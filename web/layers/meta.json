@@ -1,0 +1,35 @@
+{
+  "width": 2048,
+  "height": 1024,
+  "lon0": -180,
+  "lat0": 90,
+  "deg_per_px": 0.17578125,
+  "elev": {
+    "unit": "m",
+    "scale": 115.41176470588235,
+    "offset": -8200.0,
+    "source": "MOLA MEGDR via NASA Mars Trek (Mars_MGS_MOLA_DEM_mosaic_global_463m_8), 8-bit linear stretch -8200..21230 m, ~115 m/level"
+  },
+  "slope": {
+    "unit": "deg",
+    "scale": 0.125,
+    "offset": 0,
+    "source": "derived: 90th percentile of slope computed on 8192x4096 MOLA grid (~2.6 km/px) inside each 4x4 block"
+  },
+  "rough": {
+    "unit": "m",
+    "scale": 4,
+    "offset": 0,
+    "source": "derived: std-dev of MOLA elevation inside each output cell (terrain roughness proxy)"
+  },
+  "ice": {
+    "unit": "consistency -1..1",
+    "scale": 0.01,
+    "offset": -1.28,
+    "nodata": 0,
+    "lat_min": -60,
+    "lat_max": 60,
+    "source": "SWIM 2.0 global composite ice consistency (Planetary Science Institute / NASA), 3 km/px, swim.psi.edu"
+  },
+  "generated_by": "data_pipeline/preprocess.py"
+}

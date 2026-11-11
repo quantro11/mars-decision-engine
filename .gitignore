@@ -1,0 +1,5 @@
+# raw downloads (re-create with data_pipeline/download.ps1)
+data_pipeline/raw/
+__pycache__/
+.DS_Store
+Thumbs.db
