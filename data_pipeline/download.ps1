@@ -30,4 +30,7 @@ foreach ($f in @("SWIM2_c0_1.tif", "SWIM2_c1_5.tif", "SWIM2_c_5.tif")) {
   $wc.DownloadFile($u, $dest)
   Write-Host "$f -> $((Get-Item $dest).Length) bytes (server $cl)"
 }
+# 3) TES thermal inertia + dust abundance - ASU JMARS WMS (numeric VICAR). PowerShell's HTTP stack rejects this
+#    server's response headers, so the fetch is done with Python.
+python -I (Join-Path $PSScriptRoot "download_tes.py")
 Write-Host "Done. Now run:  python preprocess.py"

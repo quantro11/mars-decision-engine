@@ -27,6 +27,7 @@ Slope and roughness are computed on the 8192 × 4096 source grid (≈ 2.6 km/px)
 | Slope | `ramp(s, 5, 15)` | ≤ 5° landing ellipse, ≤ 15° rover traverse (MER/MSL planning limits; Perseverance static tip-over ≈ 45°, operational ≈ 30°, planning ≤ 15–20°) |
 | Ice | `(c + 1) / 2`, 0 if unknown | SWIM consistency: +1 = all datasets agree ice is present |
 | Roughness | `ramp(r, 30, 250)` | elevation σ inside a 10 km cell: < 30 m plains, > 250 m heavily cratered / mountainous |
+| Thermal inertia | `<= 0.3*I/100` below 100; rises to 1 at 150; 1 for 150-400; `ramp(I, 400, 700)` above; 0.5 if no data | I < 100: thick fine dust - low bearing strength, panel dust loading, EDL radar ambiguity (MER site-selection rule: I > 100-150). 150-400: sand / duricrust, diggable. > 500: rock / bedrock - hazard, hard to excavate |
 | Latitude | `(cos φ − cos 50°) / (1 − cos 50°)`, clipped to 0…1 | mean annual insolation ∝ cos φ; NASA HLS limit ±50° (thermal + solar) |
 
 ## 4. Aggregation
@@ -34,11 +35,11 @@ Slope and roughness are computed on the 8192 × 4096 source grid (≈ 2.6 km/px)
 `S = Σ wᵢ fᵢ`, weights normalised to Σ w = 1.
 Hard constraints (toggle): `h > +2000 m`, `s > 15°`, `|φ| > 50°` ⇒ `S = 0`.
 
-Presets (elev / slope / ice / rough / lat):
+Presets (elev / slope / ice / rough / lat / thermal inertia):
 
-* Landing safety 0.35 / 0.30 / 0.05 / 0.20 / 0.10
-* ISRU / sustainability 0.10 / 0.15 / 0.50 / 0.10 / 0.15
-* Balanced crewed mission 0.25 / 0.20 / 0.25 / 0.15 / 0.15
+* Landing safety 0.30 / 0.25 / 0.05 / 0.15 / 0.10 / 0.15
+* ISRU / sustainability 0.10 / 0.15 / 0.45 / 0.10 / 0.10 / 0.10
+* Balanced crewed mission 0.20 / 0.20 / 0.25 / 0.10 / 0.10 / 0.15
 
 ## 5. Candidate extraction
 
@@ -68,7 +69,7 @@ battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption, 0, ca
 
 1. 10 km/px cells cannot see boulders, small craters, dunes or scarps — output is a region ranking, not a landing ellipse.
 2. 8-bit elevation (≈ 115 m steps) makes slopes regional; local slopes are higher.
-3. No thermal-inertia / dust-cover index (TES) — dusty plains with low bearing strength are only partially captured by roughness.
+3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
 4. No radiation model (GCR is nearly isotropic; local topography is a second-order shield).
 5. No seasonal / diurnal insolation, no thermal cycling, no dust-devil cleaning.
 6. SWIM coverage ends at ±60°.

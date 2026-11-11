@@ -16,6 +16,8 @@ Layers
     ice01  SWIM 2.0 ice consistency, 0-1 m depth      (-1..1)
     ice15  SWIM 2.0 ice consistency, 1-5 m depth      (-1..1)
     ice5   SWIM 2.0 ice consistency, >5 m depth       (-1..1)
+    ti     TES thermal inertia (J m^-2 K^-1 s^-1/2), Christensen et al., via ASU JMARS WMS (numeric VICAR)
+    dust   TES surface dust abundance 0..1 (Bandfield 2002), via ASU JMARS WMS (numeric VICAR)
     base   shaded-relief colour basemap (RGB), rendered from the same MOLA data
 """
 import base64
@@ -122,6 +124,16 @@ def load_swim(name):
     return out
 
 
+# ---------------------------------------------------------------- TES (JMARS WMS numeric VICAR)
+def load_vicar(name, dtype):
+    """2048x1024 VICAR from ms-mars.mars.asu.edu GetMap (LBLSIZE=8192, BSQ, little-endian)."""
+    raw = open(os.path.join(RAW, name), "rb").read()
+    lbl = raw[:8192].decode("latin1")
+    lblsize = int(lbl.split("LBLSIZE=")[1].split()[0])
+    a = np.frombuffer(raw[lblsize:], dtype=dtype).reshape(OUT_H, OUT_W)
+    return a
+
+
 # ---------------------------------------------------------------- IO
 def png_b64(arr, mode="L"):
     im = Image.fromarray(arr, mode=mode)
@@ -155,6 +167,14 @@ def main():
     log("SWIM: ice consistency layers")
     ice = {k: load_swim(f) for k, f in [("ice01", "SWIM2_c0_1.tif"), ("ice15", "SWIM2_c1_5.tif"), ("ice5", "SWIM2_c_5.tif")]}
 
+    log("TES: thermal inertia + dust abundance (JMARS WMS)")
+    ti = load_vicar("tes_ti_numeric.vic", "<i4").astype(np.float32)        # FORMAT='FULL' = int32
+    dust = load_vicar("tes_dust_numeric.vic", "<f4").astype(np.float32)    # FORMAT='REAL', -1 = no data
+    log(f"  TI nodata (<=0): {(ti <= 0).mean() * 100:.1f}%   dust nodata: {(dust < 0).mean() * 100:.1f}%")
+    for n, la, lo in [("Jezero", 18.4, 77.6), ("Gale", -5.4, 137.8), ("Arabia", 20, 20)]:
+        r = int((90 - la) / 180 * OUT_H); c = int((lo + 180) / 360 * OUT_W)
+        log(f"  check {n:8s} TI={ti[r, c]:5.0f}  dust={dust[r, c]:.2f}")
+
     log("Basemap: shaded relief")
     t = (elev_out - ELEV_MIN_M) / (ELEV_MAX_M - ELEV_MIN_M)
     t = np.clip((t - 0.05) / 0.55, 0, 1) ** 0.9            # stretch so lowlands/highlands both show
@@ -171,6 +191,8 @@ def main():
         a = ice[k]
         enc = np.where(np.isnan(a), 0, np.clip(np.round(a * 100 + 128), 1, 255)).astype(np.uint8)  # 0 = no data
         png_b64.current = k; data[k] = png_b64(enc)
+    png_b64.current = "ti";   data["ti"] = png_b64(np.where(ti <= 0, 0, np.clip(np.round(ti / 4), 1, 255)).astype(np.uint8))      # 0 = no data, 4 units/level
+    png_b64.current = "dust"; data["dust"] = png_b64(np.where(dust < 0, 0, np.clip(np.round(dust * 200) + 1, 1, 255)).astype(np.uint8))  # 0 = no data
     png_b64.current = "base"; data["base"] = png_b64(rgb, "RGB")
 
     meta = {
@@ -184,6 +206,10 @@ def main():
                   "source": "derived: std-dev of MOLA elevation inside each output cell (terrain roughness proxy)"},
         "ice": {"unit": "consistency -1..1", "scale": 0.01, "offset": -1.28, "nodata": 0, "lat_min": -60, "lat_max": 60,
                 "source": "SWIM 2.0 global composite ice consistency (Planetary Science Institute / NASA), 3 km/px, swim.psi.edu"},
+        "ti": {"unit": "J m^-2 K^-1 s^-1/2", "scale": 4, "offset": 0, "nodata": 0,
+               "source": "MGS TES thermal inertia (Christensen et al.; Mellon/Putzig binned maps) via ASU JMARS WMS layer TES_Thermal_Inertia_numeric, 2048x1024"},
+        "dust": {"unit": "fraction 0..1", "scale": 0.005, "offset": -0.005, "nodata": 0,
+                 "source": "TES surface dust abundance (Bandfield 2002) via ASU JMARS WMS layer TES_Dust_numeric, 8 ppd"},
         "generated_by": "data_pipeline/preprocess.py",
     }
     with open(os.path.join(LAYERS, "meta.json"), "w") as f:

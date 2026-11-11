@@ -7,7 +7,7 @@ Those two teams have argued about the same map since the 2015 Human Landing Site
 We built the tool that turns that argument into a number."
 
 **0:20 — What it is (20 s)**
-"Mars Base Decision Engine. Five real NASA/PSI data layers — MOLA elevation, MOLA slope, roughness, SWIM 2.0 ice, latitude —
+"Mars Base Decision Engine. Six real NASA/PSI/ASU data layers — MOLA elevation, MOLA slope, roughness, SWIM 2.0 ice, TES thermal inertia, latitude —
 scored by NASA's own landing-site rules, re-weighted live. No server, runs in a browser, every formula documented and unit-tested."
 
 **0:40 — Demo 1: the conflict, visualised (35 s)**
@@ -40,4 +40,4 @@ It's not a map of Mars — it's a way to decide on Mars."
 * **Why 90th-percentile slope?** Safety-conservative: a cell is only as good as its bad corners.
 * **How confident is the ice layer?** SWIM "consistency" is agreement across 5 datasets (neutron, radar, thermal, geomorphology, dielectric); we show the band (0–1 / 1–5 / > 5 m) the crew could actually excavate.
 * **Is the storm model physical?** Semi-empirical, one fitted constant, cited; good for comparing architectures, not for hardware sizing — and we say so.
-* **What would you add with one more week?** TES thermal inertia + dust cover index; seasonal insolation; HiRISE-based local hazard maps for the top-5.
+* **What would you add with one more week?** Seasonal insolation; radiation shielding by regolith depth; HiRISE-based local hazard maps for the top-5.

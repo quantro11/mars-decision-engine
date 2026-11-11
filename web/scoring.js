@@ -23,6 +23,9 @@
     ice(c) { return c === null ? 0 : Math.max(0, Math.min(1, (c + 1) / 2)); },
     // Sub-cell elevation std-dev (m): proxy for rock/relief hazard.
     rough(m) { return ramp(m, 30, 250); },
+    // TES thermal inertia: < 100 = thick fine dust (poor bearing strength, dusty panels, EDL radar issues);
+    // 150-400 = sand / duricrust / cemented soil (ideal); > 500 = rock / bedrock (hazard, hard to dig). null = no data.
+    ti(v) { if (v === null) return 0.5; if (v < 100) return Math.max(0, v / 100 * 0.3); if (v < 150) return 0.3 + 0.7 * (v - 100) / 50; if (v <= 400) return 1; return ramp(v, 400, 700); },
     // Solar energy and thermal budget: mean insolation ~ cos(lat), rescaled so 0 deg = 1 and 50 deg = 0.
     lat(deg) { const c = Math.cos(Math.abs(deg) * Math.PI / 180), c50 = Math.cos(50 * Math.PI / 180); return Math.max(0, Math.min(1, (c - c50) / (1 - c50))); },
   };
@@ -33,12 +36,13 @@
     { key: 'ice',   label: 'Water ice (ISRU)',          unit: '' },
     { key: 'rough', label: 'Terrain roughness',         unit: 'm' },
     { key: 'lat',   label: 'Latitude (solar / thermal)', unit: '°' },
+    { key: 'ti',    label: 'Thermal inertia (surface)',  unit: 'tiu' },
   ];
 
   const PRESETS = {
-    landing:  { name: 'Landing safety',       icon: '🛬', w: { elev: 0.35, slope: 0.30, ice: 0.05, rough: 0.20, lat: 0.10 } },
-    isru:     { name: 'ISRU / sustainability', icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.50, rough: 0.10, lat: 0.15 } },
-    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.25, slope: 0.20, ice: 0.25, rough: 0.15, lat: 0.15 } },
+    landing:  { name: 'Landing safety',       icon: '🛬', w: { elev: 0.30, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15 } },
+    isru:     { name: 'ISRU / sustainability', icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.45, rough: 0.10, lat: 0.10, ti: 0.10 } },
+    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.20, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15 } },
   };
 
   const HARD = { elevMax: 2000, slopeMax: 15, latMax: 50 };
@@ -54,7 +58,7 @@
   function scoreCell(v, w, hard) {
     if (hard && (v.elev > HARD.elevMax || v.slope > HARD.slopeMax || Math.abs(v.lat) > HARD.latMax)) return 0;
     return w.elev * F.elev(v.elev) + w.slope * F.slope(v.slope) + w.ice * F.ice(v.ice)
-         + w.rough * F.rough(v.rough) + w.lat * F.lat(v.lat);
+         + w.rough * F.rough(v.rough) + w.lat * F.lat(v.lat) + w.ti * F.ti(v.ti);
   }
 
   // Full-map scoring. layers: {elev, slope, rough, ice: Float32Array|null-coded, lat: Float32Array (per row)}
@@ -62,12 +66,13 @@
   function scoreMap(L, weights, hard, out) {
     const w = normalize(weights);
     const { width, height } = L;
-    const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256);
+    const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256), ft = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
       fe[i] = F.elev(L.meta.elev.offset + i * L.meta.elev.scale);
       fs[i] = F.slope(i * L.meta.slope.scale);
       fr[i] = F.rough(i * L.meta.rough.scale);
       fi[i] = i === 0 ? 0 : F.ice(L.meta.ice.offset + i * L.meta.ice.scale);
+      ft[i] = i === 0 ? F.ti(null) : F.ti(i * L.meta.ti.scale);
     }
     const elevHardIdx = (HARD.elevMax - L.meta.elev.offset) / L.meta.elev.scale;
     const slopeHardIdx = HARD.slopeMax / L.meta.slope.scale;
@@ -79,7 +84,7 @@
         const i = row + x;
         const e = L.elev[i], s = L.slope[i];
         if (hard && (e > elevHardIdx || s > slopeHardIdx)) { out[i] = 0; continue; }
-        out[i] = w.elev * fe[e] + w.slope * fs[s] + w.ice * fi[L.ice[i]] + w.rough * fr[L.rough[i]] + fl;
+        out[i] = w.elev * fe[e] + w.slope * fs[s] + w.ice * fi[L.ice[i]] + w.rough * fr[L.rough[i]] + w.ti * ft[L.ti[i]] + fl;
       }
     }
     return out;

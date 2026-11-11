@@ -41,18 +41,21 @@
       slope: L.slope[i] * META.slope.scale,
       rough: L.rough[i] * META.rough.scale,
       ice: iceRaw === 0 ? null : META.ice.offset + iceRaw * META.ice.scale,
+      ti: L.ti[i] === 0 ? null : L.ti[i] * META.ti.scale,
+      dust: L.dust[i] === 0 ? null : META.dust.offset + L.dust[i] * META.dust.scale,
       lat: L.latOfRow(y), lon: L.lonOfCol(x),
     };
   }
 
   // mean physical values over a square block (used for candidate cards)
   function blockValues(cx, cy, size) {
-    const h = size >> 1; let n = 0, e = 0, sl = 0, r = 0, ic = 0, nIce = 0;
+    const h = size >> 1; let n = 0, e = 0, sl = 0, r = 0, ic = 0, nIce = 0, t = 0, nT = 0, du = 0, nD = 0;
     for (let y = cy - h; y < cy + h; y++) for (let x = cx - h; x < cx + h; x++) {
       if (y < 0 || y >= H) continue; const v = cellValues(((x % W) + W) % W, y);
       e += v.elev; sl += v.slope; r += v.rough; n++; if (v.ice !== null) { ic += v.ice; nIce++; }
+      if (v.ti !== null) { t += v.ti; nT++; } if (v.dust !== null) { du += v.dust; nD++; }
     }
-    return { elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
+    return { elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
   }
 
   // ------------------------------------------------------------ state
@@ -103,6 +106,8 @@
     ice: [[0, 40, 30, 20], [0.5, 60, 90, 120], [1, 160, 230, 255]],
     slope: [[0, 30, 60, 30], [0.33, 90, 180, 60], [0.66, 250, 200, 40], [1, 255, 40, 40]],
     elev: [[0, 20, 40, 90], [0.3, 60, 120, 140], [0.5, 170, 150, 90], [0.7, 150, 80, 50], [1, 255, 255, 255]],
+    ti: [[0, 120, 40, 20], [0.15, 200, 120, 40], [0.4, 90, 170, 90], [0.7, 60, 120, 200], [1, 240, 240, 255]],
+    dust: [[0, 40, 60, 90], [0.5, 190, 150, 90], [1, 255, 230, 160]],
   };
   const LUT = {};
   for (const k in CMAP) { LUT[k] = new Uint8ClampedArray(256 * 3); for (let i = 0; i < 256; i++) { const c = lerpStops(CMAP[k], i / 255); LUT[k].set(c.map(Math.round), i * 3); } }
@@ -115,6 +120,8 @@
       else if (S.overlay === 'ice') { const r = L.ice[i]; if (r === 0) { v = 0; a = 60; } else v = Math.round(Math.max(0, Math.min(255, (r - 28) * 1.275))); }
       else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);          // 0..16 deg -> 0..255
       else if (S.overlay === 'elev') v = L.elev[i];
+      else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 60; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
+      else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 60; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
       else { d[j + 3] = 0; continue; }
       d[j] = lut[v * 3]; d[j + 1] = lut[v * 3 + 1]; d[j + 2] = lut[v * 3 + 2]; d[j + 3] = a;
     }
@@ -199,7 +206,7 @@
 
   function critRows(v, w) {
     const wn = SCORING.normalize(w);
-    const fmt = { elev: `${(v.elev / 1000).toFixed(1)} km`, slope: `${v.slope.toFixed(1)}°`, ice: v.ice === null ? 'no data' : v.ice.toFixed(2), rough: `${v.rough.toFixed(0)} m`, lat: `${v.lat.toFixed(1)}°` };
+    const fmt = { elev: `${(v.elev / 1000).toFixed(1)} km`, slope: `${v.slope.toFixed(1)}°`, ice: v.ice === null ? 'no data' : v.ice.toFixed(2), rough: `${v.rough.toFixed(0)} m`, lat: `${v.lat.toFixed(1)}°`, ti: v.ti === null ? 'no data' : `${v.ti.toFixed(0)} tiu` };
     return SCORING.CRITERIA.map(c => {
       const f = SCORING.F[c.key](v[c.key]);
       const cls = f > 0.66 ? 'ok' : f > 0.33 ? 'warn' : 'bad';
@@ -231,7 +238,8 @@
       ${vetoed ? '<div class="verdict bad">⛔ Vetoed by hard constraint (elev &gt; +2 km, slope &gt; 15° or |lat| &gt; 50°)</div>' : ''}
       ${critRows(v, S.weights)}
       <table><tr><td>Elevation (MOLA)</td><td>${v.elev.toFixed(0)} m</td></tr><tr><td>Slope, 90th pct</td><td>${v.slope.toFixed(1)}°</td></tr>
-      <tr><td>Ice consistency (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'outside SWIM' : v.ice.toFixed(2)}</td></tr><tr><td>Roughness σ</td><td>${v.rough.toFixed(0)} m</td></tr></table>
+      <tr><td>Ice consistency (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'outside SWIM' : v.ice.toFixed(2)}</td></tr><tr><td>Roughness σ</td><td>${v.rough.toFixed(0)} m</td></tr>
+      <tr><td>Thermal inertia (TES)</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr><tr><td>Dust cover (TES)</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr></table>
       <div class="row"><button id="use-route" class="ghost">Use as route start</button><button id="use-crisis" class="ghost">Use for crisis sim</button></div>`;
     $('#use-route').onclick = () => { setMode('route'); S.route.start = { x, y }; S.route.goal = null; S.route.safe = S.route.straight = null; renderRoute(); draw(); };
     $('#use-crisis').onclick = () => { setMode('crisis'); setCrisisSite(x, y); };
@@ -365,7 +373,7 @@
     const el = $('#legend'), lut = LUT[S.overlay];
     if (!lut) { el.innerHTML = ''; return; }
     const stops = []; for (let i = 0; i <= 10; i++) { const v = Math.round(i * 25.5); stops.push(`rgb(${lut[v * 3]},${lut[v * 3 + 1]},${lut[v * 3 + 2]})`); }
-    const ends = { score: ['≤0.35 — unsuitable / vetoed', '1 — ideal'], ice: ['no ice evidence (−1)', 'strong ice evidence (+1)'], slope: ['0°', '≥16° (90th pct)'], elev: ['−8.2 km', '+21 km'] }[S.overlay];
+    const ends = { score: ['≤0.35 — unsuitable / vetoed', '1 — ideal'], ice: ['no ice evidence (−1)', 'strong ice evidence (+1)'], slope: ['0°', '≥16° (90th pct)'], elev: ['−8.2 km', '+21 km'], ti: ['0 — fine dust', '≥700 — rock'], dust: ['0 % dust', '100 % dust'] }[S.overlay];
     el.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
   }
 
@@ -398,7 +406,7 @@
     if (!g) { tip.classList.add('hidden'); return; }
     const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x];
     $('#hud-coord').textContent = `${fmtLat(v.lat)} ${fmtLon(v.lon)} · elev ${v.elev.toFixed(0)} m · score ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · rescored in ${$('#hud-coord').dataset.t} ms` : '');
-    tip.innerHTML = `<b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>ice ${v.ice === null ? '—' : v.ice.toFixed(2)} · rough ${v.rough.toFixed(0)} m<br>score <b>${s.toFixed(2)}</b>`;
+    tip.innerHTML = `<b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>ice ${v.ice === null ? '—' : v.ice.toFixed(2)} · rough ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}<br>score <b>${s.toFixed(2)}</b>`;
     const r = canvas.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; tip.classList.remove('hidden');
   });
   canvas.addEventListener('mouseleave', () => $('#tooltip').classList.add('hidden'));
@@ -413,7 +421,7 @@
 
   // ------------------------------------------------------------ boot
   buildPresets(); buildSliders(); renderLegend(); renderRoute();
-  Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'base'].map(decode)).then(() => {
+  Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode)).then(() => {
     L.ice = L[S.iceBand];
     window.addEventListener('resize', resize); resize();
     rescore();

@@ -31,5 +31,19 @@
     "lat_max": 60,
     "source": "SWIM 2.0 global composite ice consistency (Planetary Science Institute / NASA), 3 km/px, swim.psi.edu"
   },
+  "ti": {
+    "unit": "J m^-2 K^-1 s^-1/2",
+    "scale": 4,
+    "offset": 0,
+    "nodata": 0,
+    "source": "MGS TES thermal inertia (Christensen et al.; Mellon/Putzig binned maps) via ASU JMARS WMS layer TES_Thermal_Inertia_numeric, 2048x1024"
+  },
+  "dust": {
+    "unit": "fraction 0..1",
+    "scale": 0.005,
+    "offset": -0.005,
+    "nodata": 0,
+    "source": "TES surface dust abundance (Bandfield 2002) via ASU JMARS WMS layer TES_Dust_numeric, 8 ppd"
+  },
   "generated_by": "data_pipeline/preprocess.py"
 }

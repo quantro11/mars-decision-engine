@@ -12,7 +12,7 @@
     <span class="brand-mark"></span>
     <div>
       <div class="brand-name">MARS BASE DECISION ENGINE</div>
-      <div class="brand-sub">Multi-criteria landing-site &amp; survival planner · real MOLA + SWIM data</div>
+      <div class="brand-sub">Multi-criteria landing-site &amp; survival planner · real MOLA + SWIM + TES data</div>
     </div>
   </div>
   <nav class="modes">
@@ -80,6 +80,8 @@
         <button data-ov="ice">Ice</button>
         <button data-ov="slope">Slope</button>
         <button data-ov="elev">Elev</button>
+        <button data-ov="ti">TI</button>
+        <button data-ov="dust">Dust</button>
         <button data-ov="none">None</button>
       </div>
       <label>Overlay opacity <input type="range" id="opacity" min="0" max="100" value="70"></label>
@@ -118,6 +120,7 @@
   <b>Data</b>
   <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">MOLA MEGDR elevation — NASA Mars Trek / USGS</a> ·
   <a href="https://swim.psi.edu/" target="_blank" rel="noopener">SWIM 2.0 subsurface water-ice consistency — PSI / NASA</a> ·
+  <a href="https://jmars.mars.asu.edu/maps/?layer=TES_Thermal_Inertia_mola" target="_blank" rel="noopener">MGS TES thermal inertia &amp; dust abundance — ASU JMARS</a> ·
   <a href="https://www.nasa.gov/mars-exploration-zones" target="_blank" rel="noopener">NASA Human Landing Sites workshop criteria (2015)</a>
   · slope &amp; roughness derived from MOLA at 2.6 km/px · grid 2048×1024 (≈10 km/px)
 </footer>
@@ -133,6 +136,7 @@
       <tr><td>Slope</td><td>MOLA, 90th pct in cell</td><td>1 below 5° → 0 above 15°</td><td>Landing pad ≤ 5°, rover traverse ≤ 15°</td></tr>
       <tr><td>Water ice</td><td>SWIM 2.0</td><td>consistency −1..1 → 0..1</td><td>ISRU: water, O₂, propellant</td></tr>
       <tr><td>Roughness</td><td>MOLA std-dev in cell</td><td>1 below 30 m → 0 above 250 m</td><td>Rock / relief hazard proxy</td></tr>
+      <tr><td>Thermal inertia</td><td>TES (Christensen / Mellon-Putzig)</td><td>&lt; 100 → ≤ 0.3 (dust); 150–400 → 1; &gt; 400 → 0 at 700</td><td>Bearing strength, dust loading on panels / EDL radar, excavability; no data → 0.5 (neutral)</td></tr>
       <tr><td>Latitude</td><td>—</td><td>(cos lat − cos 50°)/(1 − cos 50°): 1 at equator → 0 at 50°</td><td>Mean insolation ∝ cos(lat); NASA HLS limit ±50°</td></tr>
     </table>
     <h3>2. Weighted sum + hard constraints</h3>
@@ -148,7 +152,7 @@
       <li>Grid is ≈10 km/px; local hazards (boulders, craters &lt; 5 km) are not resolved. Elevation is quantised to ≈115 m levels (8-bit Trek product).</li>
       <li>SWIM covers ±60° latitude only; outside it ice is "unknown" and scored 0.</li>
       <li>Radiation, seasonal insolation, dust-devil cleaning and thermal cycling are not modelled.</li>
-      <li>Thermal-inertia / dust-cover index layers (TES) are not included in this build; roughness is a partial proxy.</li>
+      <li>TES thermal inertia is a ~3 km binned product; dust abundance (Bandfield 2002, 8 ppd, 28 % no-data) is shown for inspection and not scored separately (it correlates with low thermal inertia).</li>
     </ul>
   </div>
 </div>
