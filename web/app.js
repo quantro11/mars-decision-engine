@@ -86,6 +86,7 @@
 
   // ------------------------------------------------------------ state
   const S = {
+    viewMode: '2d', // '2d' | '3d'
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
     overlay: 'score', opacity: 0.7, showRegions: true, showEZ: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
@@ -94,8 +95,11 @@
     hover: null,
   };
 
-  // ------------------------------------------------------------ canvas setup
+  // ------------------------------------------------------------ canvas & 3D globe setup
   const canvas = $('#map'), ctx = canvas.getContext('2d');
+  const globeCanvas = $('#globe');
+  const globe = (window.GLOBE3D && globeCanvas) ? window.GLOBE3D.createGlobe(globeCanvas) : null;
+
   const ovCanvas = document.createElement('canvas'); ovCanvas.width = W; ovCanvas.height = H;
   const ovCtx = ovCanvas.getContext('2d');
   const ovImg = ovCtx.createImageData(W, H);
@@ -105,8 +109,11 @@
   function resize() {
     const r = canvas.parentElement.getBoundingClientRect();
     const cx = canvas.width / 2, cy = canvas.height / 2, [gx, gy] = toGrid(cx, cy);
-    canvas.width = Math.max(1, Math.floor(r.width * devicePixelRatio));
-    canvas.height = Math.max(1, Math.floor(r.height * devicePixelRatio));
+    const cw = Math.max(1, Math.floor(r.width * devicePixelRatio));
+    const ch = Math.max(1, Math.floor(r.height * devicePixelRatio));
+    canvas.width = cw;
+    canvas.height = ch;
+    if (globeCanvas) { globeCanvas.width = cw; globeCanvas.height = ch; }
     if (!viewReady) { fitView(); viewReady = true; }
     else { S.view.tx = canvas.width / 2 - gx * S.view.scale; S.view.ty = canvas.height / 2 - gy * S.view.scale; wrapView(); }
     updateScaleBar();
@@ -115,17 +122,35 @@
   function fitView() {
     const s = Math.min(canvas.width / W, canvas.height / H);
     S.view = { scale: s, tx: (canvas.width - W * s) / 2, ty: (canvas.height - H * s) / 2 };
+    if (globe && S.viewMode === '3d') {
+      globe.state.targetDist = 2.55;
+      schedule3D();
+    }
     updateScaleBar();
   }
   const toScreen = (x, y) => [S.view.tx + x * S.view.scale, S.view.ty + y * S.view.scale];
   const toGrid = (sx, sy) => [(sx - S.view.tx) / S.view.scale, (sy - S.view.ty) / S.view.scale];
 
+  // Unified grid-to-screen projection for both 2D and 3D modes
+  function projectGrid(gx, gy) {
+    if (S.viewMode === '3d' && globe) {
+      return globe.project(L.latOfRow(gy), L.lonOfCol(gx), true);
+    }
+    const [sx, sy] = toScreen(gx, gy);
+    return [sx, sy, true];
+  }
+
   function updateScaleBar() {
     const elLbl = $('#scale-label'), elBar = $('#scale-bar');
     if (!elLbl || !elBar) return;
-    const kmPerGridPx = (2 * Math.PI * MARS_R) / W; // ~10.398 km/px at equator
-    const cssPxPerGridPx = S.view.scale / (window.devicePixelRatio || 1);
-    const kmPerCssPx = kmPerGridPx / Math.max(0.05, cssPxPerGridPx);
+    let kmPerCssPx;
+    if (S.viewMode === '3d' && globe) {
+      kmPerCssPx = globe.equatorialKmPerCssPx();
+    } else {
+      const kmPerGridPx = (2 * Math.PI * MARS_R) / W;
+      const cssPxPerGridPx = S.view.scale / (window.devicePixelRatio || 1);
+      kmPerCssPx = kmPerGridPx / Math.max(0.05, cssPxPerGridPx);
+    }
     const targetKm = kmPerCssPx * 72;
     const steps = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
     let niceKm = steps[0];
@@ -161,40 +186,143 @@
       let v, a = 255;
       if (S.overlay === 'score') { const sc = S.score[i]; v = Math.round(Math.max(0, Math.min(1, (sc - 0.35) / 0.65)) * 255); a = sc <= 0 ? 175 : 255; }
       else if (S.overlay === 'ice') { const r = L.ice[i]; if (r === 0) { v = 0; a = 60; } else v = Math.round(Math.max(0, Math.min(255, (r - 28) * 1.275))); }
-      else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);          // 0..16 deg -> 0..255
+      else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);
       else if (S.overlay === 'elev') v = L.elev[i];
       else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 60; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
       else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 60; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
       else { d[j + 3] = 0; continue; }
       d[j] = lut[v * 3]; d[j + 1] = lut[v * 3 + 1]; d[j + 2] = lut[v * 3 + 2]; d[j + 3] = a;
     }
-    ovCtx.putImageData(ovImg, 0, 0); ovDirty = false;
+    ovCtx.putImageData(ovImg, 0, 0);
+    if (globe) globe.updateOverlay(ovCanvas);
+    ovDirty = false;
+  }
+
+  // ------------------------------------------------------------ 3D animation loop
+  let raf3D = 0;
+  function schedule3D() {
+    if (S.viewMode !== '3d' || !globe || raf3D) return;
+    raf3D = requestAnimationFrame(tick3D);
+  }
+  function tick3D() {
+    raf3D = 0;
+    if (S.viewMode !== '3d' || !globe) return;
+    const moving = globe.stepPhysics();
+    updateScaleBar();
+    draw();
+    if (moving) schedule3D();
   }
 
   // ------------------------------------------------------------ drawing
   function draw() {
     if (!baseImg) return;
     if (ovDirty) buildOverlay();
-    const { scale, tx, ty } = S.view;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#030508';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.imageSmoothingEnabled = scale < 1.2;
 
-    // draw base + overlay three times for horizontal wrap
-    for (const off of [-W, 0, W]) {
-      const sx = tx + off * scale;
-      if (sx > canvas.width || sx + W * scale < 0) continue;
-      ctx.drawImage(baseImg, sx, ty, W * scale, H * scale);
-      if (S.overlay !== 'none') {
-        ctx.globalAlpha = S.opacity;
-        ctx.drawImage(ovCanvas, sx, ty, W * scale, H * scale);
-        ctx.globalAlpha = 1;
+    if (S.viewMode === '3d' && globe) {
+      globe.render({ opacity: S.opacity, showOverlay: S.overlay !== 'none' });
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      draw3DGraticule(dpr);
+    } else {
+      const { scale, tx, ty } = S.view;
+      ctx.fillStyle = '#030508';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = scale < 1.2;
+
+      for (const off of [-W, 0, W]) {
+        const sx = tx + off * scale;
+        if (sx > canvas.width || sx + W * scale < 0) continue;
+        ctx.drawImage(baseImg, sx, ty, W * scale, H * scale);
+        if (S.overlay !== 'none') {
+          ctx.globalAlpha = S.opacity;
+          ctx.drawImage(ovCanvas, sx, ty, W * scale, H * scale);
+          ctx.globalAlpha = 1;
+        }
+      }
+      draw2DGraticule(dpr);
+    }
+
+    // Named regions & NASA Exploration Zones
+    const effScale = S.viewMode === '3d' && globe ? (2.8 / Math.max(0.4, globe.state.camDist - 1.0)) : S.view.scale;
+    const fontPx = Math.max(9.5, Math.min(12, 8.5 + effScale * 0.8)) * dpr;
+    ctx.font = `500 ${fontPx}px "Inter", "Segoe UI", sans-serif`;
+    ctx.textBaseline = 'middle';
+    if (S.showRegions || S.showEZ) for (const r of REGIONS) {
+      if (S.showEZ && !r.ez && !S.showRegions) continue;
+      if (!S.showEZ && !S.showRegions) break;
+      if (!S.showEZ && effScale < 1.5 && !r.mission && !r.ez) continue;
+      const [x, y, vis] = projectGrid(L.colOfLon(r.lon), L.rowOfLat(r.lat));
+      if (!vis || x < -80 || x > canvas.width + 80 || y < -30 || y > canvas.height + 30) continue;
+      const ez = S.showEZ && r.ez;
+
+      if (ez) {
+        const s = 4.5 * dpr;
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.3 * dpr;
+        ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+      } else {
+        ctx.fillStyle = r.mission ? '#38bdf8' : 'rgba(226, 232, 240, 0.78)';
+        ctx.beginPath();
+        ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (ez || effScale >= 1.5 || (r.mission && effScale >= 1.1)) {
+        ctx.fillStyle = 'rgba(3, 5, 8, 0.82)';
+        ctx.fillText(r.name, x + 7 * dpr, y + 1 * dpr);
+        ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.92)');
+        ctx.fillText(r.name, x + 6 * dpr, y);
       }
     }
 
-    // graticule lines + telemetry coordinate labels
+    // Traverse paths
+    const drawPath = (path, color, width, dash) => {
+      if (!path) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width * dpr;
+      ctx.setLineDash(dash || []);
+      ctx.beginPath();
+      let px = null, wasVis = false;
+      for (const n of path) {
+        const y = (n / W) | 0, x = n - y * W;
+        const [sx, sy, vis] = projectGrid(x + 0.5, y + 0.5);
+        if (!vis) { wasVis = false; px = null; continue; }
+        if (!wasVis || (S.viewMode === '2d' && px !== null && Math.abs(sx - px) > W * S.view.scale / 2)) {
+          ctx.moveTo(sx, sy);
+        } else {
+          ctx.lineTo(sx, sy);
+        }
+        px = sx;
+        wasVis = true;
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
+    if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
+    if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#10b981', 'WP-A');
+    if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#f59e0b', 'WP-B');
+
+    // Candidate reticles
+    S.candidates.forEach((c, i) => {
+      const isSel = S.selected && S.selected.cand === i;
+      drawCandidateReticle(c.x, c.y, i + 1, c.score, isSel);
+    });
+
+    // Crisis surface station marker
+    if (S.crisis.site) {
+      drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
+    }
+
+    // Selected cell precision target bracket
+    if (S.selected && S.selected.cand == null) {
+      drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
+    }
+  }
+
+  function draw2DGraticule(dpr) {
+    const { scale, tx, ty } = S.view;
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.13)';
     ctx.lineWidth = 1;
     ctx.font = `500 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
@@ -226,7 +354,6 @@
       }
     }
 
-    // NASA HLS ±50° operational envelope
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
     ctx.setLineDash([6 * dpr, 5 * dpr]);
     for (const lat of [50, -50]) {
@@ -241,94 +368,66 @@
       }
     }
     ctx.setLineDash([]);
+  }
 
-    // Named regions & NASA Exploration Zones
-    const fontPx = Math.max(9.5, Math.min(12, 8.5 + scale * 0.8)) * dpr;
-    ctx.font = `500 ${fontPx}px "Inter", "Segoe UI", sans-serif`;
-    ctx.textBaseline = 'middle';
-    if (S.showRegions || S.showEZ) for (const r of REGIONS) {
-      if (S.showEZ && !r.ez && !S.showRegions) continue;
-      if (!S.showEZ && !S.showRegions) break;
-      if (!S.showEZ && scale < 1.6 && !r.mission && !r.ez) continue;
-      const [x, y] = toScreen(L.colOfLon(r.lon), L.rowOfLat(r.lat));
-      if (x < -80 || x > canvas.width + 80 || y < -30 || y > canvas.height + 30) continue;
-      const ez = S.showEZ && r.ez;
+  function draw3DGraticule(dpr) {
+    if (!globe) return;
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+    ctx.lineWidth = 1;
 
-      if (ez) {
-        const s = 4.5 * dpr;
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 1.3 * dpr;
-        ctx.strokeRect(x - s, y - s, s * 2, s * 2);
-      } else {
-        ctx.fillStyle = r.mission ? '#38bdf8' : 'rgba(226, 232, 240, 0.75)';
-        ctx.beginPath();
-        ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      if (ez || scale >= 1.6 || (r.mission && scale >= 1.15)) {
-        ctx.fillStyle = 'rgba(3, 5, 8, 0.78)';
-        ctx.fillText(r.name, x + 7 * dpr, y + 1 * dpr);
-        ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.9)');
-        ctx.fillText(r.name, x + 6 * dpr, y);
-      }
-    }
-
-    // Traverse paths
-    const drawPath = (path, color, width, dash) => {
-      if (!path) return;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width * dpr;
-      ctx.setLineDash(dash || []);
+    // Meridians
+    for (let lon = -180; lon < 180; lon += 30) {
       ctx.beginPath();
-      let px = null;
-      for (const n of path) {
-        const y = (n / W) | 0, x = n - y * W;
-        const [sx, sy] = toScreen(x + 0.5, y + 0.5);
-        if (px !== null && Math.abs(sx - px) > W * scale / 2) ctx.moveTo(sx, sy);
-        else if (px === null) ctx.moveTo(sx, sy);
-        else ctx.lineTo(sx, sy);
-        px = sx;
+      let open = false;
+      for (let lat = -80; lat <= 80; lat += 5) {
+        const [sx, sy, vis] = globe.project(lat, lon, false);
+        if (!vis) { open = false; continue; }
+        if (!open) { ctx.moveTo(sx, sy); open = true; } else ctx.lineTo(sx, sy);
       }
       ctx.stroke();
-      ctx.setLineDash([]);
-    };
-    if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
-    if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
-    if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#10b981', 'WP-A');
-    if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#f59e0b', 'WP-B');
-
-    // Candidate reticles
-    S.candidates.forEach((c, i) => {
-      const isSel = S.selected && S.selected.cand === i;
-      drawCandidateReticle(c.x, c.y, i + 1, c.score, isSel);
-    });
-
-    // Crisis surface station marker
-    if (S.crisis.site) {
-      drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
     }
 
-    // Selected cell precision target bracket
-    if (S.selected && S.selected.cand == null) {
-      drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
+    // Parallels
+    for (let lat = -60; lat <= 60; lat += 30) {
+      ctx.beginPath();
+      let open = false;
+      for (let lon = -180; lon <= 180; lon += 5) {
+        const [sx, sy, vis] = globe.project(lat, lon, false);
+        if (!vis) { open = false; continue; }
+        if (!open) { ctx.moveTo(sx, sy); open = true; } else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
     }
+
+    // NASA HLS ±50° operational envelope on 3D globe
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+    ctx.setLineDash([5 * dpr, 4 * dpr]);
+    for (const lat of [50, -50]) {
+      ctx.beginPath();
+      let open = false;
+      for (let lon = -180; lon <= 180; lon += 4) {
+        const [sx, sy, vis] = globe.project(lat, lon, false);
+        if (!vis) { open = false; continue; }
+        if (!open) { ctx.moveTo(sx, sy); open = true; } else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
   }
 
   function drawCandidateReticle(gx, gy, rank, score, active) {
-    const [x, y] = toScreen(gx, gy);
+    const [x, y, vis] = projectGrid(gx, gy);
+    if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
     const r = (active ? 11 : 9) * dpr;
     const primary = active ? '#38bdf8' : '#fc3d21';
 
-    // Outer target ring
     ctx.strokeStyle = primary;
     ctx.lineWidth = (active ? 2 : 1.5) * dpr;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Crosshair ticks
     const tIn = r + 2 * dpr, tOut = r + 6 * dpr;
     ctx.beginPath();
     ctx.moveTo(x - tOut, y); ctx.lineTo(x - tIn, y);
@@ -337,13 +436,11 @@
     ctx.moveTo(x, y + tIn); ctx.lineTo(x, y + tOut);
     ctx.stroke();
 
-    // Center dot
     ctx.fillStyle = primary;
     ctx.beginPath();
     ctx.arc(x, y, 2 * dpr, 0, Math.PI * 2);
     ctx.fill();
 
-    // Callout badge
     const tag = `0${rank}`;
     ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
     const bx = x + r + 5 * dpr, by = y - r - 2 * dpr;
@@ -361,13 +458,13 @@
   }
 
   function drawSelectionReticle(gx, gy) {
-    const [x, y] = toScreen(gx, gy);
+    const [x, y, vis] = projectGrid(gx, gy);
+    if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
     const s = 9 * dpr, c = 4 * dpr;
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1.6 * dpr;
     ctx.beginPath();
-    // 4 corner brackets
     ctx.moveTo(x - s, y - s + c); ctx.lineTo(x - s, y - s); ctx.lineTo(x - s + c, y - s);
     ctx.moveTo(x + s - c, y - s); ctx.lineTo(x + s, y - s); ctx.lineTo(x + s, y - s + c);
     ctx.moveTo(x + s, y + s - c); ctx.lineTo(x + s, y + s); ctx.lineTo(x + s - c, y + s);
@@ -376,7 +473,8 @@
   }
 
   function drawWaypoint(gx, gy, color, label) {
-    const [x, y] = toScreen(gx, gy);
+    const [x, y, vis] = projectGrid(gx, gy);
+    if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
     const r = 6.5 * dpr;
     ctx.save();
@@ -397,7 +495,8 @@
   }
 
   function drawStationBeacon(gx, gy) {
-    const [x, y] = toScreen(gx, gy);
+    const [x, y, vis] = projectGrid(gx, gy);
+    if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1.6 * dpr;
@@ -455,7 +554,11 @@
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
       li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">CAND-0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
         <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° REGIONAL MEAN</div>${critRows(v, S.weights)}`;
-      li.onclick = () => { select(c.x, c.y, i); if (S.mode === 'crisis') setCrisisSite(c.x, c.y); };
+      li.onclick = () => {
+        select(c.x, c.y, i);
+        if (S.viewMode === '3d' && globe) { globe.flyTo(v.lat, v.lon); schedule3D(); }
+        if (S.mode === 'crisis') setCrisisSite(c.x, c.y);
+      };
       ol.appendChild(li);
     });
   }
@@ -589,7 +692,53 @@
   // ------------------------------------------------------------ UI wiring
   function updateHudLayer() {
     const el = $('#hud-layer');
-    if (el) el.textContent = `ACTIVE OVERLAY: ${OVERLAY_NAMES[S.overlay] || S.overlay.toUpperCase()}`;
+    if (el) el.textContent = `OVERLAY: ${OVERLAY_NAMES[S.overlay] || S.overlay.toUpperCase()}`;
+  }
+
+  function setViewMode(vm) {
+    if (vm === '3d' && !globe) return;
+    S.viewMode = vm;
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === vm));
+    if (globeCanvas) globeCanvas.classList.toggle('hidden', vm !== '3d');
+    if ($('#globe-tools')) $('#globe-tools').classList.toggle('hidden', vm !== '3d');
+    if ($('#hud-proj')) $('#hud-proj').textContent = vm === '3d' ? 'PROJ: 3D WEBGL MOLA SPHERICAL DEM' : 'PROJ: 2D EQUIRECTANGULAR IAU-2000';
+    if ($('#hud-hint')) $('#hud-hint').textContent = vm === '3d' ? 'DRAG: ORBIT 3D · SCROLL: ZOOM · CLICK: DESIGNATE' : 'SCROLL: ZOOM · DRAG: PAN · CLICK: DESIGNATE';
+    if (vm === '3d' && globe) {
+      if (S.selected) {
+        globe.flyTo(L.latOfRow(S.selected.y), L.lonOfCol(S.selected.x));
+      } else if (S.candidates.length) {
+        const c = S.candidates[0];
+        globe.flyTo(L.latOfRow(c.y), L.lonOfCol(c.x));
+      }
+      schedule3D();
+    }
+    updateScaleBar();
+    draw();
+  }
+  document.querySelectorAll('.view-btn').forEach(b => b.onclick = () => setViewMode(b.dataset.view));
+
+  if ($('#btn-relief') && globe) {
+    const levels = [1, 5, 8, 15];
+    $('#btn-relief').onclick = () => {
+      const idx = (levels.indexOf(globe.state.exaggeration) + 1) % levels.length;
+      globe.state.exaggeration = levels[idx];
+      $('#btn-relief').textContent = `RELIEF: ${levels[idx]}×`;
+      draw();
+    };
+  }
+  if ($('#btn-sun') && globe) {
+    $('#btn-sun').onclick = () => {
+      globe.state.sunLight = !globe.state.sunLight;
+      $('#btn-sun').classList.toggle('active', globe.state.sunLight);
+      draw();
+    };
+  }
+  if ($('#btn-spin') && globe) {
+    $('#btn-spin').onclick = () => {
+      globe.state.autoSpin = !globe.state.autoSpin;
+      $('#btn-spin').classList.toggle('active', globe.state.autoSpin);
+      if (globe.state.autoSpin) schedule3D();
+    };
   }
 
   function setMode(m) {
@@ -640,13 +789,19 @@
   const routeDemoBtn = $('#route-demo');
   if (routeDemoBtn) {
     routeDemoBtn.onclick = () => {
-      const a = REGIONS[0], b = REGIONS[16]; // Jezero -> Nili Fossae
+      const a = REGIONS[0], b = REGIONS[16];
       S.route.start = { x: L.colOfLon(a.lon), y: L.rowOfLat(a.lat) };
       S.route.goal = { x: L.colOfLon(b.lon), y: L.rowOfLat(b.lat) };
-      S.view.scale = Math.max(S.view.scale, 3.2);
-      S.view.tx = canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * S.view.scale;
-      S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * S.view.scale;
-      wrapView(); updateScaleBar(); computeRoute();
+      if (S.viewMode === '3d' && globe) {
+        globe.flyTo((a.lat + b.lat) / 2, (a.lon + b.lon) / 2, 1.85);
+        schedule3D();
+      } else {
+        S.view.scale = Math.max(S.view.scale, 3.2);
+        S.view.tx = canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * S.view.scale;
+        S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * S.view.scale;
+        wrapView(); updateScaleBar();
+      }
+      computeRoute();
     };
   }
   bindRange('tau', v => (v / 10).toFixed(1), v => { S.crisis.tauPeak = v / 10; runCrisis(); });
@@ -661,6 +816,11 @@
 
   // Map zoom buttons
   const zoomBy = (factor) => {
+    if (S.viewMode === '3d' && globe) {
+      globe.state.targetDist = Math.max(1.22, Math.min(4.6, globe.state.targetDist / factor));
+      schedule3D();
+      return;
+    }
     const mx = canvas.width / 2, my = canvas.height / 2;
     const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
     const ns = Math.max(minS, Math.min(40, S.view.scale * factor));
@@ -670,8 +830,8 @@
     S.view.scale = ns;
     wrapView(); updateScaleBar(); draw();
   };
-  if ($('#zoom-in')) $('#zoom-in').onclick = () => zoomBy(1.45);
-  if ($('#zoom-out')) $('#zoom-out').onclick = () => zoomBy(1 / 1.45);
+  if ($('#zoom-in')) $('#zoom-in').onclick = () => zoomBy(1.4);
+  if ($('#zoom-out')) $('#zoom-out').onclick = () => zoomBy(1 / 1.4);
   if ($('#zoom-reset')) $('#zoom-reset').onclick = () => { fitView(); draw(); };
 
   const fly = $('#flyto');
@@ -684,10 +844,15 @@
   fly.onchange = () => {
     const r = REGIONS.find(q => q.name === fly.value); if (!r) return;
     const x = L.colOfLon(r.lon), y = L.rowOfLat(r.lat);
-    S.view.scale = Math.max(S.view.scale, 3.2);
-    S.view.tx = canvas.width / 2 - x * S.view.scale;
-    S.view.ty = canvas.height / 2 - y * S.view.scale;
-    wrapView(); updateScaleBar();
+    if (S.viewMode === '3d' && globe) {
+      globe.flyTo(r.lat, r.lon, Math.min(globe.state.targetDist, 1.95));
+      schedule3D();
+    } else {
+      S.view.scale = Math.max(S.view.scale, 3.2);
+      S.view.tx = canvas.width / 2 - x * S.view.scale;
+      S.view.ty = canvas.height / 2 - y * S.view.scale;
+      wrapView(); updateScaleBar();
+    }
     select(x, y, null);
     fly.value = '';
   };
@@ -707,12 +872,33 @@
     el.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
   }
 
-  // ------------------------------------------------------------ map interaction
+  // ------------------------------------------------------------ map interaction (2D & 3D)
   let drag = null, moved = false;
-  canvas.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY, tx: S.view.tx, ty: S.view.ty }; moved = false; });
+  canvas.addEventListener('mousedown', (e) => {
+    drag = {
+      x: e.clientX, y: e.clientY,
+      tx: S.view.tx, ty: S.view.ty,
+      rLat: globe ? globe.state.targetLat : 0,
+      rLon: globe ? globe.state.targetLon : 0,
+    };
+    moved = false;
+  });
   window.addEventListener('mousemove', (e) => {
-    if (drag) { const dx = (e.clientX - drag.x) * devicePixelRatio, dy = (e.clientY - drag.y) * devicePixelRatio; if (Math.hypot(dx, dy) > 3) moved = true;
-      S.view.tx = drag.tx + dx; S.view.ty = drag.ty + dy; wrapView(); draw(); }
+    if (!drag) return;
+    const dx = (e.clientX - drag.x) * devicePixelRatio, dy = (e.clientY - drag.y) * devicePixelRatio;
+    if (Math.hypot(dx, dy) > 3) moved = true;
+    if (S.viewMode === '3d' && globe) {
+      const sens = 0.14 * (globe.state.camDist - 0.85) / (window.devicePixelRatio || 1);
+      globe.state.targetLon = drag.rLon - dx * sens;
+      globe.state.targetLat = Math.max(-82, Math.min(82, drag.rLat + dy * sens));
+      if (globe.state.autoSpin) {
+        globe.state.autoSpin = false;
+        if ($('#btn-spin')) $('#btn-spin').classList.remove('active');
+      }
+      schedule3D();
+    } else {
+      S.view.tx = drag.tx + dx; S.view.ty = drag.ty + dy; wrapView(); draw();
+    }
   });
   window.addEventListener('mouseup', () => { drag = null; });
   canvas.addEventListener('click', (e) => {
@@ -727,6 +913,12 @@
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (S.viewMode === '3d' && globe) {
+      const f = Math.exp(e.deltaY * 0.0012);
+      globe.state.targetDist = Math.max(1.22, Math.min(4.6, globe.state.targetDist * f));
+      schedule3D();
+      return;
+    }
     const r = canvas.getBoundingClientRect(), mx = (e.clientX - r.left) * devicePixelRatio, my = (e.clientY - r.top) * devicePixelRatio;
     const f = Math.exp(-e.deltaY * 0.0015), minS = Math.min(canvas.width / W, canvas.height / H) * 0.9, ns = Math.max(minS, Math.min(40, S.view.scale * f));
     const k = ns / S.view.scale; S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k; S.view.scale = ns; wrapView(); updateScaleBar(); draw();
@@ -747,7 +939,13 @@
   canvas.addEventListener('mouseleave', () => $('#tooltip').classList.add('hidden'));
   function gridAt(e) {
     const r = canvas.getBoundingClientRect();
-    let [gx, gy] = toGrid((e.clientX - r.left) * devicePixelRatio, (e.clientY - r.top) * devicePixelRatio);
+    const sx = (e.clientX - r.left) * devicePixelRatio;
+    const sy = (e.clientY - r.top) * devicePixelRatio;
+    if (S.viewMode === '3d' && globe) {
+      const hit = globe.unproject(sx, sy);
+      return hit ? [hit[0], hit[1]] : null;
+    }
+    let [gx, gy] = toGrid(sx, sy);
     gx = ((Math.floor(gx) % W) + W) % W; gy = Math.floor(gy);
     if (gy < 0 || gy >= H) return null; return [gx, gy];
   }
@@ -764,6 +962,7 @@
   buildPresets(); buildSliders(); renderLegend(); renderRoute();
   Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode)).then(() => {
     L.ice = L[S.iceBand];
+    if (globe) globe.setLayers(baseImg, L.elev, W, H);
     window.addEventListener('resize', resize); resize();
     rescore();
     $('#loading').classList.add('hidden');
@@ -771,10 +970,11 @@
   }).catch(err => { $('#loading').innerHTML = 'Failed to decode layers: ' + err; });
 
   // Deep links for the demo / presentation:
-  //   ?preset=isru            ?demo=route&from=Jezero&to=Nili   ?demo=crisis&site=Arcadia&tau=9&kp=1
+  //   ?preset=isru  ?view=3d  ?demo=route&from=Jezero&to=Nili   ?demo=crisis&site=Arcadia&tau=9&kp=1
   function applyDemoLink() {
     const q = new URLSearchParams(location.search);
     const find = (n) => n && REGIONS.find(r => r.name.toLowerCase().includes(n.toLowerCase()));
+    if (q.get('view') === '3d') setViewMode('3d');
     if (q.get('preset') && SCORING.PRESETS[q.get('preset')]) { S.preset = q.get('preset'); S.weights = { ...SCORING.PRESETS[S.preset].w }; buildPresets(); buildSliders(); rescore(); }
     if (q.get('demo') === 'route') {
       const a = find(q.get('from')) || REGIONS[0], b = find(q.get('to')) || REGIONS[16];
@@ -789,5 +989,5 @@
     }
   }
 
-  window.MDE = { L, S, cellValues, rescore };   // console access for debugging / tests
+  window.MDE = { L, S, globe, cellValues, rescore, setViewMode };
 })();

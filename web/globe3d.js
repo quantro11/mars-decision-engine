@@ -1,0 +1,536 @@
+// Hardware-accelerated WebGL 3D Planetary Globe Engine for Mars Base Decision Engine.
+// Uses real NASA MGS MOLA DEM (2048x1024) for 3D vertex displacement & per-pixel normal mapping,
+// composites live decision overlays (Score, SWIM 2.0 Ice, Slope, Elev, TES TI, Dust),
+// and provides exact 3D-to-2D projection & raycast unprojection for full interactive parity.
+(function (global) {
+  'use strict';
+
+  const DEG = Math.PI / 180;
+  const RAD = 180 / Math.PI;
+  const MARS_R = 3389.5; // km
+
+  const VS_GLOBE = `
+    attribute vec2 a_uv;
+    uniform mat4 u_mvp;
+    uniform sampler2D u_elevTex;
+    uniform float u_relief;
+    varying vec2 v_uv;
+    varying vec3 v_pos;
+    varying vec3 v_norm;
+    varying float v_elev;
+
+    void main() {
+      v_uv = a_uv;
+      float lon = (a_uv.x - 0.5) * 6.28318530718;
+      float lat = (0.5 - a_uv.y) * 3.14159265359;
+      float clat = cos(lat), slat = sin(lat);
+      float clon = cos(lon), slon = sin(lon);
+      vec3 n = vec3(clat * slon, slat, clat * clon);
+      float elevRaw = texture2D(u_elevTex, a_uv).r;
+      v_elev = elevRaw;
+      float r = 1.0 + (elevRaw - 0.278) * u_relief;
+      vec3 p = n * r;
+      v_pos = p;
+      v_norm = n;
+      gl_Position = u_mvp * vec4(p, 1.0);
+    }
+  `;
+
+  const FS_GLOBE = `
+    precision highp float;
+    varying vec2 v_uv;
+    varying vec3 v_pos;
+    varying vec3 v_norm;
+    varying float v_elev;
+
+    uniform sampler2D u_baseTex;
+    uniform sampler2D u_elevTex;
+    uniform sampler2D u_ovTex;
+    uniform float u_opacity;
+    uniform float u_showOv;
+    uniform float u_relief;
+    uniform float u_lighting;
+    uniform vec3 u_sunDir;
+    uniform vec3 u_camPos;
+
+    void main() {
+      vec3 N = normalize(v_norm);
+      float lon = (v_uv.x - 0.5) * 6.28318530718;
+      float lat = (0.5 - v_uv.y) * 3.14159265359;
+
+      // Tangent & bitangent on sphere for MOLA DEM normal perturbation
+      vec3 T = normalize(vec3(cos(lon), 0.0, -sin(lon)));
+      vec3 B = normalize(cross(N, T));
+
+      vec2 texel = vec2(1.0 / 2048.0, 1.0 / 1024.0);
+      float hL = texture2D(u_elevTex, v_uv - vec2(texel.x, 0.0)).r;
+      float hR = texture2D(u_elevTex, v_uv + vec2(texel.x, 0.0)).r;
+      float hU = texture2D(u_elevTex, v_uv - vec2(0.0, texel.y)).r;
+      float hD = texture2D(u_elevTex, v_uv + vec2(0.0, texel.y)).r;
+
+      float bumpStrength = 8.0 + u_relief * 45.0;
+      float dU = (hR - hL) * bumpStrength;
+      float dV = (hD - hU) * bumpStrength;
+      vec3 pertN = normalize(N - dU * T + dV * B);
+
+      // Base MOLA/Viking shaded relief + subtle Martian regolith chromatic grading
+      vec3 baseRaw = texture2D(u_baseTex, v_uv).rgb;
+      float lum = dot(baseRaw, vec3(0.299, 0.587, 0.114));
+      vec3 marsTint = mix(
+        vec3(0.56, 0.33, 0.23) * (0.35 + 0.95 * lum),
+        vec3(0.84, 0.52, 0.36) * (0.45 + 0.75 * lum),
+        smoothstep(0.15, 0.75, v_elev)
+      );
+      vec3 baseCol = mix(baseRaw, marsTint, 0.52);
+
+      // Composite active decision/sensor overlay
+      vec4 ov = texture2D(u_ovTex, v_uv);
+      float ovAlpha = u_showOv * u_opacity * ov.a;
+      vec3 surfaceCol = mix(baseCol, ov.rgb, ovAlpha);
+
+      // Solar illumination & terrain hillshading
+      vec3 V = normalize(u_camPos - v_pos);
+      if (u_lighting > 0.5) {
+        vec3 L = normalize(u_sunDir);
+        float diffSphere = max(0.0, dot(N, L));
+        float diffDetail = max(0.0, dot(pertN, L));
+        float terminator = smoothstep(-0.18, 0.22, dot(N, L));
+        float shade = mix(0.16, 1.08, 0.45 * diffSphere + 0.55 * diffDetail) * mix(0.22, 1.0, terminator);
+
+        // Subtle specular sheen on high-albedo / overlay zones
+        vec3 H = normalize(L + V);
+        float spec = pow(max(0.0, dot(pertN, H)), 28.0) * 0.10 * terminator;
+        surfaceCol = surfaceCol * shade + vec3(spec);
+      } else {
+        float reliefShade = clamp(0.75 + 0.45 * dot(pertN, normalize(u_camPos)), 0.45, 1.18);
+        surfaceCol *= reliefShade;
+      }
+
+      // Martian atmospheric limb scattering (Rayleigh/dust Fresnel halo)
+      float ndotv = max(0.0, dot(N, V));
+      float rim = pow(1.0 - ndotv, 3.0);
+      vec3 atmoColor = mix(vec3(0.92, 0.48, 0.28), vec3(0.35, 0.72, 0.98), 0.38);
+      surfaceCol += atmoColor * rim * 0.42;
+
+      gl_FragColor = vec4(surfaceCol, 1.0);
+    }
+  `;
+
+  const VS_HALO = `
+    attribute vec2 a_pos;
+    varying vec2 v_p;
+    void main() {
+      v_p = a_pos;
+      gl_Position = vec4(a_pos, 0.999, 1.0);
+    }
+  `;
+
+  const FS_HALO = `
+    precision highp float;
+    varying vec2 v_p;
+    uniform vec2 u_res;
+    uniform float u_sphereScreenR;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    void main() {
+      vec2 aspect = vec2(u_res.x / u_res.y, 1.0);
+      vec2 p = v_p * aspect;
+      float d = length(p);
+
+      // Deep space background gradient
+      vec3 col = mix(vec3(0.025, 0.038, 0.062), vec3(0.008, 0.012, 0.022), clamp(d * 0.7, 0.0, 1.0));
+
+      // Crisp starfield outside planet limb
+      vec2 grid = floor((v_p * 0.5 + 0.5) * u_res / 2.5);
+      float h = hash(grid);
+      if (h > 0.9965 && d > u_sphereScreenR * 0.98) {
+        float b = (h - 0.9965) / 0.0035;
+        col += vec3(0.65, 0.78, 0.95) * (0.25 + 0.75 * b * b);
+      }
+
+      // Outer Martian atmospheric corona glow
+      float edge = d - u_sphereScreenR;
+      if (edge > -0.04) {
+        float glow = exp(-max(0.0, edge) * 18.0 / max(0.2, u_sphereScreenR)) * smoothstep(-0.04, 0.005, edge);
+        col += vec3(0.88, 0.42, 0.24) * glow * 0.34 + vec3(0.22, 0.68, 0.96) * glow * 0.16;
+      }
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  function createShader(gl, type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('Shader compile error:', gl.getShaderInfoLog(s));
+    }
+    return s;
+  }
+
+  function createProg(gl, vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, createShader(gl, gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, createShader(gl, gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      console.error('Program link error:', gl.getProgramInfoLog(p));
+    }
+    return p;
+  }
+
+  function createGlobe(canvas) {
+    const gl = canvas.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: false });
+    if (!gl) return null;
+
+    const progGlobe = createProg(gl, VS_GLOBE, FS_GLOBE);
+    const progHalo = createProg(gl, VS_HALO, FS_HALO);
+
+    // Build 240 x 120 UV sphere mesh (29,241 vertices, fits in Uint16Array)
+    const LON_SEGS = 240, LAT_SEGS = 120;
+    const uvs = new Float32Array((LON_SEGS + 1) * (LAT_SEGS + 1) * 2);
+    const indices = new Uint16Array(LON_SEGS * LAT_SEGS * 6);
+    let ptr = 0;
+    for (let y = 0; y <= LAT_SEGS; y++) {
+      const v = y / LAT_SEGS;
+      for (let x = 0; x <= LON_SEGS; x++) {
+        uvs[ptr++] = x / LON_SEGS;
+        uvs[ptr++] = v;
+      }
+    }
+    let idx = 0;
+    const stride = LON_SEGS + 1;
+    for (let y = 0; y < LAT_SEGS; y++) {
+      for (let x = 0; x < LON_SEGS; x++) {
+        const a = y * stride + x;
+        const b = a + 1;
+        const c = a + stride;
+        const d = c + 1;
+        indices[idx++] = a; indices[idx++] = c; indices[idx++] = b;
+        indices[idx++] = b; indices[idx++] = c; indices[idx++] = d;
+      }
+    }
+
+    const vboGlobe = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboGlobe);
+    gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+
+    const iboGlobe = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboGlobe);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+    const vboQuad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+    // Textures
+    function makeTex(wrapX) {
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapX ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    }
+
+    const texBase = makeTex(true);
+    const texElev = makeTex(true);
+    const texOv = makeTex(true);
+
+    // State
+    const state = {
+      active: false,
+      rotLat: 16,      // degrees
+      rotLon: 65,      // degrees (starts facing Syrtis / Jezero / Hellas hemisphere)
+      targetLat: 16,
+      targetLon: 65,
+      camDist: 2.55,
+      targetDist: 2.55,
+      fov: 38 * DEG,
+      exaggeration: 8, // 1x, 5x, 8x, 15x
+      autoSpin: false,
+      sunLight: true,
+      sunAngle: 0.45,
+      elevData: null,
+      W: 2048,
+      H: 1024,
+    };
+
+    function getReliefScale() {
+      // Physical Mars relief is ~29.5 km / 3389.5 km = 0.0087 of radius.
+      return 0.0087 * state.exaggeration;
+    }
+
+    function setLayers(baseImg, elevUint8, width, height) {
+      state.W = width;
+      state.H = height;
+      state.elevData = elevUint8;
+
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.bindTexture(gl.TEXTURE_2D, texBase);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, baseImg);
+
+      gl.bindTexture(gl.TEXTURE_2D, texElev);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, width, height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, elevUint8);
+    }
+
+    function updateOverlay(ovCanvas) {
+      gl.bindTexture(gl.TEXTURE_2D, texOv);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ovCanvas);
+    }
+
+    function flyTo(lat, lon, dist) {
+      state.targetLat = Math.max(-82, Math.min(82, lat));
+      // Shortest angular path for longitude
+      let dLon = ((lon - state.rotLon + 540) % 360) - 180;
+      state.targetLon = state.rotLon + dLon;
+      if (dist !== undefined) state.targetDist = Math.max(1.22, Math.min(5.0, dist));
+    }
+
+    function stepPhysics() {
+      if (state.autoSpin) {
+        state.targetLon += 0.12;
+      }
+      const dLat = state.targetLat - state.rotLat;
+      const dLon = state.targetLon - state.rotLon;
+      const dDist = state.targetDist - state.camDist;
+      const moving = Math.abs(dLat) > 0.02 || Math.abs(dLon) > 0.02 || Math.abs(dDist) > 0.001 || state.autoSpin;
+      state.rotLat += dLat * 0.18;
+      state.rotLon += dLon * 0.18;
+      state.camDist += dDist * 0.22;
+      if (!moving) {
+        state.rotLat = state.targetLat;
+        state.rotLon = ((state.targetLon + 540) % 360) - 180;
+        state.targetLon = state.rotLon;
+        state.camDist = state.targetDist;
+      }
+      return moving;
+    }
+
+    // Rotate world point (wx, wy, wz) into camera-aligned globe space
+    function worldToRot(wx, wy, wz) {
+      const rLat = state.rotLat * DEG;
+      const rLon = state.rotLon * DEG;
+      const cLon = Math.cos(rLon), sLon = Math.sin(rLon);
+      const cLat = Math.cos(rLat), sLat = Math.sin(rLat);
+
+      const x1 = wx * cLon - wz * sLon;
+      const y1 = wy;
+      const z1 = wx * sLon + wz * cLon;
+
+      const x2 = x1;
+      const y2 = y1 * cLat - z1 * sLat;
+      const z2 = y1 * sLat + z1 * cLat;
+      return [x2, y2, z2];
+    }
+
+    // Inverse rotate from camera-aligned globe space back to world (wx, wy, wz)
+    function rotToWorld(x2, y2, z2) {
+      const rLat = state.rotLat * DEG;
+      const rLon = state.rotLon * DEG;
+      const cLon = Math.cos(rLon), sLon = Math.sin(rLon);
+      const cLat = Math.cos(rLat), sLat = Math.sin(rLat);
+
+      const x1 = x2;
+      const y1 = y2 * cLat + z2 * sLat;
+      const z1 = -y2 * sLat + z2 * cLat;
+
+      const wx = x1 * cLon + z1 * sLon;
+      const wy = y1;
+      const wz = -x1 * sLon + z1 * cLon;
+      return [wx, wy, wz];
+    }
+
+    function elevRadiusAt(lat, lon) {
+      if (!state.elevData) return 1.0;
+      const W = state.W, H = state.H;
+      const x = ((Math.floor((lon + 180) / 360 * W) % W) + W) % W;
+      const y = Math.min(H - 1, Math.max(0, Math.floor((90 - lat) / 180 * H)));
+      const elevRaw = state.elevData[y * W + x] / 255;
+      return 1.0 + (elevRaw - 0.278) * getReliefScale();
+    }
+
+    // Project (lat, lon) in degrees -> [screenX, screenY, visible]
+    function project(lat, lon, useElev) {
+      const phi = lat * DEG, lam = lon * DEG;
+      const r = useElev === false ? 1.0 : elevRadiusAt(lat, lon);
+      const wx = Math.cos(phi) * Math.sin(lam) * r;
+      const wy = Math.sin(phi) * r;
+      const wz = Math.cos(phi) * Math.cos(lam) * r;
+
+      const [rx, ry, rz] = worldToRot(wx, wy, wz);
+      const camZ = state.camDist - rz;
+      if (camZ <= 0.05) return [0, 0, false];
+
+      // Horizon occlusion check: dot(normal, camPos - pos) > 0 => rz * camDist > r * r
+      const visible = (rz * state.camDist) > (r * r * 0.96);
+
+      const f = 1.0 / Math.tan(state.fov * 0.5);
+      const aspect = canvas.width / Math.max(1, canvas.height);
+      const ndcX = (rx * f / aspect) / camZ;
+      const ndcY = (ry * f) / camZ;
+
+      const sx = (ndcX * 0.5 + 0.5) * canvas.width;
+      const sy = (0.5 - ndcY * 0.5) * canvas.height;
+      return [sx, sy, visible];
+    }
+
+    // Raycast screen pixel (sx, sy) -> [gx, gy, lat, lon] or null if off-globe
+    function unproject(sx, sy) {
+      const W = state.W, H = state.H;
+      const aspect = canvas.width / Math.max(1, canvas.height);
+      const tanHalf = Math.tan(state.fov * 0.5);
+      const ndcX = (sx / canvas.width) * 2 - 1;
+      const ndcY = 1 - (sy / canvas.height) * 2;
+
+      let dx = ndcX * aspect * tanHalf;
+      let dy = ndcY * tanHalf;
+      let dz = -1;
+      const len = Math.hypot(dx, dy, dz);
+      dx /= len; dy /= len; dz /= len;
+
+      const oz = state.camDist;
+      const b = oz * dz;
+      const c = oz * oz - 1.0;
+      const disc = b * b - c;
+      if (disc < 0) return null;
+
+      let t = -b - Math.sqrt(disc);
+      if (t <= 0) return null;
+
+      // Refine once with actual MOLA elevation radius at hit point
+      let hx = t * dx, hy = t * dy, hz = oz + t * dz;
+      let [wx, wy, wz] = rotToWorld(hx, hy, hz);
+      let lat = Math.asin(Math.max(-1, Math.min(1, wy))) * RAD;
+      let lon = Math.atan2(wx, wz) * RAD;
+      const r = elevRadiusAt(lat, lon);
+      const c2 = oz * oz - r * r;
+      const disc2 = b * b - c2;
+      if (disc2 >= 0) {
+        t = -b - Math.sqrt(disc2);
+        hx = t * dx; hy = t * dy; hz = oz + t * dz;
+        [wx, wy, wz] = rotToWorld(hx, hy, hz);
+        const invR = 1 / Math.hypot(wx, wy, wz);
+        lat = Math.asin(Math.max(-1, Math.min(1, wy * invR))) * RAD;
+        lon = Math.atan2(wx, wz) * RAD;
+      }
+
+      const gx = ((Math.floor((lon + 180) / 360 * W) % W) + W) % W;
+      const gy = Math.min(H - 1, Math.max(0, Math.floor((90 - lat) / 180 * H)));
+      return [gx, gy, lat, lon];
+    }
+
+    function buildMVP() {
+      const aspect = canvas.width / Math.max(1, canvas.height);
+      const f = 1.0 / Math.tan(state.fov * 0.5);
+      const near = 0.08, far = 20.0;
+      const nf = 1 / (near - far);
+
+      const rLat = state.rotLat * DEG;
+      const rLon = state.rotLon * DEG;
+      const cLon = Math.cos(rLon), sLon = Math.sin(rLon);
+      const cLat = Math.cos(rLat), sLat = Math.sin(rLat);
+
+      // View rotation R = Rx(rLat) * Ry(-rLon), translation Tz = -camDist
+      const r00 = cLon,          r01 = 0,     r02 = -sLon;
+      const r10 = -sLat * sLon,  r11 = cLat,  r12 = -sLat * cLon;
+      const r20 = cLat * sLon,   r21 = sLat,  r22 = cLat * cLon;
+      const tz = -state.camDist;
+
+      const sx = f / aspect, sy = f, sz = (far + near) * nf, sw = 2 * far * near * nf;
+
+      // Column-major 4x4 MVP = P * V
+      return new Float32Array([
+        sx * r00, sy * r10, sz * r20, -r20,
+        sx * r01, sy * r11, sz * r21, -r21,
+        sx * r02, sy * r12, sz * r22, -r22,
+        0,        0,        sz * tz + sw, -tz,
+      ]);
+    }
+
+    function render(opts) {
+      const w = canvas.width, h = canvas.height;
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0.012, 0.018, 0.03, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      // 1. Background starfield + atmospheric corona
+      gl.disable(gl.DEPTH_TEST);
+      gl.useProgram(progHalo);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
+      const aPos = gl.getAttribLocation(progHalo, 'a_pos');
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+      const f = 1.0 / Math.tan(state.fov * 0.5);
+      const sphereScreenR = f / Math.sqrt(Math.max(1.05, state.camDist * state.camDist - 1.0));
+      gl.uniform2f(gl.getUniformLocation(progHalo, 'u_res'), w, h);
+      gl.uniform1f(gl.getUniformLocation(progHalo, 'u_sphereScreenR'), sphereScreenR);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // 2. 3D displaced MOLA Mars globe
+      gl.enable(gl.DEPTH_TEST);
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.BACK);
+
+      gl.useProgram(progGlobe);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vboGlobe);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboGlobe);
+      const aUv = gl.getAttribLocation(progGlobe, 'a_uv');
+      gl.enableVertexAttribArray(aUv);
+      gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 0, 0);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texBase);
+      gl.uniform1i(gl.getUniformLocation(progGlobe, 'u_baseTex'), 0);
+
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, texElev);
+      gl.uniform1i(gl.getUniformLocation(progGlobe, 'u_elevTex'), 1);
+
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, texOv);
+      gl.uniform1i(gl.getUniformLocation(progGlobe, 'u_ovTex'), 2);
+
+      const mvp = buildMVP();
+      gl.uniformMatrix4fv(gl.getUniformLocation(progGlobe, 'u_mvp'), false, mvp);
+      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_relief'), getReliefScale());
+      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_opacity'), opts.opacity ?? 0.7);
+      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_showOv'), opts.showOverlay ? 1.0 : 0.0);
+      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_lighting'), state.sunLight ? 1.0 : 0.0);
+
+      // Camera & Sun direction in world space (headlight-offset solar vector for optimal inspection)
+      const [camWx, camWy, camWz] = rotToWorld(0, 0, state.camDist);
+      const [sunWx, sunWy, sunWz] = rotToWorld(1.15, 0.75, state.camDist + 1.5);
+      gl.uniform3f(gl.getUniformLocation(progGlobe, 'u_camPos'), camWx, camWy, camWz);
+      gl.uniform3f(gl.getUniformLocation(progGlobe, 'u_sunDir'), sunWx, sunWy, sunWz);
+
+      gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+    }
+
+    function equatorialKmPerCssPx() {
+      const f = 1.0 / Math.tan(state.fov * 0.5);
+      const screenRadiusCssPx = (f / Math.max(0.2, state.camDist - 1.0)) * (canvas.height / (window.devicePixelRatio || 1)) * 0.5;
+      return MARS_R / Math.max(20, screenRadiusCssPx);
+    }
+
+    return {
+      state,
+      setLayers,
+      updateOverlay,
+      flyTo,
+      stepPhysics,
+      project,
+      unproject,
+      render,
+      equatorialKmPerCssPx,
+    };
+  }
+
+  global.GLOBE3D = { createGlobe };
+})(typeof window !== 'undefined' ? window : module.exports);
