@@ -4,6 +4,32 @@
   const $ = (s) => document.querySelector(s);
   const META = window.LAYER_META;
   const W = META.width, H = META.height;
+  const MARS_R = 3389.5; // km
+
+  const PRESET_CODES = {
+    landing: 'EDL-PRI',
+    isru: 'ISRU-H2O',
+    balanced: 'CREW-BAL',
+  };
+
+  const CRIT_TAGS = {
+    elev: 'ELEV',
+    slope: 'SLOP',
+    ice: 'H2O',
+    rough: 'ROUG',
+    lat: 'LAT',
+    ti: 'TES',
+  };
+
+  const OVERLAY_NAMES = {
+    score: 'SUITABILITY SCORE',
+    ice: 'SWIM 2.0 SUBSURFACE ICE',
+    slope: 'MOLA 90TH-PCT SLOPE',
+    elev: 'MOLA MEGDR ELEVATION',
+    ti: 'TES THERMAL INERTIA',
+    dust: 'TES DUST ABUNDANCE',
+    none: 'MOLA SHADED RELIEF BASE',
+  };
 
   // ------------------------------------------------------------ layer decoding
   const L = {
@@ -83,14 +109,31 @@
     canvas.height = Math.max(1, Math.floor(r.height * devicePixelRatio));
     if (!viewReady) { fitView(); viewReady = true; }
     else { S.view.tx = canvas.width / 2 - gx * S.view.scale; S.view.ty = canvas.height / 2 - gy * S.view.scale; wrapView(); }
+    updateScaleBar();
     draw();
   }
   function fitView() {
     const s = Math.min(canvas.width / W, canvas.height / H);
     S.view = { scale: s, tx: (canvas.width - W * s) / 2, ty: (canvas.height - H * s) / 2 };
+    updateScaleBar();
   }
   const toScreen = (x, y) => [S.view.tx + x * S.view.scale, S.view.ty + y * S.view.scale];
   const toGrid = (sx, sy) => [(sx - S.view.tx) / S.view.scale, (sy - S.view.ty) / S.view.scale];
+
+  function updateScaleBar() {
+    const elLbl = $('#scale-label'), elBar = $('#scale-bar');
+    if (!elLbl || !elBar) return;
+    const kmPerGridPx = (2 * Math.PI * MARS_R) / W; // ~10.398 km/px at equator
+    const cssPxPerGridPx = S.view.scale / (window.devicePixelRatio || 1);
+    const kmPerCssPx = kmPerGridPx / Math.max(0.05, cssPxPerGridPx);
+    const targetKm = kmPerCssPx * 72;
+    const steps = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+    let niceKm = steps[0];
+    for (const s of steps) { if (s <= targetKm * 1.35) niceKm = s; }
+    const barPx = Math.max(28, Math.min(120, Math.round(niceKm / kmPerCssPx)));
+    elLbl.textContent = `${niceKm} km`;
+    elBar.style.width = `${barPx}px`;
+  }
 
   // ------------------------------------------------------------ colour maps
   function lerpStops(stops, t) {
@@ -102,12 +145,12 @@
     return stops[stops.length - 1].slice(1);
   }
   const CMAP = {
-    score: [[0, 20, 20, 40], [0.3, 70, 30, 110], [0.55, 200, 70, 70], [0.75, 250, 160, 40], [1, 255, 250, 180]],
-    ice: [[0, 40, 30, 20], [0.5, 60, 90, 120], [1, 160, 230, 255]],
-    slope: [[0, 30, 60, 30], [0.33, 90, 180, 60], [0.66, 250, 200, 40], [1, 255, 40, 40]],
-    elev: [[0, 20, 40, 90], [0.3, 60, 120, 140], [0.5, 170, 150, 90], [0.7, 150, 80, 50], [1, 255, 255, 255]],
-    ti: [[0, 120, 40, 20], [0.15, 200, 120, 40], [0.4, 90, 170, 90], [0.7, 60, 120, 200], [1, 240, 240, 255]],
-    dust: [[0, 40, 60, 90], [0.5, 190, 150, 90], [1, 255, 230, 160]],
+    score: [[0, 14, 19, 34], [0.3, 30, 64, 130], [0.55, 16, 155, 165], [0.78, 245, 158, 11], [1, 254, 249, 195]],
+    ice: [[0, 32, 26, 22], [0.5, 45, 95, 135], [1, 145, 228, 255]],
+    slope: [[0, 22, 55, 38], [0.33, 65, 175, 95], [0.66, 245, 180, 35], [1, 239, 55, 55]],
+    elev: [[0, 18, 38, 88], [0.3, 52, 118, 142], [0.5, 168, 148, 88], [0.7, 148, 78, 48], [1, 252, 252, 255]],
+    ti: [[0, 115, 38, 22], [0.15, 195, 115, 38], [0.4, 75, 168, 95], [0.7, 56, 135, 215], [1, 238, 244, 255]],
+    dust: [[0, 35, 55, 85], [0.5, 185, 145, 85], [1, 255, 228, 155]],
   };
   const LUT = {};
   for (const k in CMAP) { LUT[k] = new Uint8ClampedArray(256 * 3); for (let i = 0; i < 256; i++) { const c = lerpStops(CMAP[k], i / 255); LUT[k].set(c.map(Math.round), i * 3); } }
@@ -116,7 +159,7 @@
     const d = ovImg.data, lut = LUT[S.overlay] || LUT.score;
     for (let i = 0, j = 0; i < W * H; i++, j += 4) {
       let v, a = 255;
-      if (S.overlay === 'score') { const sc = S.score[i]; v = Math.round(Math.max(0, Math.min(1, (sc - 0.35) / 0.65)) * 255); a = sc <= 0 ? 170 : 255; }
+      if (S.overlay === 'score') { const sc = S.score[i]; v = Math.round(Math.max(0, Math.min(1, (sc - 0.35) / 0.65)) * 255); a = sc <= 0 ? 175 : 255; }
       else if (S.overlay === 'ice') { const r = L.ice[i]; if (r === 0) { v = 0; a = 60; } else v = Math.round(Math.max(0, Math.min(255, (r - 28) * 1.275))); }
       else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);          // 0..16 deg -> 0..255
       else if (S.overlay === 'elev') v = L.elev[i];
@@ -133,59 +176,240 @@
     if (!baseImg) return;
     if (ovDirty) buildOverlay();
     const { scale, tx, ty } = S.view;
+    const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.imageSmoothingEnabled = scale < 1;
+    ctx.fillStyle = '#030508';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = scale < 1.2;
+
     // draw base + overlay three times for horizontal wrap
     for (const off of [-W, 0, W]) {
       const sx = tx + off * scale;
       if (sx > canvas.width || sx + W * scale < 0) continue;
       ctx.drawImage(baseImg, sx, ty, W * scale, H * scale);
-      if (S.overlay !== 'none') { ctx.globalAlpha = S.opacity; ctx.drawImage(ovCanvas, sx, ty, W * scale, H * scale); ctx.globalAlpha = 1; }
+      if (S.overlay !== 'none') {
+        ctx.globalAlpha = S.opacity;
+        ctx.drawImage(ovCanvas, sx, ty, W * scale, H * scale);
+        ctx.globalAlpha = 1;
+      }
     }
-    // graticule
-    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 1;
-    for (let lon = -180; lon <= 180; lon += 30) { const [x0] = toScreen(L.colOfLon(Math.min(lon, 179.99)), 0); ctx.beginPath(); ctx.moveTo(x0, ty); ctx.lineTo(x0, ty + H * scale); ctx.stroke(); }
-    for (let lat = -60; lat <= 60; lat += 30) { const [, y0] = toScreen(0, L.rowOfLat(lat)); ctx.beginPath(); ctx.moveTo(tx, y0); ctx.lineTo(tx + W * scale, y0); ctx.stroke(); }
-    // HLS ±50° band
-    ctx.strokeStyle = 'rgba(255,200,87,.35)'; ctx.setLineDash([6, 6]);
-    for (const lat of [50, -50]) { const [, y0] = toScreen(0, L.rowOfLat(lat)); ctx.beginPath(); ctx.moveTo(tx, y0); ctx.lineTo(tx + W * scale, y0); ctx.stroke(); }
+
+    // graticule lines + telemetry coordinate labels
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.13)';
+    ctx.lineWidth = 1;
+    ctx.font = `500 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.55)';
+
+    for (let lon = -180; lon <= 180; lon += 30) {
+      const [x0] = toScreen(L.colOfLon(Math.min(lon, 179.99)), 0);
+      ctx.beginPath();
+      ctx.moveTo(x0, Math.max(0, ty));
+      ctx.lineTo(x0, Math.min(canvas.height, ty + H * scale));
+      ctx.stroke();
+      if (lon > -180 && lon < 180 && x0 > 30 * dpr && x0 < canvas.width - 30 * dpr) {
+        const lbl = lon === 0 ? '0°' : `${Math.abs(lon)}°${lon > 0 ? 'E' : 'W'}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(lbl, x0, Math.max(46 * dpr, ty + 12 * dpr));
+      }
+    }
+
+    ctx.textAlign = 'left';
+    for (let lat = -60; lat <= 60; lat += 30) {
+      const [, y0] = toScreen(0, L.rowOfLat(lat));
+      ctx.beginPath();
+      ctx.moveTo(tx, y0);
+      ctx.lineTo(tx + W * scale, y0);
+      ctx.stroke();
+      if (y0 > 48 * dpr && y0 < canvas.height - 40 * dpr) {
+        const lbl = lat === 0 ? 'EQ 0°' : `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`;
+        ctx.fillText(lbl, 12 * dpr, y0 - 4 * dpr);
+      }
+    }
+
+    // NASA HLS ±50° operational envelope
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+    ctx.setLineDash([6 * dpr, 5 * dpr]);
+    for (const lat of [50, -50]) {
+      const [, y0] = toScreen(0, L.rowOfLat(lat));
+      ctx.beginPath();
+      ctx.moveTo(tx, y0);
+      ctx.lineTo(tx + W * scale, y0);
+      ctx.stroke();
+      if (y0 > 46 * dpr && y0 < canvas.height - 40 * dpr) {
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.72)';
+        ctx.fillText(`HLS LIMIT ${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`, canvas.width - 115 * dpr, y0 - 4 * dpr);
+      }
+    }
     ctx.setLineDash([]);
 
-    const fontPx = Math.max(10, Math.min(13, 9 + scale)) * devicePixelRatio;
-    ctx.font = `${fontPx}px Inter, Segoe UI, sans-serif`; ctx.textBaseline = 'middle';
+    // Named regions & NASA Exploration Zones
+    const fontPx = Math.max(9.5, Math.min(12, 8.5 + scale * 0.8)) * dpr;
+    ctx.font = `500 ${fontPx}px "Inter", "Segoe UI", sans-serif`;
+    ctx.textBaseline = 'middle';
     if (S.showRegions || S.showEZ) for (const r of REGIONS) {
       if (S.showEZ && !r.ez && !S.showRegions) continue;
       if (!S.showEZ && !S.showRegions) break;
-      if (!S.showEZ && scale < 1.6 && !r.mission && !r.ez) continue;   // declutter when zoomed out
+      if (!S.showEZ && scale < 1.6 && !r.mission && !r.ez) continue;
       const [x, y] = toScreen(L.colOfLon(r.lon), L.rowOfLat(r.lat));
+      if (x < -80 || x > canvas.width + 80 || y < -30 || y > canvas.height + 30) continue;
       const ez = S.showEZ && r.ez;
-      ctx.fillStyle = ez ? '#5ad17a' : (r.mission ? '#4cc3ff' : 'rgba(255,255,255,.75)');
-      ctx.beginPath(); ctx.arc(x, y, (ez ? 4 : 2.5) * devicePixelRatio, 0, 7); ctx.fill();
-      if (ez || scale >= 1.6 || (r.mission && scale >= 1.2)) { ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(r.name, x + 7, y + 1); ctx.fillStyle = ez ? '#bff5cc' : '#fff'; ctx.fillText(r.name, x + 6, y); }
+
+      if (ez) {
+        const s = 4.5 * dpr;
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.3 * dpr;
+        ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+      } else {
+        ctx.fillStyle = r.mission ? '#38bdf8' : 'rgba(226, 232, 240, 0.75)';
+        ctx.beginPath();
+        ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (ez || scale >= 1.6 || (r.mission && scale >= 1.15)) {
+        ctx.fillStyle = 'rgba(3, 5, 8, 0.78)';
+        ctx.fillText(r.name, x + 7 * dpr, y + 1 * dpr);
+        ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.9)');
+        ctx.fillText(r.name, x + 6 * dpr, y);
+      }
     }
-    // routes
+
+    // Traverse paths
     const drawPath = (path, color, width, dash) => {
-      if (!path) return; ctx.strokeStyle = color; ctx.lineWidth = width * devicePixelRatio; ctx.setLineDash(dash || []);
-      ctx.beginPath(); let px = null;
-      for (const n of path) { const y = (n / W) | 0, x = n - y * W; const [sx, sy] = toScreen(x + 0.5, y + 0.5);
-        if (px !== null && Math.abs(sx - px) > W * scale / 2) ctx.moveTo(sx, sy); else if (px === null) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy); px = sx; }
-      ctx.stroke(); ctx.setLineDash([]);
+      if (!path) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width * dpr;
+      ctx.setLineDash(dash || []);
+      ctx.beginPath();
+      let px = null;
+      for (const n of path) {
+        const y = (n / W) | 0, x = n - y * W;
+        const [sx, sy] = toScreen(x + 0.5, y + 0.5);
+        if (px !== null && Math.abs(sx - px) > W * scale / 2) ctx.moveTo(sx, sy);
+        else if (px === null) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+        px = sx;
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
     };
-    if (S.route.straight) drawPath(S.route.straight.path, '#ff5c5c', 2, [6, 5]);
-    if (S.route.safe) drawPath(S.route.safe.path, '#5ad17a', 3);
-    for (const [p, col, lab] of [[S.route.start, '#5ad17a', 'A'], [S.route.goal, '#ffc857', 'B']]) if (p) marker(p.x, p.y, col, lab);
-    // candidates
-    S.candidates.forEach((c, i) => marker(c.x, c.y, S.selected && S.selected.cand === i ? '#fff' : '#ff7a45', String(i + 1)));
-    if (S.crisis.site) marker(S.crisis.site.x, S.crisis.site.y, '#4cc3ff', '⚡');
-    if (S.selected && S.selected.cand == null) { const [x, y] = toScreen(S.selected.x + 0.5, S.selected.y + 0.5); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5 * devicePixelRatio; ctx.strokeRect(x - 6, y - 6, 12, 12); }
+    if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
+    if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
+    if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#10b981', 'WP-A');
+    if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#f59e0b', 'WP-B');
+
+    // Candidate reticles
+    S.candidates.forEach((c, i) => {
+      const isSel = S.selected && S.selected.cand === i;
+      drawCandidateReticle(c.x, c.y, i + 1, c.score, isSel);
+    });
+
+    // Crisis surface station marker
+    if (S.crisis.site) {
+      drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
+    }
+
+    // Selected cell precision target bracket
+    if (S.selected && S.selected.cand == null) {
+      drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
+    }
   }
-  function marker(gx, gy, color, label) {
-    const [x, y] = toScreen(gx, gy), r = 10 * devicePixelRatio;
-    ctx.fillStyle = color; ctx.strokeStyle = '#111'; ctx.lineWidth = 2 * devicePixelRatio;
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#111'; ctx.font = `bold ${11 * devicePixelRatio}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(label, x, y + 0.5); ctx.textAlign = 'left';
+
+  function drawCandidateReticle(gx, gy, rank, score, active) {
+    const [x, y] = toScreen(gx, gy);
+    const dpr = window.devicePixelRatio || 1;
+    const r = (active ? 11 : 9) * dpr;
+    const primary = active ? '#38bdf8' : '#fc3d21';
+
+    // Outer target ring
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = (active ? 2 : 1.5) * dpr;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Crosshair ticks
+    const tIn = r + 2 * dpr, tOut = r + 6 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(x - tOut, y); ctx.lineTo(x - tIn, y);
+    ctx.moveTo(x + tIn, y); ctx.lineTo(x + tOut, y);
+    ctx.moveTo(x, y - tOut); ctx.lineTo(x, y - tIn);
+    ctx.moveTo(x, y + tIn); ctx.lineTo(x, y + tOut);
+    ctx.stroke();
+
+    // Center dot
+    ctx.fillStyle = primary;
+    ctx.beginPath();
+    ctx.arc(x, y, 2 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Callout badge
+    const tag = `0${rank}`;
+    ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
+    const bx = x + r + 5 * dpr, by = y - r - 2 * dpr;
+    const bw = 20 * dpr, bh = 13 * dpr;
+    ctx.fillStyle = active ? '#38bdf8' : 'rgba(8, 12, 18, 0.92)';
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = 1 * dpr;
+    ctx.fillRect(bx, by - bh / 2, bw, bh);
+    ctx.strokeRect(bx, by - bh / 2, bw, bh);
+    ctx.fillStyle = active ? '#04070b' : '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tag, bx + bw / 2, by + 0.5 * dpr);
+    ctx.textAlign = 'left';
+  }
+
+  function drawSelectionReticle(gx, gy) {
+    const [x, y] = toScreen(gx, gy);
+    const dpr = window.devicePixelRatio || 1;
+    const s = 9 * dpr, c = 4 * dpr;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.beginPath();
+    // 4 corner brackets
+    ctx.moveTo(x - s, y - s + c); ctx.lineTo(x - s, y - s); ctx.lineTo(x - s + c, y - s);
+    ctx.moveTo(x + s - c, y - s); ctx.lineTo(x + s, y - s); ctx.lineTo(x + s, y - s + c);
+    ctx.moveTo(x + s, y + s - c); ctx.lineTo(x + s, y + s); ctx.lineTo(x + s - c, y + s);
+    ctx.moveTo(x - s + c, y + s); ctx.lineTo(x - s, y + s); ctx.lineTo(x - s, y + s - c);
+    ctx.stroke();
+  }
+
+  function drawWaypoint(gx, gy, color, label) {
+    const [x, y] = toScreen(gx, gy);
+    const dpr = window.devicePixelRatio || 1;
+    const r = 6.5 * dpr;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = 'rgba(6, 9, 15, 0.9)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 * dpr;
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    ctx.strokeRect(-r, -r, r * 2, r * 2);
+    ctx.restore();
+
+    ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + 10 * dpr, y);
+  }
+
+  function drawStationBeacon(gx, gy) {
+    const [x, y] = toScreen(gx, gy);
+    const dpr = window.devicePixelRatio || 1;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.beginPath();
+    ctx.arc(x, y, 11 * dpr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = `700 ${Math.round(9 * dpr)}px "JetBrains Mono", monospace`;
+    ctx.fillText('STA-PWR', x + 14 * dpr, y);
   }
 
   // ------------------------------------------------------------ scoring pipeline
@@ -206,7 +430,14 @@
 
   function critRows(v, w) {
     const wn = SCORING.normalize(w);
-    const fmt = { elev: `${(v.elev / 1000).toFixed(1)} km`, slope: `${v.slope.toFixed(1)}°`, ice: v.ice === null ? 'no data' : v.ice.toFixed(2), rough: `${v.rough.toFixed(0)} m`, lat: `${v.lat.toFixed(1)}°`, ti: v.ti === null ? 'no data' : `${v.ti.toFixed(0)} tiu` };
+    const fmt = {
+      elev: `${(v.elev / 1000).toFixed(1)} km`,
+      slope: `${v.slope.toFixed(1)}°`,
+      ice: v.ice === null ? 'NO DATA' : v.ice.toFixed(2),
+      rough: `${v.rough.toFixed(0)} m`,
+      lat: `${v.lat.toFixed(1)}°`,
+      ti: v.ti === null ? 'NO DATA' : `${v.ti.toFixed(0)} tiu`,
+    };
     return SCORING.CRITERIA.map(c => {
       const f = SCORING.F[c.key](v[c.key]);
       const cls = f > 0.66 ? 'ok' : f > 0.33 ? 'warn' : 'bad';
@@ -216,13 +447,14 @@
 
   function renderCandidates() {
     const ol = $('#candidates'); ol.innerHTML = '';
-    if (!S.candidates.length) { ol.innerHTML = '<li class="help">No cell satisfies the constraints.</li>'; return; }
+    if (!S.candidates.length) { ol.innerHTML = '<li class="help">No surface block satisfies active constraints.</li>'; return; }
     S.candidates.forEach((c, i) => {
       const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
-      const name = nr.distDeg < 6 ? nr.region.name : `Unnamed terrain near ${nr.region.name}`;
-      const li = document.createElement('li'); li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
-      li.innerHTML = `<div class="head"><span><span class="rank">#${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</span><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° block means</div>${critRows(v, S.weights)}`;
+      const name = nr.distDeg < 6 ? nr.region.name : `Sector near ${nr.region.name}`;
+      const li = document.createElement('li');
+      li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
+      li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">CAND-0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
+        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° REGIONAL MEAN</div>${critRows(v, S.weights)}`;
       li.onclick = () => { select(c.x, c.y, i); if (S.mode === 'crisis') setCrisisSite(c.x, c.y); };
       ol.appendChild(li);
     });
@@ -232,15 +464,38 @@
 
   function renderDetail(x, y, cand) {
     const v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
-    const vetoed = S.hard && (v.elev > SCORING.HARD.elevMax || v.slope > SCORING.HARD.slopeMax || Math.abs(v.lat) > SCORING.HARD.latMax);
-    $('#detail').innerHTML = `<div class="big">${s.toFixed(3)}</div>
-      <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name} (${(nr.distDeg * 59.3).toFixed(0)} km)</div>
-      ${vetoed ? '<div class="verdict bad">⛔ Vetoed by hard constraint (elev &gt; +2 km, slope &gt; 15° or |lat| &gt; 50°)</div>' : ''}
+    const passElev = v.elev <= SCORING.HARD.elevMax;
+    const passSlope = v.slope <= SCORING.HARD.slopeMax;
+    const passLat = Math.abs(v.lat) <= SCORING.HARD.latMax;
+    const vetoed = S.hard && (!passElev || !passSlope || !passLat);
+
+    $('#detail').innerHTML = `
+      <div class="detail-header">
+        <div>
+          <div class="hint">COMPOSITE SUITABILITY INDEX</div>
+          <div class="big">${s.toFixed(3)}</div>
+        </div>
+        <span class="status-pill ${vetoed ? 'bad' : 'ok'}">${vetoed ? 'HLS HARD VETO' : 'NOMINAL CELL'}</span>
+      </div>
+      <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ${nr.distDeg < 6 ? nr.region.name : 'NEAR ' + nr.region.name.toUpperCase()} (${(nr.distDeg * 59.3).toFixed(0)} KM)</div>
+      <div class="hls-checks">
+        <div class="hls-check"><span class="hint">ELEV ≤ +2KM</span><b class="${passElev ? 'ok' : 'bad'}">${passElev ? 'PASS' : 'VETO'}</b></div>
+        <div class="hls-check"><span class="hint">SLOPE ≤ 15°</span><b class="${passSlope ? 'ok' : 'bad'}">${passSlope ? 'PASS' : 'VETO'}</b></div>
+        <div class="hls-check"><span class="hint">|LAT| ≤ 50°</span><b class="${passLat ? 'ok' : 'bad'}">${passLat ? 'PASS' : 'VETO'}</b></div>
+      </div>
       ${critRows(v, S.weights)}
-      <table><tr><td>Elevation (MOLA)</td><td>${v.elev.toFixed(0)} m</td></tr><tr><td>Slope, 90th pct</td><td>${v.slope.toFixed(1)}°</td></tr>
-      <tr><td>Ice consistency (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'outside SWIM' : v.ice.toFixed(2)}</td></tr><tr><td>Roughness σ</td><td>${v.rough.toFixed(0)} m</td></tr>
-      <tr><td>Thermal inertia (TES)</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr><tr><td>Dust cover (TES)</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr></table>
-      <div class="row"><button id="use-route" class="ghost">Use as route start</button><button id="use-crisis" class="ghost">Use for crisis sim</button></div>`;
+      <table>
+        <tr><td>MOLA Elevation</td><td>${v.elev.toFixed(0)} m</td></tr>
+        <tr><td>MOLA 90th-pct Slope</td><td>${v.slope.toFixed(1)}°</td></tr>
+        <tr><td>SWIM Ice (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'OUTSIDE ±60°' : v.ice.toFixed(2)}</td></tr>
+        <tr><td>Sub-cell Roughness (σ)</td><td>${v.rough.toFixed(0)} m</td></tr>
+        <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'NO DATA' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
+        <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'NO DATA' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
+      </table>
+      <div class="row">
+        <button id="use-route" class="ghost">Set Traverse Origin</button>
+        <button id="use-crisis" class="ghost">Load in Power Sim</button>
+      </div>`;
     $('#use-route').onclick = () => { setMode('route'); S.route.start = { x, y }; S.route.goal = null; S.route.safe = S.route.straight = null; renderRoute(); draw(); };
     $('#use-crisis').onclick = () => { setMode('crisis'); setCrisisSite(x, y); };
   }
@@ -256,69 +511,94 @@
   }
   function renderRoute() {
     const r = S.route, el = $('#route-stats');
-    if (!r.start) { el.innerHTML = '<p class="help">Step 1 — click the start point.</p>'; return; }
-    if (!r.goal) { el.innerHTML = '<p class="help">Step 2 — click the goal point.</p>'; return; }
-    if (!r.safe || !r.safe.ok) { el.innerHTML = `<p class="help bad">No slope-safe route found (${r.safe ? r.safe.reason : ''}). Raise the slope limit or move the goal.</p>`; return; }
+    if (!r.start) { el.innerHTML = '<div class="verdict">STEP 01 // DESIGNATE ORIGIN WAYPOINT (WP-A) ON MAP</div>'; return; }
+    if (!r.goal) { el.innerHTML = '<div class="verdict">STEP 02 // DESIGNATE TARGET WAYPOINT (WP-B) ON MAP</div>'; return; }
+    if (!r.safe || !r.safe.ok) { el.innerHTML = `<div class="verdict bad">TRAVERSE BLOCKED // No slope-safe corridor (${r.safe ? r.safe.reason : ''}). Increase slope threshold or relocate target.</div>`; return; }
     const a = r.straight.stats, b = r.safe.stats, sols = (km) => (km / r.speed).toFixed(0);
     const cls = (s) => s > r.maxSlope ? 'bad' : s > 10 ? 'warn' : 'ok';
-    el.innerHTML = `<table class="stat-table"><tr><th></th><th class="straight">Straight</th><th class="safe">Safe (A*)</th></tr>
-      <tr><td>Distance</td><td>${a.km.toFixed(0)} km</td><td>${b.km.toFixed(0)} km <small>(+${(100 * (b.km / a.km - 1)).toFixed(0)}%)</small></td></tr>
-      <tr><td>Max slope</td><td class="${cls(a.maxSlope)}">${a.maxSlope.toFixed(1)}°</td><td class="${cls(b.maxSlope)}">${b.maxSlope.toFixed(1)}°</td></tr>
-      <tr><td>Mean slope</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
-      <tr><td>km on &gt;10° terrain</td><td>${a.hazardKm.toFixed(0)}</td><td>${b.hazardKm.toFixed(0)}</td></tr>
-      <tr><td>Travel time</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
-      <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `⚠ Straight line crosses ${a.maxSlope.toFixed(0)}° terrain — rover tip-over risk. Safe route adds ${(b.km - a.km).toFixed(0)} km.` : '✓ Straight line is already within the slope limit.'}</div>
-      <div class="help" style="margin-top:6px">Elevation profile of safe route (A* ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells)</div>${profileSVG(b.profile)}`;
+    el.innerHTML = `<table class="stat-table"><tr><th>Metric</th><th class="straight">Direct</th><th class="safe">A* Safe</th></tr>
+      <tr><td>Total Distance</td><td>${a.km.toFixed(0)} km</td><td>${b.km.toFixed(0)} km <small>(+${(100 * (b.km / a.km - 1)).toFixed(0)}%)</small></td></tr>
+      <tr><td>Peak Slope</td><td class="${cls(a.maxSlope)}">${a.maxSlope.toFixed(1)}°</td><td class="${cls(b.maxSlope)}">${b.maxSlope.toFixed(1)}°</td></tr>
+      <tr><td>Mean Slope</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
+      <tr><td>Distance &gt;10° Slope</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
+      <tr><td>Traverse Duration</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
+      <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `HAZARD ALERT // Direct path intersects ${a.maxSlope.toFixed(1)}° grade (exceeds ${r.maxSlope}° limit). A* detour adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
+      <div class="hint" style="margin-top:10px">MOLA ELEVATION PROFILE · A* SOLVED IN ${r.ms.toFixed(0)} MS (${r.safe.path.length} CELLS)</div>${profileSVG(b.profile)}`;
   }
   function profileSVG(p) {
-    const w = 260, h = 110, pad = 24;
+    const w = 276, h = 118, pad = 32;
     const kmMax = p[p.length - 1].km || 1, eMin = Math.min(...p.map(q => q.elev)), eMax = Math.max(...p.map(q => q.elev)) + 1;
-    const X = (km) => pad + (km / kmMax) * (w - pad - 6), Y = (e) => h - 16 - ((e - eMin) / (eMax - eMin)) * (h - 26);
+    const X = (km) => pad + (km / kmMax) * (w - pad - 8), Y = (e) => h - 18 - ((e - eMin) / (eMax - eMin)) * (h - 30);
     let d = '', segs = '';
     p.forEach((q, i) => { d += (i ? 'L' : 'M') + X(q.km).toFixed(1) + ',' + Y(q.elev).toFixed(1); });
-    p.forEach((q, i) => { if (i && q.slope > 10) segs += `<line x1="${X(p[i - 1].km).toFixed(1)}" y1="${Y(p[i - 1].elev).toFixed(1)}" x2="${X(q.km).toFixed(1)}" y2="${Y(q.elev).toFixed(1)}" stroke="#ffc857" stroke-width="3"/>`; });
-    return `<svg class="chart" viewBox="0 0 ${w} ${h}"><path d="${d}" fill="none" stroke="#5ad17a" stroke-width="1.5"/>${segs}
-      <text x="${pad}" y="10" fill="#8d94a3" font-size="9">${(eMax / 1000).toFixed(1)} km</text><text x="${pad}" y="${h - 4}" fill="#8d94a3" font-size="9">${(eMin / 1000).toFixed(1)} km</text>
-      <text x="${w - 6}" y="${h - 4}" fill="#8d94a3" font-size="9" text-anchor="end">${kmMax.toFixed(0)} km</text></svg>`;
+    const areaD = `${d}L${X(kmMax).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
+    p.forEach((q, i) => { if (i && q.slope > 10) segs += `<line x1="${X(p[i - 1].km).toFixed(1)}" y1="${Y(p[i - 1].elev).toFixed(1)}" x2="${X(q.km).toFixed(1)}" y2="${Y(q.elev).toFixed(1)}" stroke="#f59e0b" stroke-width="2.8"/>`; });
+    return `<svg class="chart" viewBox="0 0 ${w} ${h}">
+      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(148,163,184,0.12)" stroke-dasharray="2 2"/>
+      <line x1="${pad}" y1="${(h - 6) / 2}" x2="${w - 8}" y2="${(h - 6) / 2}" stroke="rgba(148,163,184,0.12)" stroke-dasharray="2 2"/>
+      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(148,163,184,0.25)"/>
+      <path d="${areaD}" fill="rgba(16, 185, 129, 0.12)"/>
+      <path d="${d}" fill="none" stroke="#10b981" stroke-width="1.6"/>${segs}
+      <text x="4" y="15" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMax / 1000).toFixed(1)}km</text>
+      <text x="4" y="${h - 18}" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMin / 1000).toFixed(1)}km</text>
+      <text x="${pad}" y="${h - 5}" fill="#56657e" font-size="8.5" font-family="JetBrains Mono, monospace">0 km</text>
+      <text x="${w - 8}" y="${h - 5}" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">${kmMax.toFixed(0)} km</text>
+    </svg>`;
   }
 
   // ------------------------------------------------------------ crisis
   function setCrisisSite(x, y) { S.crisis.site = { x, y }; runCrisis(); draw(); }
   function runCrisis() {
     const c = S.crisis, el = $('#crisis-summary');
-    if (!c.site) { $('#crisis-site').textContent = '— click the map —'; el.innerHTML = ''; return; }
+    if (!c.site) { $('#crisis-site').textContent = '— SELECT COORDINATE ON MAP —'; el.innerHTML = ''; return; }
     const v = cellValues(c.site.x, c.site.y), nr = nearestRegion(v.lat, v.lon);
-    $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name} · ${fmtLat(v.lat)}`;
+    $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : 'NEAR ' + nr.region.name} (${fmtLat(v.lat)}, ${fmtLon(v.lon)})`;
     const res = STORM.simulate({ lat: v.lat, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
       storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
     const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5), peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak);
     const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
-    const verdict = res.blackoutSol !== null ? `<div class="summary-big bad">⛔ Blackout on sol ${res.blackoutSol}</div><div class="help">Battery depleted ${res.blackoutSol - 20} sols after storm onset. Peak-storm production ${(peakSolar + nuc).toFixed(0)} kWh/sol vs consumption ${c.cons} kWh/sol.</div>`
-      : `<div class="summary-big ok">✓ Survives the storm</div><div class="help">Minimum battery ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Margin at peak storm: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
+    const verdict = res.blackoutSol !== null
+      ? `<div class="summary-big bad">CRITICAL BLACKOUT // SOL ${res.blackoutSol}</div><div class="help">Battery reserve exhausted ${res.blackoutSol - 20} sols after storm onset. Peak-storm generation ${(peakSolar + nuc).toFixed(0)} kWh/sol vs load ${c.cons} kWh/sol.</div>`
+      : `<div class="summary-big ok">NOMINAL // SURVIVES GLOBAL STORM</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
     el.innerHTML = `${verdict}
-      <div class="kv"><span>Clear-sky solar (τ 0.5)</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
-      <div class="kv"><span>Peak-storm solar (τ ${c.tauPeak.toFixed(1)})</span><b>${peakSolar.toFixed(0)} kWh/sol · −${res.peakSolarDropPct.toFixed(0)}%</b></div>
-      <div class="kv"><span>Nuclear (Kilopower)</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
+      <div class="kv"><span>Clear-Sky Solar (τ = 0.5)</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
+      <div class="kv"><span>Peak-Storm Solar (τ = ${c.tauPeak.toFixed(1)})</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
+      <div class="kv"><span>Kilopower Fission Baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
       ${crisisSVG(res.rows, c.batt)}
-      <div class="help">Storm: onset sol 20, 10-sol rise, 40-sol plateau, 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Try adding a Kilopower reactor — NASA’s own conclusion for sustained surface power.' : ''}</div>`;
+      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add Kilopower fission units (10 kWe each) to maintain life-support baseload.' : ''}</div>`;
   }
   function crisisSVG(rows, cap) {
-    const w = 260, h = 110, pad = 22, n = rows.length;
-    const X = (i) => pad + (i / (n - 1)) * (w - pad - 6), Yb = (b) => h - 16 - (b / cap) * (h - 26), Yt = (t) => h - 16 - (t / 12) * (h - 26);
+    const w = 276, h = 118, pad = 26, n = rows.length;
+    const X = (i) => pad + (i / (n - 1)) * (w - pad - 8), Yb = (b) => h - 18 - (b / cap) * (h - 30), Yt = (t) => h - 18 - (t / 12) * (h - 30);
     let db = '', dt = '';
     rows.forEach((r, i) => { db += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yb(r.batt).toFixed(1); dt += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yt(r.tau).toFixed(1); });
-    return `<svg class="chart" viewBox="0 0 ${w} ${h}"><path d="${dt}" fill="none" stroke="#ff7a45" stroke-width="1" stroke-dasharray="3 3"/><path d="${db}" fill="none" stroke="#4cc3ff" stroke-width="1.8"/>
-      <text x="${pad}" y="10" fill="#4cc3ff" font-size="9">battery</text><text x="${pad + 44}" y="10" fill="#ff7a45" font-size="9">τ (0–12)</text>
-      <text x="${w - 6}" y="${h - 4}" fill="#8d94a3" font-size="9" text-anchor="end">${n} sols</text></svg>`;
+    const areaB = `${db}L${X(n - 1).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
+    return `<svg class="chart" viewBox="0 0 ${w} ${h}">
+      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(148,163,184,0.12)" stroke-dasharray="2 2"/>
+      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(148,163,184,0.25)"/>
+      <path d="${areaB}" fill="rgba(56, 189, 248, 0.10)"/>
+      <path d="${dt}" fill="none" stroke="#fc3d21" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <path d="${db}" fill="none" stroke="#38bdf8" stroke-width="1.8"/>
+      <text x="${pad}" y="10" fill="#38bdf8" font-size="8.5" font-family="JetBrains Mono, monospace">BATTERY RESERVE</text>
+      <text x="${w - 8}" y="10" fill="#fc3d21" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">OPTICAL DEPTH τ (0–12)</text>
+      <text x="${pad}" y="${h - 5}" fill="#56657e" font-size="8.5" font-family="JetBrains Mono, monospace">SOL 0</text>
+      <text x="${w - 8}" y="${h - 5}" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">SOL ${n}</text>
+    </svg>`;
   }
 
   // ------------------------------------------------------------ UI wiring
+  function updateHudLayer() {
+    const el = $('#hud-layer');
+    if (el) el.textContent = `ACTIVE OVERLAY: ${OVERLAY_NAMES[S.overlay] || S.overlay.toUpperCase()}`;
+  }
+
   function setMode(m) {
     S.mode = m;
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
     for (const k of ['score', 'route', 'crisis']) $('#panel-' + k).classList.toggle('hidden', k !== m);
     if (m === 'route') { S.overlay = 'slope'; } else if (m === 'score') { S.overlay = 'score'; }
     document.querySelectorAll('#overlay button').forEach(b => b.classList.toggle('active', b.dataset.ov === S.overlay));
+    updateHudLayer();
     ovDirty = true; renderLegend(); if (m === 'route') renderRoute(); if (m === 'crisis') runCrisis(); draw();
   }
   document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => setMode(b.dataset.mode));
@@ -328,7 +608,8 @@
     for (const k in SCORING.PRESETS) {
       const p = SCORING.PRESETS[k], b = document.createElement('button');
       b.className = 'preset' + (S.preset === k ? ' active' : '');
-      b.innerHTML = `<span>${p.icon}</span><span>${p.name}</span><small>${Object.values(p.w).map(v => (v * 100).toFixed(0)).join('/')}</small>`;
+      const code = PRESET_CODES[k] || k.toUpperCase();
+      b.innerHTML = `<span class="p-code">${code}</span><span class="p-name">${p.name}</span><small>${Object.values(p.w).map(v => (v * 100).toFixed(0)).join('·')}</small>`;
       b.onclick = () => { S.preset = k; S.weights = { ...p.w }; buildPresets(); buildSliders(); rescore(); };
       el.appendChild(b);
     }
@@ -338,7 +619,8 @@
     const wn = SCORING.normalize(S.weights);
     for (const c of SCORING.CRITERIA) {
       const d = document.createElement('div'); d.className = 'slider';
-      d.innerHTML = `<div class="lbl"><span>${c.label}</span><b>${(wn[c.key] * 100).toFixed(0)}%</b></div><input type="range" min="0" max="100" value="${Math.round(S.weights[c.key] * 100)}">`;
+      const tag = CRIT_TAGS[c.key] || c.key.toUpperCase();
+      d.innerHTML = `<div class="lbl"><span class="lbl-left"><span class="crit-tag">${tag}</span><span>${c.label}</span></span><b>${(wn[c.key] * 100).toFixed(0)}%</b></div><input type="range" min="0" max="100" value="${Math.round(S.weights[c.key] * 100)}">`;
       d.querySelector('input').oninput = (e) => { S.weights[c.key] = +e.target.value / 100; S.preset = null; buildPresets();
         const n = SCORING.normalize(S.weights); el.querySelectorAll('.slider').forEach((s, i) => s.querySelector('b').textContent = (n[SCORING.CRITERIA[i].key] * 100).toFixed(0) + '%'); rescore(); };
       el.appendChild(d);
@@ -346,8 +628,8 @@
   }
   $('#hard').onchange = (e) => { S.hard = e.target.checked; rescore(); };
   document.querySelectorAll('#iceband button').forEach(b => b.onclick = () => { document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b)); S.iceBand = b.dataset.band; rescore(); });
-  document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; ovDirty = true; renderLegend(); draw(); });
-  $('#opacity').oninput = (e) => { S.opacity = +e.target.value / 100; draw(); };
+  document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; updateHudLayer(); ovDirty = true; renderLegend(); draw(); });
+  $('#opacity').oninput = (e) => { S.opacity = +e.target.value / 100; const vEl = $('#opacity-v'); if (vEl) vEl.textContent = e.target.value + '%'; draw(); };
   $('#show-regions').onchange = (e) => { S.showRegions = e.target.checked; draw(); };
   $('#show-ez').onchange = (e) => { S.showEZ = e.target.checked; draw(); };
   const bindRange = (id, fmt, cb) => { const el = $('#' + id); const upd = () => { $('#' + id + '-v').textContent = fmt(+el.value); cb(+el.value); }; el.oninput = upd; upd(); };
@@ -355,6 +637,18 @@
   bindRange('kslope', v => (v / 100).toFixed(2), v => { S.route.k = v / 100; computeRoute(); });
   bindRange('speed', v => v + ' km/sol', v => { S.route.speed = v; renderRoute(); });
   $('#route-clear').onclick = () => { S.route.start = S.route.goal = S.route.safe = S.route.straight = null; renderRoute(); draw(); };
+  const routeDemoBtn = $('#route-demo');
+  if (routeDemoBtn) {
+    routeDemoBtn.onclick = () => {
+      const a = REGIONS[0], b = REGIONS[16]; // Jezero -> Nili Fossae
+      S.route.start = { x: L.colOfLon(a.lon), y: L.rowOfLat(a.lat) };
+      S.route.goal = { x: L.colOfLon(b.lon), y: L.rowOfLat(b.lat) };
+      S.view.scale = Math.max(S.view.scale, 3.2);
+      S.view.tx = canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * S.view.scale;
+      S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * S.view.scale;
+      wrapView(); updateScaleBar(); computeRoute();
+    };
+  }
   bindRange('tau', v => (v / 10).toFixed(1), v => { S.crisis.tauPeak = v / 10; runCrisis(); });
   bindRange('area', v => v + ' m²', v => { S.crisis.area = v; runCrisis(); });
   bindRange('cons', v => v + ' kWh/sol', v => { S.crisis.cons = v; runCrisis(); });
@@ -363,17 +657,53 @@
   $('#btn-about').onclick = () => $('#about').classList.remove('hidden');
   $('#about-close').onclick = () => $('#about').classList.add('hidden');
   $('#about').onclick = (e) => { if (e.target.id === 'about') $('#about').classList.add('hidden'); };
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#about').classList.add('hidden'); });
+
+  // Map zoom buttons
+  const zoomBy = (factor) => {
+    const mx = canvas.width / 2, my = canvas.height / 2;
+    const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
+    const ns = Math.max(minS, Math.min(40, S.view.scale * factor));
+    const k = ns / S.view.scale;
+    S.view.tx = mx - (mx - S.view.tx) * k;
+    S.view.ty = my - (my - S.view.ty) * k;
+    S.view.scale = ns;
+    wrapView(); updateScaleBar(); draw();
+  };
+  if ($('#zoom-in')) $('#zoom-in').onclick = () => zoomBy(1.45);
+  if ($('#zoom-out')) $('#zoom-out').onclick = () => zoomBy(1 / 1.45);
+  if ($('#zoom-reset')) $('#zoom-reset').onclick = () => { fitView(); draw(); };
 
   const fly = $('#flyto');
-  REGIONS.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(r => { const o = document.createElement('option'); o.value = r.name; o.textContent = (r.ez ? '★ ' : '') + r.name; fly.appendChild(o); });
-  fly.onchange = () => { const r = REGIONS.find(q => q.name === fly.value); if (!r) return; const x = L.colOfLon(r.lon), y = L.rowOfLat(r.lat);
-    S.view.scale = Math.max(S.view.scale, 3); S.view.tx = canvas.width / 2 - x * S.view.scale; S.view.ty = canvas.height / 2 - y * S.view.scale; select(x, y, null); fly.value = ''; };
+  REGIONS.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.name;
+    o.textContent = (r.ez ? '[EZ] ' : '') + r.name;
+    fly.appendChild(o);
+  });
+  fly.onchange = () => {
+    const r = REGIONS.find(q => q.name === fly.value); if (!r) return;
+    const x = L.colOfLon(r.lon), y = L.rowOfLat(r.lat);
+    S.view.scale = Math.max(S.view.scale, 3.2);
+    S.view.tx = canvas.width / 2 - x * S.view.scale;
+    S.view.ty = canvas.height / 2 - y * S.view.scale;
+    wrapView(); updateScaleBar();
+    select(x, y, null);
+    fly.value = '';
+  };
 
   function renderLegend() {
     const el = $('#legend'), lut = LUT[S.overlay];
     if (!lut) { el.innerHTML = ''; return; }
     const stops = []; for (let i = 0; i <= 10; i++) { const v = Math.round(i * 25.5); stops.push(`rgb(${lut[v * 3]},${lut[v * 3 + 1]},${lut[v * 3 + 2]})`); }
-    const ends = { score: ['≤0.35 — unsuitable / vetoed', '1 — ideal'], ice: ['no ice evidence (−1)', 'strong ice evidence (+1)'], slope: ['0°', '≥16° (90th pct)'], elev: ['−8.2 km', '+21 km'], ti: ['0 — fine dust', '≥700 — rock'], dust: ['0 % dust', '100 % dust'] }[S.overlay];
+    const ends = {
+      score: ['≤0.35 VETO/POOR', '1.00 OPTIMAL'],
+      ice: ['−1.0 NO ICE', '+1.0 HIGH ICE'],
+      slope: ['0.0° FLAT', '≥16.0° STEEP'],
+      elev: ['−8.2 KM', '+21.2 KM'],
+      ti: ['0 FINE DUST', '≥700 BEDROCK'],
+      dust: ['0% DUST', '100% DUST'],
+    }[S.overlay];
     el.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
   }
 
@@ -399,15 +729,20 @@
     e.preventDefault();
     const r = canvas.getBoundingClientRect(), mx = (e.clientX - r.left) * devicePixelRatio, my = (e.clientY - r.top) * devicePixelRatio;
     const f = Math.exp(-e.deltaY * 0.0015), minS = Math.min(canvas.width / W, canvas.height / H) * 0.9, ns = Math.max(minS, Math.min(40, S.view.scale * f));
-    const k = ns / S.view.scale; S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k; S.view.scale = ns; wrapView(); draw();
+    const k = ns / S.view.scale; S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k; S.view.scale = ns; wrapView(); updateScaleBar(); draw();
   }, { passive: false });
   canvas.addEventListener('mousemove', (e) => {
     const g = gridAt(e), tip = $('#tooltip');
     if (!g) { tip.classList.add('hidden'); return; }
-    const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x];
-    $('#hud-coord').textContent = `${fmtLat(v.lat)} ${fmtLon(v.lon)} · elev ${v.elev.toFixed(0)} m · score ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · rescored in ${$('#hud-coord').dataset.t} ms` : '');
-    tip.innerHTML = `<b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>ice ${v.ice === null ? '—' : v.ice.toFixed(2)} · rough ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}<br>score <b>${s.toFixed(2)}</b>`;
-    const r = canvas.getBoundingClientRect(); tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; tip.classList.remove('hidden');
+    const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
+    $('#hud-coord').textContent = `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
+    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'Near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · SCORE <b>${s.toFixed(2)}</b><br>ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}°<br>ICE ${v.ice === null ? '—' : v.ice.toFixed(2)} · ROUGH ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · DUST ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
+    const r = canvas.getBoundingClientRect();
+    const tx = Math.min(r.width - 210, e.clientX - r.left + 14);
+    const ty = Math.min(r.height - 95, e.clientY - r.top + 14);
+    tip.style.left = Math.max(8, tx) + 'px';
+    tip.style.top = Math.max(8, ty) + 'px';
+    tip.classList.remove('hidden');
   });
   canvas.addEventListener('mouseleave', () => $('#tooltip').classList.add('hidden'));
   function gridAt(e) {
@@ -418,6 +753,12 @@
   }
   function wrapView() { const span = W * S.view.scale; while (S.view.tx > span) S.view.tx -= span; while (S.view.tx < -span) S.view.tx += span;
     const maxTy = canvas.height * 0.5, minTy = canvas.height * 0.5 - H * S.view.scale; S.view.ty = Math.max(minTy, Math.min(maxTy, S.view.ty)); }
+
+  // range track fill (CSS --p) for every slider, now and whenever one changes
+  function syncRanges(root) { root.querySelectorAll('input[type=range]').forEach(r => { const p = (r.value - r.min) / (r.max - r.min) * 100; r.style.setProperty('--p', p + '%'); }); }
+  document.addEventListener('input', (e) => { if (e.target.type === 'range') syncRanges(e.target.parentElement); });
+  new MutationObserver(() => syncRanges(document)).observe(document.body, { childList: true, subtree: true });
+  syncRanges(document);
 
   // ------------------------------------------------------------ boot
   buildPresets(); buildSliders(); renderLegend(); renderRoute();
@@ -438,7 +779,7 @@
     if (q.get('demo') === 'route') {
       const a = find(q.get('from')) || REGIONS[0], b = find(q.get('to')) || REGIONS[16];
       setMode('route'); S.route.start = { x: L.colOfLon(a.lon), y: L.rowOfLat(a.lat) }; S.route.goal = { x: L.colOfLon(b.lon), y: L.rowOfLat(b.lat) };
-      S.view.scale = 4; S.view.tx = canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * 4; S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * 4; wrapView();
+      S.view.scale = 4; S.view.tx = canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * 4; S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * 4; wrapView(); updateScaleBar();
       computeRoute();
     } else if (q.get('demo') === 'crisis') {
       const a = find(q.get('site')) || REGIONS[10];

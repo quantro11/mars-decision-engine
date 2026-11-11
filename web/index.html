@@ -3,156 +3,315 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mars Base Decision Engine</title>
+<title>MARS BASE DECISION ENGINE // NASA-STD Planetary GIS &amp; Mission Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark"></span>
-    <div>
+    <div class="brand-emblem" aria-hidden="true">
+      <svg viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="16" stroke="rgba(56,189,248,0.28)" stroke-width="1" stroke-dasharray="3 2"/>
+        <ellipse cx="18" cy="18" rx="16.5" ry="6.5" transform="rotate(-24 18 18)" stroke="#38bdf8" stroke-width="1.1" stroke-opacity="0.65"/>
+        <circle cx="18" cy="18" r="9.5" fill="#180b08" stroke="#fc3d21" stroke-width="1.5"/>
+        <path d="M11 15.5C13.5 14 16.5 14.5 19 16C21.5 17.5 23.5 17 25.5 15.5" stroke="#fc3d21" stroke-width="1" stroke-opacity="0.65"/>
+        <path d="M12.5 21C15 19.8 18.5 20.2 22.5 21.5" stroke="#fc3d21" stroke-width="1" stroke-opacity="0.5"/>
+        <circle cx="23.5" cy="11.5" r="1.8" fill="#38bdf8"/>
+        <path d="M18 3V6M18 30V33M3 18H6M30 18H33" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.55"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <div class="brand-meta">
+        <span class="sys-badge">SYS // MDE-2.4</span>
+        <span class="sys-divider">/</span>
+        <span>MGS-MOLA · PSI-SWIM 2.0 · MGS-TES</span>
+      </div>
       <div class="brand-name">MARS BASE DECISION ENGINE</div>
-      <div class="brand-sub">Multi-criteria landing-site &amp; survival planner · real MOLA + SWIM + TES data</div>
     </div>
   </div>
-  <nav class="modes">
-    <button class="mode-btn active" data-mode="score">① Site score</button>
-    <button class="mode-btn" data-mode="route">② Rover route</button>
-    <button class="mode-btn" data-mode="crisis">③ Dust-storm crisis</button>
+
+  <nav class="modes" aria-label="Mission Analysis Modules">
+    <button class="mode-btn active" data-mode="score">
+      <span class="mode-idx">01</span>
+      <span class="mode-label">SITE SELECTION</span>
+    </button>
+    <button class="mode-btn" data-mode="route">
+      <span class="mode-idx">02</span>
+      <span class="mode-label">ROVER TRAVERSE A*</span>
+    </button>
+    <button class="mode-btn" data-mode="crisis">
+      <span class="mode-idx">03</span>
+      <span class="mode-label">DUST-STORM POWER</span>
+    </button>
   </nav>
+
   <div class="topbar-right">
-    <select id="flyto" title="Fly to a named region"><option value="">Fly to region…</option></select>
-    <button id="btn-about" class="ghost">Method</button>
+    <div class="select-wrap">
+      <span class="select-prefix">LOC</span>
+      <select id="flyto" title="Fly to a named Martian region or landing site">
+        <option value="">Target region / landing zone…</option>
+      </select>
+    </div>
+    <button id="btn-about" class="btn-spec" title="View physical models, data sources, and system limitations">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2.5 2.5H10.5L13.5 5.5V13.5H2.5V2.5Z" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M5 6.5H11M5 9H11M5 11.5H8.5" stroke="currentColor" stroke-width="1.3"/>
+      </svg>
+      <span>SPEC &amp; METHOD</span>
+    </button>
   </div>
 </header>
 
 <main class="layout">
-  <!-- LEFT: controls -->
+  <!-- LEFT: INSTRUMENT CONTROLS -->
   <aside class="panel left">
     <section id="panel-score" class="mode-panel">
-      <h2>Mission priority</h2>
+      <div class="sec-head">
+        <h2>Mission Architecture</h2>
+        <span class="sec-code">MOD-01A</span>
+      </div>
       <div class="presets" id="presets"></div>
-      <h2>Criteria weights <span class="hint">(auto-normalised)</span></h2>
-      <div id="sliders"></div>
-      <label class="check"><input type="checkbox" id="hard" checked> Hard constraints (NASA HLS): elev &gt; +2 km, slope &gt; 15° or |lat| &gt; 50° ⇒ score 0</label>
-      <h2>Ice depth band (SWIM 2.0)</h2>
+
+      <div class="sec-head">
+        <h2>Criteria Weight Matrix</h2>
+        <span class="hint">Σ = 100% AUTO-NORM</span>
+      </div>
+      <div id="sliders" class="sliders-box"></div>
+
+      <div class="constraint-box">
+        <label class="check">
+          <input type="checkbox" id="hard" checked>
+          <span><b>NASA HLS-2015 Hard Veto</b> — zero score if elev &gt; +2 km, slope &gt; 15°, or |lat| &gt; 50°</span>
+        </label>
+      </div>
+
+      <div class="sec-head">
+        <h2>Subsurface Ice Horizon <span class="hint">SWIM 2.0</span></h2>
+        <span class="sec-code">H₂O</span>
+      </div>
       <div class="seg" id="iceband">
-        <button data-band="ice01">0–1 m</button>
-        <button data-band="ice15" class="active">1–5 m</button>
-        <button data-band="ice5">&gt; 5 m</button>
+        <button data-band="ice01">0–1 m SHALLOW</button>
+        <button data-band="ice15" class="active">1–5 m MID</button>
+        <button data-band="ice5">&gt; 5 m DEEP</button>
       </div>
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
-      <h2>Rover / EVA route</h2>
-      <p class="help">Click a <b>start</b> point, then a <b>goal</b>. The planner runs A* on the MOLA slope grid and compares it with the straight line.</p>
-      <label>Traversable slope limit <span id="maxslope-v">15°</span>
-        <input type="range" id="maxslope" min="5" max="30" value="15"></label>
-      <label>Slope penalty k <span id="kslope-v">0.30</span>
-        <input type="range" id="kslope" min="0" max="100" value="30"></label>
-      <label>Average speed <span id="speed-v">20 km/sol</span>
-        <input type="range" id="speed" min="5" max="100" value="20"></label>
-      <div class="row"><button id="route-clear" class="ghost">Clear route</button></div>
+      <div class="sec-head">
+        <h2>Surface Traverse Planner</h2>
+        <span class="sec-code">MOD-02 // A*</span>
+      </div>
+      <p class="help">Designate <b>Origin (WP-A)</b> and <b>Target (WP-B)</b> on the orbital map. Computes an 8-connected, longitude-wrapping A* path over the MOLA slope grid vs. great-circle direct line.</p>
+
+      <div class="control-group">
+        <label>Max Traversable Slope <span id="maxslope-v">15°</span>
+          <input type="range" id="maxslope" min="5" max="30" value="15">
+        </label>
+        <label>Slope Cost Penalty (k) <span id="kslope-v">0.30</span>
+          <input type="range" id="kslope" min="0" max="100" value="30">
+        </label>
+        <label>Nominal Traverse Speed <span id="speed-v">20 km/sol</span>
+          <input type="range" id="speed" min="5" max="100" value="20">
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="route-demo" class="ghost">Load Jezero → Nili Demo</button>
+        <button id="route-clear" class="ghost">Clear Waypoints</button>
+      </div>
       <div id="route-stats"></div>
     </section>
 
     <section id="panel-crisis" class="mode-panel hidden">
-      <h2>Dust-storm energy crisis</h2>
-      <p class="help">Click a site on the map (or pick a candidate) to set the base latitude, then size the power system.</p>
-      <div class="kv"><span>Base</span><b id="crisis-site">— click the map —</b></div>
-      <label>Peak optical depth τ <span id="tau-v">8.0</span>
-        <input type="range" id="tau" min="5" max="120" value="80"></label>
-      <label>Solar array area <span id="area-v">1000 m²</span>
-        <input type="range" id="area" min="100" max="5000" step="50" value="1000"></label>
-      <label>Habitat consumption <span id="cons-v">300 kWh/sol</span>
-        <input type="range" id="cons" min="50" max="1000" step="10" value="300"></label>
-      <label>Battery capacity <span id="batt-v">2000 kWh</span>
-        <input type="range" id="batt" min="100" max="10000" step="100" value="2000"></label>
-      <label>Kilopower reactors (10 kW each) <span id="kp-v">0</span>
-        <input type="range" id="kp" min="0" max="4" value="0"></label>
+      <div class="sec-head">
+        <h2>Global Dust-Storm Telemetry</h2>
+        <span class="sec-code">MOD-03 // PWR</span>
+      </div>
+      <p class="help">Select a surface location on the map (or candidate card) to lock station latitude and simulate a 2018-class global dust event.</p>
+
+      <div class="station-lock">
+        <span class="station-lbl">SURFACE STATION</span>
+        <b id="crisis-site">— SELECT COORDINATE ON MAP —</b>
+      </div>
+
+      <div class="control-group">
+        <label>Peak Optical Depth (τ) <span id="tau-v">8.0</span>
+          <input type="range" id="tau" min="5" max="120" value="80">
+        </label>
+        <label>Photovoltaic Array Area <span id="area-v">1000 m²</span>
+          <input type="range" id="area" min="100" max="5000" step="50" value="1000">
+        </label>
+        <label>Habitat Continuous Load <span id="cons-v">300 kWh/sol</span>
+          <input type="range" id="cons" min="50" max="1000" step="10" value="300">
+        </label>
+        <label>Battery Reserve Capacity <span id="batt-v">2000 kWh</span>
+          <input type="range" id="batt" min="100" max="10000" step="100" value="2000">
+        </label>
+        <label>Kilopower Fission Units (10 kWe) <span id="kp-v">0</span>
+          <input type="range" id="kp" min="0" max="4" value="0">
+        </label>
+      </div>
+
       <div id="crisis-summary"></div>
     </section>
 
     <section class="layers">
-      <h2>Map layers</h2>
-      <div class="seg" id="overlay">
-        <button data-ov="score" class="active">Score</button>
-        <button data-ov="ice">Ice</button>
-        <button data-ov="slope">Slope</button>
-        <button data-ov="elev">Elev</button>
-        <button data-ov="ti">TI</button>
-        <button data-ov="dust">Dust</button>
-        <button data-ov="none">None</button>
+      <div class="sec-head">
+        <h2>Orbital Sensor Overlay</h2>
+        <span class="sec-code">LYR</span>
       </div>
-      <label>Overlay opacity <input type="range" id="opacity" min="0" max="100" value="70"></label>
-      <label class="check"><input type="checkbox" id="show-regions" checked> Region labels</label>
-      <label class="check"><input type="checkbox" id="show-ez"> Highlight NASA HLS-2015 exploration zones</label>
+      <div class="seg seg-grid" id="overlay">
+        <button data-ov="score" class="active">SCORE</button>
+        <button data-ov="ice">ICE</button>
+        <button data-ov="slope">SLOPE</button>
+        <button data-ov="elev">ELEV</button>
+        <button data-ov="ti">TES-TI</button>
+        <button data-ov="dust">DUST</button>
+        <button data-ov="none">BASE</button>
+      </div>
+      <label>Overlay Opacity <span id="opacity-v">70%</span>
+        <input type="range" id="opacity" min="0" max="100" value="70">
+      </label>
+      <div class="toggles-group">
+        <label class="check"><input type="checkbox" id="show-regions" checked> <span>Planetary Nomenclature &amp; Landers</span></label>
+        <label class="check"><input type="checkbox" id="show-ez"> <span>NASA HLS-2015 Exploration Zones</span></label>
+      </div>
       <div class="legend" id="legend"></div>
     </section>
   </aside>
 
-  <!-- CENTER: map -->
+  <!-- CENTER: ORBITAL MAP VIEWPORT -->
   <section class="map-wrap">
+    <div class="map-top-bar">
+      <div class="telemetry-pill">
+        <span class="status-dot"></span>
+        <span>PROJ: EQUIRECTANGULAR IAU-2000</span>
+        <span class="hud-sep">|</span>
+        <span>GRID: 2048×1024 (10.3 KM/PX)</span>
+        <span class="hud-sep">|</span>
+        <span id="hud-layer">ACTIVE OVERLAY: SUITABILITY SCORE</span>
+      </div>
+      <div class="map-controls">
+        <div class="scale-box" title="Equatorial surface scale">
+          <span id="scale-label">1000 km</span>
+          <div class="scale-bar" id="scale-bar" style="width: 64px;"></div>
+        </div>
+        <div class="zoom-btns">
+          <button id="zoom-in" title="Zoom in">+</button>
+          <button id="zoom-out" title="Zoom out">−</button>
+          <button id="zoom-reset" title="Reset global view">FIT</button>
+        </div>
+      </div>
+    </div>
+
     <canvas id="map"></canvas>
     <div id="tooltip" class="tooltip hidden"></div>
+
     <div class="map-hud">
-      <span id="hud-coord">—</span>
-      <span class="hud-sep">·</span>
-      <span>scroll = zoom · drag = pan · click = select</span>
+      <span class="hud-tag">TELEMETRY</span>
+      <span id="hud-coord">LAT — · LON — · ELEV — · SCORE —</span>
+      <span class="hud-sep">|</span>
+      <span class="hud-controls-hint">SCROLL: ZOOM · DRAG: PAN · CLICK: DESIGNATE</span>
     </div>
-    <div id="loading" class="loading"><div class="spinner"></div><div>Decoding MOLA &amp; SWIM layers…</div></div>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <div class="loading-title">INITIALIZING ORBITAL TELEMETRY RASTERS</div>
+      <div class="loading-sub">Decoding MGS-MOLA DEM · PSI SWIM 2.0 Ice · TES Thermal Inertia…</div>
+    </div>
   </section>
 
-  <!-- RIGHT: results -->
+  <!-- RIGHT: RECONNAISSANCE & TELEMETRY INSPECTOR -->
   <aside class="panel right">
     <section id="candidates-sec">
-      <h2>Top candidate sites <span class="hint">2°×2° blocks, ≥800 km apart</span></h2>
+      <div class="sec-head">
+        <h2>Top Candidate Regions</h2>
+        <span class="hint">2°×2° · ≥800 KM SEP</span>
+      </div>
       <ol id="candidates" class="cards"></ol>
     </section>
     <section id="detail-sec">
-      <h2>Selected cell</h2>
-      <div id="detail" class="detail"><p class="help">Click anywhere on the map.</p></div>
+      <div class="sec-head">
+        <h2>Surface Cell Inspector</h2>
+        <span class="sec-code">TELEMETRY</span>
+      </div>
+      <div id="detail" class="detail">
+        <div class="empty-state">
+          <div class="empty-reticle"></div>
+          <p class="help">Designate any coordinate on the planetary map or select a candidate region above to inspect orbital sensor data.</p>
+        </div>
+      </div>
     </section>
   </aside>
 </main>
 
 <footer class="sources">
-  <b>Data</b>
-  <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">MOLA MEGDR elevation — NASA Mars Trek / USGS</a> ·
-  <a href="https://swim.psi.edu/" target="_blank" rel="noopener">SWIM 2.0 subsurface water-ice consistency — PSI / NASA</a> ·
-  <a href="https://jmars.mars.asu.edu/maps/?layer=TES_Thermal_Inertia_mola" target="_blank" rel="noopener">MGS TES thermal inertia &amp; dust abundance — ASU JMARS</a> ·
-  <a href="https://www.nasa.gov/mars-exploration-zones" target="_blank" rel="noopener">NASA Human Landing Sites workshop criteria (2015)</a>
-  · slope &amp; roughness derived from MOLA at 2.6 km/px · grid 2048×1024 (≈10 km/px)
+  <div class="sources-left">
+    <span class="sources-tag">INSTRUMENT DATASETS</span>
+    <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">MGS MOLA MEGDR DEM (NASA Mars Trek / USGS)</a>
+    <span class="hud-sep">/</span>
+    <a href="https://swim.psi.edu/" target="_blank" rel="noopener">SWIM 2.0 Subsurface Ice Consistency (PSI / NASA)</a>
+    <span class="hud-sep">/</span>
+    <a href="https://jmars.mars.asu.edu/maps/?layer=TES_Thermal_Inertia_mola" target="_blank" rel="noopener">MGS TES Thermal Inertia &amp; Dust (ASU JMARS)</a>
+    <span class="hud-sep">/</span>
+    <a href="https://www.nasa.gov/mars-exploration-zones" target="_blank" rel="noopener">NASA HLS-2015 Workshop Criteria</a>
+  </div>
+  <div class="sources-right">
+    <span>MOLA 2.6 KM/PX DERIVED SLOPE &amp; ROUGHNESS</span>
+  </div>
 </footer>
 
-<div id="about" class="modal hidden">
+<div id="about" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal-box">
-    <button class="modal-close" id="about-close">✕</button>
-    <h1>How the engine decides</h1>
-    <h3>1. Suitability functions (0–1) per criterion</h3>
+    <div class="modal-header">
+      <div>
+        <div class="sys-badge">TECHNICAL SPECIFICATION // DOC-MDE-2026</div>
+        <h1 id="modal-title">Decision Engine Methodology &amp; Physical Models</h1>
+      </div>
+      <button class="modal-close" id="about-close" aria-label="Close specification">ESC / CLOSE ✕</button>
+    </div>
+
+    <h3>01 // Multi-Criteria Suitability Functions (0.00 – 1.00)</h3>
     <table class="tbl">
-      <tr><th>Criterion</th><th>Data</th><th>Rule</th><th>Why</th></tr>
-      <tr><td>Elevation</td><td>MOLA</td><td>1 below −2 km → 0 above +2 km</td><td>EDL: thicker atmosphere = more deceleration (NASA HLS: ≤ +2 km)</td></tr>
-      <tr><td>Slope</td><td>MOLA, 90th pct in cell</td><td>1 below 5° → 0 above 15°</td><td>Landing pad ≤ 5°, rover traverse ≤ 15°</td></tr>
-      <tr><td>Water ice</td><td>SWIM 2.0</td><td>consistency −1..1 → 0..1</td><td>ISRU: water, O₂, propellant</td></tr>
-      <tr><td>Roughness</td><td>MOLA std-dev in cell</td><td>1 below 30 m → 0 above 250 m</td><td>Rock / relief hazard proxy</td></tr>
-      <tr><td>Thermal inertia</td><td>TES (Christensen / Mellon-Putzig)</td><td>&lt; 100 → ≤ 0.3 (dust); 150–400 → 1; &gt; 400 → 0 at 700</td><td>Bearing strength, dust loading on panels / EDL radar, excavability; no data → 0.5 (neutral)</td></tr>
-      <tr><td>Latitude</td><td>—</td><td>(cos lat − cos 50°)/(1 − cos 50°): 1 at equator → 0 at 50°</td><td>Mean insolation ∝ cos(lat); NASA HLS limit ±50°</td></tr>
+      <thead>
+        <tr><th>Criterion</th><th>Orbital Dataset</th><th>Transfer Function</th><th>Aerospace / Engineering Rationale</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>Elevation</b></td><td>MGS MOLA</td><td><code>1.0</code> below −2 km → <code>0.0</code> above +2 km</td><td>EDL atmospheric column density for parachute deployment &amp; supersonic retro-propulsion (NASA HLS limit ≤ +2 km)</td></tr>
+        <tr><td><b>Slope</b></td><td>MOLA (90th pct)</td><td><code>1.0</code> below 5° → <code>0.0</code> above 15°</td><td>Lander touch-down stability (≤ 5°) and crewed rover gradeability limit (≤ 15°)</td></tr>
+        <tr><td><b>Water Ice</b></td><td>PSI SWIM 2.0</td><td>Consistency <code>−1..+1</code> → <code>0..1</code></td><td>In-Situ Resource Utilization (ISRU): potable water, O₂ life support, and CH₄/LOX propellant production</td></tr>
+        <tr><td><b>Roughness</b></td><td>MOLA sub-cell σ</td><td><code>1.0</code> below 30 m → <code>0.0</code> above 250 m</td><td>Sub-grid topographic relief proxy for boulder fields, scarps, and landing radar scatter</td></tr>
+        <tr><td><b>Thermal Inertia</b></td><td>MGS TES</td><td><code>&lt;100</code> → ≤0.3; <code>150–400</code> → 1.0; <code>&gt;400</code> → 0 at 700</td><td>Regolith load-bearing capacity, dust mobilization risk on arrays/radiators, and mechanical excavability (no-data → 0.5)</td></tr>
+        <tr><td><b>Latitude</b></td><td>IAU-2000 Grid</td><td><code>(cos φ − cos 50°)/(1 − cos 50°)</code></td><td>Mean annual solar insolation ∝ cos(φ) and thermal cycling minimization (NASA HLS limit ±50°)</td></tr>
+      </tbody>
     </table>
-    <h3>2. Weighted sum + hard constraints</h3>
-    <p><code>S = Σ wᵢ·fᵢ</code>, weights normalised to 1. Cells with elevation &gt; +2 km, slope &gt; 15° or |latitude| &gt; 50° are vetoed (S = 0) when hard constraints are on.</p>
-    <h3>3. Candidates</h3>
-    <p>The map is aggregated into 2°×2° blocks; the five best blocks at least 800 km apart are reported and named after the nearest known region.</p>
-    <h3>4. Route planner</h3>
-    <p>A* on the slope grid, 8-connected, longitude-wrapping. Edge cost = distance × (1 + k·slope); slopes above the limit are impassable. Compared against the straight line.</p>
-    <h3>5. Dust-storm model</h3>
-    <p>Daily solar energy = 3.0 kWh/m²/sol × cos(lat) × e<sup>−0.35(τ−0.5)</sup>. The τ-factor is an empirical fit reproducing Opportunity's 2018 drop (≈650 → ≈22 Wh/sol at τ≈10.8). Battery = clamp(battery + production − consumption).</p>
-    <h3>Limitations (stated on purpose)</h3>
-    <ul>
-      <li>Grid is ≈10 km/px; local hazards (boulders, craters &lt; 5 km) are not resolved. Elevation is quantised to ≈115 m levels (8-bit Trek product).</li>
-      <li>SWIM covers ±60° latitude only; outside it ice is "unknown" and scored 0.</li>
-      <li>Radiation, seasonal insolation, dust-devil cleaning and thermal cycling are not modelled.</li>
-      <li>TES thermal inertia is a ~3 km binned product; dust abundance (Bandfield 2002, 8 ppd, 28 % no-data) is shown for inspection and not scored separately (it correlates with low thermal inertia).</li>
+
+    <div class="modal-grid">
+      <div>
+        <h3>02 // Weighted Synthesis &amp; Hard Vetoes</h3>
+        <p>Composite score is evaluated per pixel as <code>S = Σ wᵢ·fᵢ</code> with weights normalized such that <code>Σ wᵢ = 1</code>. When NASA HLS-2015 hard constraints are active, any cell violating <code>elev &gt; +2000 m</code>, <code>slope &gt; 15°</code>, or <code>|lat| &gt; 50°</code> is strictly vetoed (<code>S = 0</code>).</p>
+
+        <h3>03 // Spatial Aggregation &amp; Candidate Extraction</h3>
+        <p>The 2048×1024 grid is integrated over 2°×2° regional blocks (~118×118 km at the equator). Non-maximum suppression extracts the top 5 Exploration Zones separated by at least 800 km.</p>
+      </div>
+      <div>
+        <h3>04 // Slope-Constrained A* Traverse Planner</h3>
+        <p>Operates on an 8-connected spherical-metric grid with longitudinal wrapping at ±180°. Edge transition cost is <code>d(a,b) × (1 + k·slope_b)</code>, with cells exceeding <code>maxSlope</code> treated as impassable barriers.</p>
+
+        <h3>05 // Global Dust-Storm Power Balance Model</h3>
+        <p>Daily horizontal solar flux is modeled as <code>E = 3.0 kWh/m²/sol × cos(φ) × exp(−0.35(τ − 0.5))</code>, calibrated to reproduce the MER Opportunity June 2018 global storm attenuation (<code>τ ≈ 10.8</code> → ~97% array loss, 650 to 22 Wh/sol).</p>
+      </div>
+    </div>
+
+    <h3>06 // Stated Engineering Limitations</h3>
+    <ul class="spec-list">
+      <li><b>Spatial Resolution:</b> Grid resolution is ≈10.3 km/px at the equator; meter-scale hazards (boulders, small secondary craters &lt; 5 km) require HiRISE local reconnaissance.</li>
+      <li><b>Vertical Quantization:</b> Global MOLA DEM layer is quantized at ≈115 m steps; derived slopes represent regional kilometric gradients rather than meter-baseline lander footpad slopes.</li>
+      <li><b>SWIM 2.0 Coverage:</b> Subsurface ice consistency maps span ±60° latitude; higher latitudes are scored 0 for ice and excluded by the ±50° NASA HLS thermal/power constraint.</li>
+      <li><b>Unmodeled Environmental Factors:</b> Galactic cosmic ray (GCR) shielding, seasonal Ls orbital eccentricity insolation variance, and electrostatic dust-devil clearing are omitted.</li>
     </ul>
   </div>
 </div>
