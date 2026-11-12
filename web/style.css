@@ -665,6 +665,8 @@ input[type=range]::-moz-range-track {
   flex-wrap: wrap;
 }
 
+.seg-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.seg-grid button { min-width: 0; white-space: nowrap; }
 .seg button {
   flex: 1;
   padding: 6px 5px;

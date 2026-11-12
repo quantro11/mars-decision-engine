@@ -549,7 +549,7 @@
     if (!S.candidates.length) { ol.innerHTML = '<li class="help">No surface block satisfies active constraints.</li>'; return; }
     S.candidates.forEach((c, i) => {
       const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
-      const name = nr.distDeg < 6 ? nr.region.name : `Sector near ${nr.region.name}`;
+      const name = candidateName(v.lat, v.lon, nr);
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
       li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">CAND-0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
@@ -561,6 +561,14 @@
       };
       ol.appendChild(li);
     });
+  }
+  // Distinct, readable candidate names: exact region if within 2 deg, otherwise a compass sector of the nearest region.
+  function candidateName(lat, lon, nr) {
+    if (nr.distDeg < 2) return nr.region.name;
+    const r = nr.region; let dlon = lon - r.lon; if (dlon > 180) dlon -= 360; if (dlon < -180) dlon += 360;
+    const dlat = lat - r.lat, ew = dlon * Math.cos(lat * Math.PI / 180);
+    const dir = (Math.abs(dlat) > Math.abs(ew) * 2 ? '' : (ew > 0 ? 'E' : 'W')); const ns = (Math.abs(ew) > Math.abs(dlat) * 2 ? '' : (dlat > 0 ? 'N' : 'S'));
+    return `${ns}${dir} of ${r.name.replace(/ \(.*\)$/, '')} · ${(nr.distDeg * 59.3).toFixed(0)} km`;
   }
   const fmtLat = (la) => `${Math.abs(la).toFixed(1)}°${la >= 0 ? 'N' : 'S'}`;
   const fmtLon = (lo) => `${Math.abs(lo).toFixed(1)}°${lo >= 0 ? 'E' : 'W'}`;
@@ -979,7 +987,10 @@
     if (q.get('demo') === 'route') {
       const a = find(q.get('from')) || REGIONS[0], b = find(q.get('to')) || REGIONS[16];
       setMode('route'); S.route.start = { x: L.colOfLon(a.lon), y: L.rowOfLat(a.lat) }; S.route.goal = { x: L.colOfLon(b.lon), y: L.rowOfLat(b.lat) };
-      S.view.scale = 4; S.view.tx = canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * 4; S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * 4; wrapView(); updateScaleBar();
+      let dx = Math.abs(S.route.goal.x - S.route.start.x); if (dx > W / 2) dx = W - dx; const dy = Math.abs(S.route.goal.y - S.route.start.y);
+      const sc = Math.max(1, Math.min(canvas.width / (dx + 160), canvas.height / (dy + 160), 8));
+      let cx = (S.route.start.x + S.route.goal.x) / 2; if (Math.abs(S.route.goal.x - S.route.start.x) > W / 2) cx = (cx + W / 2) % W;
+      S.view.scale = sc; S.view.tx = canvas.width / 2 - cx * sc; S.view.ty = canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * sc; wrapView(); updateScaleBar();
       computeRoute();
     } else if (q.get('demo') === 'crisis') {
       const a = find(q.get('site')) || REGIONS[10];
