@@ -56,7 +56,15 @@
         for (let i = 0, j = 0; i < out.length; i++, j += 4) out[i] = d[j];
         L[key] = out; res();
       };
-      im.onerror = rej; im.src = window.LAYER_DATA[key];
+      im.onerror = () => {
+        // Fallback: if data URI fails or not bundled, stream directly from web/layers/*.png
+        if (!im.src.includes('layers/')) {
+          im.src = 'layers/' + key + '.png';
+        } else {
+          rej(new Error('Failed to load layer ' + key));
+        }
+      };
+      im.src = (window.LAYER_DATA && window.LAYER_DATA[key]) ? window.LAYER_DATA[key] : ('layers/' + key + '.png');
     });
   }
 
@@ -96,7 +104,7 @@
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
     sensSpread: 0.2,
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
-    crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
+    crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0, regolith: 1.5 },
     hover: null,
   };
 
@@ -620,6 +628,8 @@
     const isru = SCORING.calcISRU(v.ice, S.iceBand);
     const sTemp = STORM.surfaceTempC(v.lat, S.crisis.ls);
     const pTherm = STORM.thermalDemandKw(v.lat, S.crisis.ls);
+    const micro = SCORING.calcMicroHazard(v.slope, v.rough);
+    const spe = SCORING.calcSPE(v.elev, 1.5);
 
     $('#detail').innerHTML = `
       <div class="detail-header">
@@ -643,10 +653,13 @@
         <tr><td>ISRU Water Yield</td><td><b>${isru.yieldLitersSol} L/sol</b> (${isru.label})</td></tr>
         <tr><td>ECLSS O₂ Equivalent</td><td>${isru.loxKgSol} kg O₂/sol</td></tr>
         <tr><td>Sub-cell Roughness (σ)</td><td>${v.rough.toFixed(0)} m</td></tr>
+        <tr><td>Tactical Micro-Hazard</td><td><b class="${micro.boulderRiskPct >= 40 ? 'bad' : micro.boulderRiskPct >= 20 ? 'warn' : 'ok'}">${micro.tacticalGrade} (${micro.boulderRiskPct}% boulder risk)</b></td></tr>
+        <tr><td>HiRISE Verification</td><td><small>${micro.recommendation}</small></td></tr>
         <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
         <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
         <tr><td>Atmospheric Column</td><td>${SCORING.atmoColumnGcm2(v.elev).toFixed(1)} g/cm²</td></tr>
         <tr><td>GCR Dose (MSL-RAD)</td><td>${SCORING.radDoseMsvYr(v.elev).toFixed(0)} mSv/yr</td></tr>
+        <tr><td>Acute SPE Solar Storm</td><td>${spe.unshieldedDoseMsv} mSv unshielded · needs ${spe.requiredRegolithM}m regolith</td></tr>
         <tr><td>Nocturnal Surface Temp</td><td>${sTemp.night.toFixed(0)} °C (diurnal mean ${sTemp.mean.toFixed(0)} °C)</td></tr>
         <tr><td>Hab Thermal Demand</td><td>${pTherm} kWe heating required</td></tr>
       </table>
@@ -723,6 +736,7 @@
     const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
     const sTemp = STORM.surfaceTempC(v.lat, c.ls);
     const pTherm = STORM.thermalDemandKw(v.lat, c.ls);
+    const spe = SCORING.calcSPE(v.elev, c.regolith || 1.5);
 
     const verdict = res.blackoutSol !== null
       ? `<div class="summary-big bad">Blackout on sol ${res.blackoutSol}</div><div class="help">Battery reserve exhausted ${res.blackoutSol - 20} sols after storm onset. Peak-storm generation ${(peakSolar + nuc).toFixed(0)} kWh/sol vs load ${c.cons} kWh/sol.</div>`
@@ -741,6 +755,9 @@
       <div class="kv"><span>Peak-storm solar, τ ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
       <div class="kv"><span>Post-Storm Dust Fallout</span><b>−${res.postStormSolarLossPct}% permanent array loss</b></div>
       <div class="kv"><span>Kilopower baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
+      <div class="kv" style="border-top:1px dashed rgba(236,231,223,.12);padding-top:4px"><span>Acute SPE Unshielded</span><b>${spe.unshieldedDoseMsv} mSv (Lethal)</b></div>
+      <div class="kv"><span>Shielded (${(c.regolith || 1.5).toFixed(1)}m regolith)</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${spe.survivalStatus})</b></div>
+      <div class="kv"><span>Required Safe Trench Depth</span><b>${spe.requiredRegolithM} m (or >3.5m lava tube)</b></div>
       ${crisisSVG(res.rows, c.batt)}
       <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add a Kilopower reactor to prevent habitat freeze-out and keep ECLSS running.' : ''}</div>`;
   }
@@ -921,6 +938,9 @@
   bindRange('cons', v => v + ' kWh/sol', v => { S.crisis.cons = v; runCrisis(); });
   bindRange('batt', v => v + ' kWh', v => { S.crisis.batt = v; runCrisis(); });
   bindRange('kp', v => String(v), v => { S.crisis.kp = v; runCrisis(); });
+  if ($('#rego')) {
+    bindRange('rego', v => (v / 10).toFixed(1) + ' m', v => { S.crisis.regolith = v / 10; runCrisis(); });
+  }
   $('#btn-about').onclick = () => $('#about').classList.remove('hidden');
   $('#about-close').onclick = () => $('#about').classList.add('hidden');
   $('#about').onclick = (e) => { if (e.target.id === 'about') $('#about').classList.add('hidden'); };
@@ -949,6 +969,9 @@
         isru_water_yield_l_sol: SCORING.calcISRU(v.ice, S.iceBand).yieldLitersSol,
         isru_eclss_status: SCORING.calcISRU(v.ice, S.iceBand).status,
         roughness_m: Math.round(v.rough),
+        tactical_micro_hazard: SCORING.calcMicroHazard(v.slope, v.rough).tacticalGrade,
+        boulder_risk_pct: SCORING.calcMicroHazard(v.slope, v.rough).boulderRiskPct,
+        hirise_recommendation: SCORING.calcMicroHazard(v.slope, v.rough).recommendation,
         tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
         atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
         gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
@@ -1005,6 +1028,13 @@
         tau_peak: S.crisis.tauPeak,
         nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls).night,
         hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls),
+        spe_acute_radiation: {
+          unshielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).unshieldedDoseMsv,
+          regolith_cover_m: +(S.crisis.regolith || 1.5).toFixed(1),
+          shielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).shieldedDoseMsv,
+          required_trench_depth_m: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).requiredRegolithM,
+          survival_status: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).survivalStatus,
+        },
         panel_area_m2: S.crisis.area,
         kilopower_units: S.crisis.kp,
         survives_blackout: sim.blackoutSol === null,

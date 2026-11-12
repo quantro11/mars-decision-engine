@@ -53,6 +53,45 @@
     return { yieldLitersSol, crewMargin, loxKgSol, status, label };
   }
 
+  // NASA Solar Particle Event (SPE) Acute Radiation Crisis & Regolith Trench Shielding
+  // A major Coronal Mass Ejection (CME) / SPE event delivers 1200-2000 mSv acute unshielded surface dose over 48 hours.
+  // NASA 30-day career/acute astronaut limit is 250 mSv; the ALARA target to prevent acute radiation sickness is <= 100 mSv.
+  // Regolith density rho ~ 1.5 g/cm3, effective nuclear attenuation length lambda ~ 36.0 g/cm2 (mean free path ~ 0.24 m).
+  function calcSPE(elev_m, regolithCoverMeters) {
+    const sigma = atmoColumnGcm2(elev_m); // g/cm2
+    // Partial atmospheric column shielding for primary protons & secondary neutrons:
+    const unshieldedDoseMsv = Math.round(1850 * Math.exp(-sigma / 85.0));
+    const cover = Math.max(0, regolithCoverMeters || 0);
+    // Exponential attenuation through Martian regolith trench / sandbags:
+    const shieldedDoseMsv = Math.round(unshieldedDoseMsv * Math.exp(-cover / 0.24));
+    // Safe depth required to bring acute dose below 100 mSv target:
+    const requiredRegolithM = Math.max(0.4, Math.round(0.24 * Math.log(unshieldedDoseMsv / 100) * 10) / 10);
+    const lavaTubeMsv = Math.round(unshieldedDoseMsv * Math.exp(-3.5 / 0.15)); // >=3.5m basalt cave ceiling -> <0.5 mSv
+    let survivalStatus = 'LETHAL_ACUTE';
+    if (shieldedDoseMsv <= 100) survivalStatus = 'NOMINAL_SAFE';
+    else if (shieldedDoseMsv <= 250) survivalStatus = 'MARGINAL_EXPOSURE';
+    return { unshieldedDoseMsv, shieldedDoseMsv, requiredRegolithM, survivalStatus, lavaTubeMsv };
+  }
+
+  // Tactical Sub-Meter Landing Hazard Prediction (HiRISE 0.25 m/px Bounding Box Proxy)
+  // Bridges 10.4 km regional MOLA grid to 100 m tactical landing ellipse certification
+  function calcMicroHazard(slope_deg, rough_m) {
+    const s = Math.max(0, slope_deg), r = Math.max(0, rough_m);
+    // Sub-cell boulder (>1 m) & localized scarp frequency model:
+    const boulderRiskPct = Math.min(95, Math.max(4, Math.round((r / 250 * 55 + s / 15 * 45))));
+    const trnRequired = boulderRiskPct >= 20; // Requires active Terrain Relative Navigation & hazard avoidance
+    let tacticalGrade = 'NOMINAL_SMOOTH';
+    let recommendation = 'Low boulder probability; nominal for direct unguided touchdown.';
+    if (boulderRiskPct >= 50) {
+      tacticalGrade = 'HIGH_HAZARD';
+      recommendation = 'Heavy rock concentration / escarpments; requires 0.25 m/px HiRISE validation & active TRN divert.';
+    } else if (boulderRiskPct >= 20) {
+      tacticalGrade = 'CAUTION_ROUGH';
+      recommendation = 'Moderate relief; requires HiRISE DTM slopes and automated hazard avoidance.';
+    }
+    return { boulderRiskPct, trnRequired, tacticalGrade, recommendation };
+  }
+
   const F = {
     // Lower is better: thick atmosphere for parachutes / retro-propulsion margin.
     elev(h_m) { return ramp(h_m, -2000, 2000); },
@@ -184,5 +223,5 @@
 
   function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcISRU, sensitivity, mulberry32 };
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcISRU, calcSPE, calcMicroHazard, sensitivity, mulberry32 };
 })(typeof window !== 'undefined' ? window : module.exports);

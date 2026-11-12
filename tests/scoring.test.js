@@ -104,4 +104,21 @@ assert.strictEqual(res2.freezeSol, null, 'Kilopower base maintains habitable the
 // --- Interplanetary Survival Guide: Emergency Safe Havens on traverse
 assert.ok(Array.isArray(safe.stats.safeHavens), 'safe havens list returned');
 
-console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal tests passed.');
+// --- Interplanetary Survival Guide: SPE Acute Radiation & Regolith Shielding
+const speUnshielded = S.calcSPE(-2000, 0);
+assert.ok(speUnshielded.unshieldedDoseMsv > 1200, 'severe unshielded SPE dose > 1200 mSv');
+assert.strictEqual(speUnshielded.survivalStatus, 'LETHAL_ACUTE');
+const speShielded = S.calcSPE(-2000, 2.0);
+assert.ok(speShielded.shieldedDoseMsv <= 100, '2.0m regolith attenuates SPE to nominal safe <= 100 mSv');
+assert.strictEqual(speShielded.survivalStatus, 'NOMINAL_SAFE');
+assert.ok(speShielded.lavaTubeMsv < 1, 'lava tube provides >99.9% radiation attenuation');
+
+// --- Interplanetary Survival Guide: Tactical Micro-Hazard Prediction (HiRISE 0.25 m/px proxy)
+const smoothMicro = S.calcMicroHazard(1.5, 12);
+assert.strictEqual(smoothMicro.tacticalGrade, 'NOMINAL_SMOOTH');
+assert.ok(smoothMicro.boulderRiskPct < 20 && !smoothMicro.trnRequired);
+const roughMicro = S.calcMicroHazard(18.0, 180);
+assert.strictEqual(roughMicro.tacticalGrade, 'HIGH_HAZARD');
+assert.ok(roughMicro.boulderRiskPct >= 50 && roughMicro.trnRequired);
+
+console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal / SPE / micro-hazard tests passed.');
