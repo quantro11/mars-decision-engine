@@ -88,7 +88,7 @@
   const S = {
     viewMode: '2d', // '2d' | '3d'
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
-    overlay: 'score', opacity: 0.7, showRegions: true, showEZ: false,
+    overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
     crisis: { site: null, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
