@@ -19,6 +19,7 @@
     rough: 'ROUG',
     lat: 'LAT',
     ti: 'TES',
+    rad: 'RAD',
   };
 
   const OVERLAY_NAMES = {
@@ -28,6 +29,7 @@
     elev: 'MOLA MEGDR ELEVATION',
     ti: 'TES THERMAL INERTIA',
     dust: 'TES DUST ABUNDANCE',
+    rad: 'GCR DOSE (MSL/RAD-ANCHORED)',
     none: 'NASA VIKING MDIM 2.1 OPTICAL',
   };
 
@@ -62,7 +64,7 @@
   function cellValues(x, y) {
     const i = y * W + x;
     const iceRaw = L.ice[i];
-    return {
+    const out = {
       elev: META.elev.offset + L.elev[i] * META.elev.scale,
       slope: L.slope[i] * META.slope.scale,
       rough: L.rough[i] * META.rough.scale,
@@ -71,6 +73,8 @@
       dust: L.dust[i] === 0 ? null : META.dust.offset + L.dust[i] * META.dust.scale,
       lat: L.latOfRow(y), lon: L.lonOfCol(x),
     };
+    out.rad = SCORING.radDose(out.elev);
+    return out;
   }
 
   // mean physical values over a square block (used for candidate cards)
@@ -81,7 +85,7 @@
       e += v.elev; sl += v.slope; r += v.rough; n++; if (v.ice !== null) { ic += v.ice; nIce++; }
       if (v.ti !== null) { t += v.ti; nT++; } if (v.dust !== null) { du += v.dust; nD++; }
     }
-    return { elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
+    return { rad: SCORING.radDose(e / n), elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
   }
 
   // ------------------------------------------------------------ state
@@ -90,6 +94,7 @@
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
+    sensSpread: 0.2,
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
     crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
     hover: null,
@@ -176,9 +181,13 @@
     elev: [[0, 18, 38, 88], [0.3, 52, 118, 142], [0.5, 168, 148, 88], [0.7, 148, 78, 48], [1, 252, 252, 255]],
     ti: [[0, 115, 38, 22], [0.15, 195, 115, 38], [0.4, 75, 168, 95], [0.7, 56, 135, 215], [1, 238, 244, 255]],
     dust: [[0, 35, 55, 85], [0.5, 185, 145, 85], [1, 255, 228, 155]],
+    rad: [[0, 40, 120, 90], [0.5, 230, 200, 60], [1, 220, 40, 90]],
   };
   const LUT = {};
   for (const k in CMAP) { LUT[k] = new Uint8ClampedArray(256 * 3); for (let i = 0; i < 256; i++) { const c = lerpStops(CMAP[k], i / 255); LUT[k].set(c.map(Math.round), i * 3); } }
+
+  const radLut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) radLut[i] = Math.max(0, Math.min(255, Math.round((SCORING.radDose(META.elev.offset + i * META.elev.scale) - 190) / 150 * 255)));
 
   function buildOverlay() {
     const d = ovImg.data, lut = LUT[S.overlay] || LUT.score;
@@ -194,6 +203,7 @@
       else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);
       else if (S.overlay === 'elev') v = L.elev[i];
       else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
+      else if (S.overlay === 'rad') { v = radLut[L.elev[i]]; }
       else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
       else { d[j + 3] = 0; continue; }
       d[j] = lut[v * 3]; d[j + 1] = lut[v * 3 + 1]; d[j + 2] = lut[v * 3 + 2]; d[j + 3] = a;
@@ -526,10 +536,27 @@
       SCORING.scoreMap(L, S.weights, S.hard, S.score);
       const blockPx = Math.round(2 / META.deg_per_px), sepPx = Math.round(800 / 59.3 / META.deg_per_px);
       S.candidates = SCORING.topCandidates(S.score, W, H, 5, blockPx, sepPx).map(c => ({ ...c, x: Math.round(c.x), y: Math.round(c.y), blockPx }));
+      if ($('#sens-result')) $('#sens-result').innerHTML = '';
       ovDirty = true; renderCandidates(); if (S.selected) renderDetail(S.selected.x, S.selected.y, S.selected.cand);
       draw();
       $('#hud-coord').dataset.t = (performance.now() - t0).toFixed(0);
     });
+  }
+
+  function runSensitivity() {
+    if (!S.candidates.length) return;
+    const btn = $('#sens-run'), out = $('#sens-result');
+    if (!btn || !out) return;
+    btn.disabled = true; out.innerHTML = '<div class="help">Running 30 perturbed scorings…</div>';
+    setTimeout(() => {
+      const blockPx = S.candidates[0].blockPx, sepPx = Math.round(800 / 59.3 / META.deg_per_px);
+      const rob = SCORING.sensitivity(L, S.weights, S.hard, S.candidates,
+        { runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx: Math.round(400 / 59.3 / META.deg_per_px) }, SCORING.mulberry32(2026));
+      S.candidates.forEach((c, i) => { c.robust = rob[i]; });
+      const mean = rob.reduce((a, b) => a + b, 0) / rob.length;
+      out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">Weights ±${Math.round(S.sensSpread * 100)}% × 30 runs: top-5 candidates stay in the top-5 (within 400 km) in ${(mean * 100).toFixed(0)}% of runs on average. ${mean >= 0.8 ? 'Ranking is ROBUST to weight uncertainty.' : 'Ranking DEPENDS on the chosen weights.'}</div>`;
+      renderCandidates(); btn.disabled = false;
+    }, 30);
   }
 
   function critRows(v, w) {
@@ -541,9 +568,10 @@
       rough: `${v.rough.toFixed(0)} m`,
       lat: `${v.lat.toFixed(1)}°`,
       ti: v.ti === null ? 'no data' : `${v.ti.toFixed(0)} tiu`,
+      rad: `${v.rad.toFixed(0)} mSv/yr`,
     };
     return SCORING.CRITERIA.map(c => {
-      const f = SCORING.F[c.key](v[c.key]);
+      const f = c.key === 'rad' ? SCORING.F.rad(v.elev) : SCORING.F[c.key](v[c.key]);
       const cls = f > 0.66 ? 'ok' : f > 0.33 ? 'warn' : 'bad';
       return `<div class="crit"><span>${c.label.split(' (')[0]}</span><div class="bar"><i style="width:${(f * 100).toFixed(0)}%;opacity:${0.35 + 0.65 * wn[c.key] / 0.5}"></i></div><span class="v ${cls}">${fmt[c.key]}</span></div>`;
     }).join('');
@@ -558,7 +586,10 @@
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
       li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° block mean</div>${critRows(v, S.weights)}`;
+        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° block mean${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
+        <a class="trek" href="${trekUrl(v.lat, v.lon)}" target="_blank" rel="noopener">▸ Inspect in NASA Mars Trek (HiRISE / CTX)</a>`;
+      const trekLink = li.querySelector('.trek');
+      if (trekLink) trekLink.onclick = (e) => e.stopPropagation();
       li.onclick = () => {
         select(c.x, c.y, i);
         if (S.viewMode === '3d' && globe) { globe.flyTo(v.lat, v.lon); schedule3D(); }
@@ -575,6 +606,7 @@
     const dir = (Math.abs(dlat) > Math.abs(ew) * 2 ? '' : (ew > 0 ? 'E' : 'W')); const ns = (Math.abs(ew) > Math.abs(dlat) * 2 ? '' : (dlat > 0 ? 'N' : 'S'));
     return `${ns}${dir} of ${r.name.replace(/ \(.*\)$/, '')} · ${(nr.distDeg * 59.3).toFixed(0)} km`;
   }
+  const trekUrl = (lat, lon) => `https://trek.nasa.gov/mars/#v=0.1&x=${lon.toFixed(3)}&y=${lat.toFixed(3)}&z=7&p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905&d=`;
   const fmtLat = (la) => `${Math.abs(la).toFixed(1)}°${la >= 0 ? 'N' : 'S'}`;
   const fmtLon = (lo) => `${Math.abs(lo).toFixed(1)}°${lo >= 0 ? 'E' : 'W'}`;
 
@@ -639,6 +671,8 @@
       <tr><td>Peak Slope</td><td class="${cls(a.maxSlope)}">${a.maxSlope.toFixed(1)}°</td><td class="${cls(b.maxSlope)}">${b.maxSlope.toFixed(1)}°</td></tr>
       <tr><td>Mean Slope</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
       <tr><td>Distance &gt;10° Slope</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
+      <tr><td>Low-TI Dust (&lt;100 tiu)</td><td>${(a.dustKm || 0).toFixed(0)} km</td><td>${(b.dustKm || 0).toFixed(0)} km</td></tr>
+      <tr><td>Mean Roughness (σ)</td><td>${(a.meanRough || 0).toFixed(0)} m</td><td>${(b.meanRough || 0).toFixed(0)} m</td></tr>
       <tr><td>Traverse Duration</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
       <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (limit ${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
       <div class="hint" style="margin-top:10px">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
@@ -801,11 +835,38 @@
   }
   $('#hard').onchange = (e) => { S.hard = e.target.checked; rescore(); };
   document.querySelectorAll('#iceband button').forEach(b => b.onclick = () => { document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b)); S.iceBand = b.dataset.band; rescore(); });
+  if ($('#sens')) {
+    $('#sens').oninput = (e) => {
+      S.sensSpread = +e.target.value / 100;
+      if ($('#sens-v')) $('#sens-v').textContent = `±${e.target.value}%`;
+    };
+  }
+  if ($('#sens-run')) {
+    $('#sens-run').onclick = () => {
+      const outEl = $('#sens-result');
+      if (!outEl || !S.candidates.length) return;
+      const t0 = performance.now();
+      const blockPx = Math.round(2 / META.deg_per_px), sepPx = Math.round(800 / 59.3 / META.deg_per_px);
+      const rates = SCORING.sensitivity(L, S.weights, S.hard, S.candidates, {
+        runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx: blockPx * 2,
+      }, SCORING.mulberry32(42));
+      const ms = (performance.now() - t0).toFixed(0);
+      outEl.innerHTML = `<div class="hint" style="margin:6px 0 4px">30 Monte Carlo runs (±${Math.round(S.sensSpread * 100)}% weights, ${ms} ms)</div>` +
+        S.candidates.map((c, i) => {
+          const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
+          const pct = Math.round((rates[i] || 0) * 100);
+          const cls = pct >= 80 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
+          return `<div class="kv"><span>#0${i + 1} ${candidateName(v.lat, v.lon, nr).split(' ·')[0]}</span><b class="${cls}">${pct}% Top-5</b></div>`;
+        }).join('');
+    };
+  }
   document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; updateHudLayer(); ovDirty = true; renderLegend(); draw(); });
   $('#opacity').oninput = (e) => { S.opacity = +e.target.value / 100; const vEl = $('#opacity-v'); if (vEl) vEl.textContent = e.target.value + '%'; draw(); };
   $('#show-regions').onchange = (e) => { S.showRegions = e.target.checked; draw(); };
   $('#show-ez').onchange = (e) => { S.showEZ = e.target.checked; draw(); };
-  const bindRange = (id, fmt, cb) => { const el = $('#' + id); const upd = () => { $('#' + id + '-v').textContent = fmt(+el.value); cb(+el.value); }; el.oninput = upd; upd(); };
+  const bindRange = (id, fmt, cb) => { const el = $('#' + id); if (!el) return; const upd = () => { const vEl = $('#' + id + '-v'); if (vEl) vEl.textContent = fmt(+el.value); cb(+el.value); }; el.oninput = upd; upd(); };
+  if ($('#sens-run')) $('#sens-run').onclick = runSensitivity;
+  bindRange('sens', v => '±' + v + '%', v => { S.sensSpread = v / 100; });
   bindRange('maxslope', v => v + '°', v => { S.route.maxSlope = v; computeRoute(); });
   bindRange('kslope', v => (v / 100).toFixed(2), v => { S.route.k = v / 100; computeRoute(); });
   bindRange('speed', v => v + ' km/sol', v => { S.route.speed = v; renderRoute(); });
@@ -903,6 +964,8 @@
         direct_max_slope_deg: +S.route.straight.stats.maxSlope.toFixed(1),
         astar_safe_km: +S.route.safe.stats.km.toFixed(1),
         astar_max_slope_deg: +S.route.safe.stats.maxSlope.toFixed(1),
+        astar_dust_trap_km: +(S.route.safe.stats.dustKm || 0).toFixed(1),
+        astar_mean_roughness_m: Math.round(S.route.safe.stats.meanRough || 0),
         speed_km_per_sol: S.route.speed,
       } : null,
       dust_storm_simulation: {
@@ -1033,6 +1096,7 @@
       elev: ['−8.2 KM', '+21.2 KM'],
       ti: ['0 FINE DUST', '≥700 BEDROCK'],
       dust: ['0% DUST', '100% DUST'],
+      rad: ['190 mSv/YR LOW', '340 mSv/YR HIGH'],
     }[S.overlay];
     el.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
   }

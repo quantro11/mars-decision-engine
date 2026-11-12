@@ -4,7 +4,7 @@ All numbers shown in the app can be traced to this document.
 
 ## 1. Grid
 
-Simple cylindrical, 2048 × 1024 px, lon −180…180 °E, lat 90…−90. One pixel = 0.1758° ≈ 10.4 km at the equator.
+Simple cylindrical, 2048 × 1024 px, lon −180…180 °E, lat 90…−90 (IAU-2000 volumetric mean radius $R = 3389.5\text{ km}$). One pixel = 0.1758° ≈ 10.4 km at the equator.
 Slope and roughness are computed on the 8192 × 4096 source grid (≈ 2.6 km/px) and then aggregated 4 × 4 into the output grid.
 
 ## 2. Layers
@@ -15,6 +15,9 @@ Slope and roughness are computed on the 8192 × 4096 source grid (≈ 2.6 km/px)
 | Slope `s` (°) | derived | `atan(|∇h|)` with metre-per-pixel scaled by `cos(lat)`; output = 90th percentile of the 16 source pixels in each cell (a pessimistic, safety-oriented statistic) |
 | Roughness `r` (m) | derived | standard deviation of the 16 source elevations in each cell |
 | Ice `c` (−1…1) | SWIM 2.0 composite ice consistency (0–1 m, 1–5 m, > 5 m) | box-resampled from 7200 × 2400 (3 km/px); rows outside ±60° = no data |
+| Thermal inertia `I` (tiu) | MGS TES (Christensen et al.; Putzig/Mellon) via ASU JMARS WMS | 2048 × 1024 numeric VICAR (`J m⁻² K⁻¹ s⁻½`) |
+| Dust abundance `d` (0…1) | MGS TES surface dust fraction (Bandfield 2002) via ASU JMARS WMS | 2048 × 1024 numeric VICAR |
+| Optical basemap | NASA Viking Orbiter MDIM 2.1 global mosaic | 4096 × 2048 colour mosaic + MOLA directional hillshade |
 | Latitude | — | row centre |
 
 ## 3. Suitability functions
@@ -43,14 +46,20 @@ Presets (elev / slope / ice / rough / lat / thermal inertia):
 
 ## 5. Candidate extraction
 
-Mean score per 2° × 2° block (11 × 11 px); greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer (within 6°; otherwise "unnamed terrain near …"). Cards show block means.
+Mean score per 2° × 2° block (11 × 11 px); greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer (within 6°; otherwise compass-sector offset from nearest region). Cards show block means.
 
-## 6. Route planner
+## 6. Multi-hazard route planner (A*)
 
-A* on the slope grid, 8-connected, longitude wrapping, search window = bounding box ± 160 px.
-Edge cost `d · (1 + k · s_target)`, `k` = 0.3 default; `s > s_max` (15° default) is impassable.
+A* on the 2048 × 1024 grid, 8-connected, longitude wrapping, search window = bounding box ± 160 px.
+Edge cost integrates slope, sub-cell roughness ($r > 50\text{ m}$), and TES low-TI fine-dust sinkage ($I < 100\text{ tiu}$, e.g. Spirit-like dust traps):
+
+```
+cost(a → b) = d · [ 1 + k · (s_b + max(0, (r_b − 50)/50) + 6 · max(0, 1 − I_b/100)) ]
+```
+
+where `k` = 0.3 default, and `s_b > s_max` (15° default) is strictly impassable.
 Heuristic = haversine distance (admissible, Mars radius 3389.5 km).
-Reported: distance, max / mean slope, km on > 10° terrain, travel time at a user-set speed (default 20 km/sol — Perseverance's best single-sol drives are ≈ 350 m, so 20 km/sol represents a crewed pressurised rover, not today's robots), elevation profile.
+Reported: distance, max / mean slope, km on > 10° terrain, km across low-TI dust (< 100 tiu), mean sub-cell roughness (σ), travel time at user-set speed (default 20 km/sol — representing a crewed pressurised rover), and elevation profile.
 
 ## 7. Dust-storm & seasonal energy model
 
@@ -74,10 +83,11 @@ D_GCR(h)   = 155 + 245 · exp(−Σ(h) / 20.5)              [mSv/yr]
 ```
 
 * Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4500\text{ m}$, $\Sigma \approx 24\text{ g/cm}^2 \Rightarrow D_{\text{GCR}} \approx 231\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $232 \pm 10\text{ mSv/yr}$).
+* Because $D_{\text{GCR}}(h)$ is a monotonic function of elevation $h$ (already weighted in `S`), it is reported as an explicit diagnostic metric in the site inspector and Mission Brief rather than a separate weight slider, avoiding collinear double-counting.
 
 ## 9. Known limitations
 
-1. 10 km/px cells cannot see boulders, small craters, dunes or scarps — output is a region ranking, not a landing ellipse.
+1. 10 km/px cells cannot see individual boulders, small craters, dunes or scarps — output is a regional reconnaissance ranking, not a 100 m landing ellipse.
 2. 8-bit elevation (≈ 115 m steps) makes slopes regional; local slopes are higher.
 3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
 4. SWIM coverage ends at ±60°.

@@ -21,30 +21,29 @@
   const OBLIQUITY = 25.19 * DEG;
   const ECC = 0.0934;
   const LS_PERIHELION = 251.0;
+  const S0 = 586;
+  const LS_PER_SOL = 360 / 668.6;
 
   function fTau(tau) { return Math.exp(-0.35 * (tau - 0.5)); }
 
-  // Seasonal & latitudinal geometry factor (normalised so equatorial equinox = 1.0).
+  // Seasonal daily-mean top-of-atmosphere insolation (W/m2) for latitude and solar longitude Ls (deg).
+  function insolationTOA(lat, Ls) {
+    const phi = lat * DEG;
+    const dec = Math.asin(Math.max(-1, Math.min(1, Math.sin(OBLIQUITY) * Math.sin(Ls * DEG))));
+    const rf = (1 + ECC * Math.cos((Ls - LS_PERIHELION) * DEG)) / (1 - ECC * ECC);
+    const x = -Math.tan(phi) * Math.tan(dec);
+    const h0 = x >= 1 ? 0 : x <= -1 ? Math.PI : Math.acos(x);
+    return Math.max(0, S0 / Math.PI * rf * rf * (h0 * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(h0)));
+  }
+
+  let Q_EQ = 0; for (let l = 0; l < 360; l++) Q_EQ += insolationTOA(0, l) / 360;
+
+  // Seasonal & latitudinal geometry factor (normalised so equatorial annual-mean = 1.0).
   function seasonalFactor(lat, ls) {
     if (ls === undefined || ls === null) {
       return Math.max(0.05, Math.cos(lat * DEG));
     }
-    const phi = lat * DEG;
-    const lsRad = ls * DEG;
-    const sinDec = Math.sin(OBLIQUITY) * Math.sin(lsRad);
-    const dec = Math.asin(Math.max(-1, Math.min(1, sinDec)));
-
-    // Eccentricity distance modulation: ((1 + e cos(Ls - Lp)) / (1 - e^2))^2
-    const rRatio = (1 + ECC * Math.cos((ls - LS_PERIHELION) * DEG)) / (1 - ECC * ECC);
-    const distFactor = rRatio * rRatio;
-
-    // Sunset hour angle H0
-    const arg = -Math.tan(phi) * Math.tan(dec);
-    const H0 = arg <= -1 ? Math.PI : arg >= 1 ? 0 : Math.acos(arg);
-
-    // Diurnal integral normalised by equatorial equinox (1/pi -> 1)
-    const geom = H0 * Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.sin(H0);
-    return Math.max(0.03, distFactor * geom);
+    return insolationTOA(lat, ls) / Q_EQ;
   }
 
   function dailySolar(lat, tau, ls) {
@@ -71,27 +70,26 @@
     return s.tau0;
   }
 
-  // cfg: {lat, ls, panelArea, efficiency, consumption(kWh/sol), capacity(kWh), kilopower(units), sols, storm:{...}}
+  // cfg: {lat, ls|Ls0, panelArea, efficiency, consumption(kWh/sol), capacity(kWh), kilopower(units), sols, storm:{...}}
   function simulate(cfg) {
     const rows = [];
     let batt = cfg.capacity;
     let blackoutSol = null, minBatt = batt;
-    const ls0 = cfg.ls;
+    const ls0 = cfg.ls !== undefined ? cfg.ls : cfg.Ls0;
     for (let sol = 0; sol < cfg.sols; sol++) {
       const tau = tauAt(sol, cfg.storm);
-      // Mars advances ~0.524 deg of Ls per sol
-      const lsSol = (ls0 === undefined || ls0 === null) ? undefined : (ls0 + sol * 0.524) % 360;
+      const lsSol = (ls0 === undefined || ls0 === null) ? null : (ls0 + sol * LS_PER_SOL + 360) % 360;
       const solar = cfg.panelArea * cfg.efficiency * dailySolar(cfg.lat, tau, lsSol);
       const nuclear = cfg.kilopower * KILOPOWER_KW * SOL_H;
       const net = solar + nuclear - cfg.consumption;
       batt = Math.max(0, Math.min(cfg.capacity, batt + net));
       if (batt <= 0 && blackoutSol === null) blackoutSol = sol;
       minBatt = Math.min(minBatt, batt);
-      rows.push({ sol, tau, solar, nuclear, net, batt, ls: lsSol });
+      rows.push({ sol, tau, solar, nuclear, net, batt, ls: lsSol, Ls: lsSol });
     }
     const peakRow = rows.reduce((a, b) => (b.tau > a.tau ? b : a), rows[0]);
     return { rows, blackoutSol, minBatt, peakSolarDropPct: 100 * (1 - fTau(cfg.storm.tauPeak) / fTau(cfg.storm.tau0)), peakRow };
   }
 
-  global.STORM = { fTau, seasonalFactor, seasonName, dailySolar, tauAt, simulate, SOL_H, KILOPOWER_KW };
+  global.STORM = { fTau, insolationTOA, seasonalFactor, seasonName, dailySolar, tauAt, simulate, SOL_H, KILOPOWER_KW, LS_PER_SOL };
 })(typeof window !== 'undefined' ? window : module.exports);

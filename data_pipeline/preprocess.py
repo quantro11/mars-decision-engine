@@ -38,7 +38,7 @@ os.makedirs(LAYERS, exist_ok=True)
 SRC_W, SRC_H = 8192, 4096          # zoom-4 Trek tiles
 OUT_W, OUT_H = 2048, 1024          # browser grid
 F = SRC_W // OUT_W                 # 4x4 source pixels per output cell
-MARS_R = 3396190.0                 # m
+MARS_R = 3389500.0                 # m (IAU-2000 volumetric mean radius, matching web engine)
 
 # Trek's 8-bit MOLA product is a linear stretch of the MOLA range.
 # We anchor it on the global extremes (Hellas floor / Olympus summit) and

@@ -1,8 +1,9 @@
-// Slope-aware A* path planning on the 2048x1024 grid (8-connected, longitude wraps).
-// cost(a->b) = distance(a,b) * (1 + k * slope_b)   ; slope_b > maxSlope => impassable
+// Multi-hazard A* path planning on the 2048x1024 grid (8-connected, longitude wraps).
+// Accounts for MOLA 90th-pct slope, sub-cell terrain roughness (sigma), and TES low-TI dust traps.
+// cost(a->b) = distance(a,b) * (1 + k * (slope_b + roughPenalty_b + dustPenalty_b)) ; slope_b > maxSlope => impassable
 (function (global) {
   'use strict';
-  const MARS_R = 3389.5; // km
+  const MARS_R = 3389.5; // km (IAU-2000 volumetric mean radius)
 
   class Heap {
     constructor() { this.a = []; }
@@ -22,12 +23,14 @@
     return 2 * MARS_R * Math.asin(Math.sqrt(a));
   }
 
-  // L: {width,height, slope:Uint8Array, meta, latOfRow(y), lonOfCol(x)}
+  // L: {width,height, slope:Uint8Array, rough?:Uint8Array, ti?:Uint8Array, meta, latOfRow(y), lonOfCol(x)}
   // opts: {k, maxSlope, marginPx}
   function plan(L, sx, sy, gx, gy, opts) {
     const k = opts.k ?? 0.3, maxSlope = opts.maxSlope ?? 15;
     const W = L.width, H = L.height, sc = L.meta.slope.scale;
-    const degPx = 360 / W;
+    const rScale = L.meta.rough ? L.meta.rough.scale : 0;
+    const tiScale = L.meta.ti ? L.meta.ti.scale : 0;
+    const hasRough = !!(L.rough && rScale), hasTi = !!(L.ti && tiScale);
     const kmRow = (Math.PI * MARS_R) / H;
     const kmCol = new Float32Array(H);
     for (let y = 0; y < H; y++) kmCol[y] = Math.max(0.05, (2 * Math.PI * MARS_R / W) * Math.cos(L.latOfRow(y) * Math.PI / 180));
@@ -63,8 +66,12 @@
         if (!inBox(nx, ny)) continue;
         const m = ny * W + nx; if (closed[m]) continue;
         const s = L.slope[m] * sc; if (s > maxSlope) continue;
+        // Sub-cell roughness hazard (>50 m) and TES low-TI fine-dust sinkage hazard (<100 tiu)
+        let rPen = 0, dPen = 0;
+        if (hasRough) { const r = L.rough[m] * rScale; if (r > 50) rPen = (r - 50) / 25; }
+        if (hasTi) { const tiRaw = L.ti[m]; if (tiRaw > 0) { const ti = tiRaw * tiScale; if (ti < 100) dPen = 15 * (1 - ti / 100); } }
         const dist = Math.hypot(dx * kmCol[ny], dy * kmRow);
-        const c = gScore[n] + dist * (1 + k * s);
+        const c = gScore[n] + dist * (1 + k * (s + rPen + dPen));
         if (c < gScore[m]) { gScore[m] = c; came[m] = n; heap.push(m, c + haversineKm(L.latOfRow(ny), L.lonOfCol(nx), glat, glon)); }
       }
     }
@@ -77,17 +84,24 @@
 
   function pathStats(L, path, kmCol, kmRow) {
     const W = L.width, sc = L.meta.slope.scale;
-    let km = 0, maxS = 0, sumS = 0, hazardKm = 0;
+    const rScale = L.meta.rough ? L.meta.rough.scale : 0;
+    const tiScale = L.meta.ti ? L.meta.ti.scale : 0;
+    let km = 0, maxS = 0, sumS = 0, hazardKm = 0, dustKm = 0, sumR = 0;
     const profile = [];
     for (let i = 0; i < path.length; i++) {
       const n = path[i], y = (n / W) | 0, x = n - y * W;
       const s = L.slope[n] * sc; maxS = Math.max(maxS, s); sumS += s;
+      const r = L.rough ? L.rough[n] * rScale : 0; sumR += r;
+      const ti = (L.ti && L.ti[n] > 0) ? L.ti[n] * tiScale : null;
       if (i) { const p = path[i - 1], py = (p / W) | 0, px = p - py * W;
         let dx = Math.abs(x - px); if (dx > W / 2) dx = W - dx;
-        const d = Math.hypot(dx * kmCol[y], (y - py) * kmRow); km += d; if (s > 10) hazardKm += d; }
-      profile.push({ km, elev: L.meta.elev.offset + L.elev[n] * L.meta.elev.scale, slope: s });
+        const d = Math.hypot(dx * kmCol[y], (y - py) * kmRow); km += d;
+        if (s > 10) hazardKm += d;
+        if (ti !== null && ti < 100) dustKm += d;
+      }
+      profile.push({ km, elev: L.meta.elev.offset + L.elev[n] * L.meta.elev.scale, slope: s, rough: r, ti });
     }
-    return { km, maxSlope: maxS, meanSlope: sumS / path.length, hazardKm, profile };
+    return { km, maxSlope: maxS, meanSlope: sumS / path.length, hazardKm, dustKm, meanRough: sumR / path.length, profile };
   }
 
   // Straight (great-circle-ish on the grid) line for comparison: Bresenham with wrap.

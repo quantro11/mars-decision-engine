@@ -59,6 +59,12 @@ L.slope[5 * W + 30] = 8;
 const viaGap = A.plan(L, 10, 16, 50, 16, { k: 0.3, maxSlope: 15, marginPx: 100 });
 assert.ok(viaGap.ok && viaGap.path.includes(5 * W + 30), 'route uses the gap');
 
+// --- A* multi-hazard avoidance: routes around low-TI fine-dust sinkage trap (<100 tiu)
+for (let y = 12; y <= 20; y++) L.ti[y * W + 70] = 8; // 32 tiu deep dust pocket on direct line (60,16)->(80,16)
+const dustAvoid = A.plan(L, 60, 16, 80, 16, { k: 0.3, maxSlope: 15, marginPx: 100 });
+const dustDirect = A.straight(L, 60, 16, 80, 16);
+assert.ok(dustAvoid.ok && dustAvoid.stats.dustKm === 0 && dustDirect.stats.dustKm > 0, 'A* avoids low-TI dust trap');
+
 // --- storm model
 assert.ok(Math.abs(T.fTau(0.5) - 1) < 1e-9);
 const drop = T.fTau(10.8); assert.ok(drop > 0.02 && drop < 0.05, 'Opportunity-like 2018 drop ~3%');

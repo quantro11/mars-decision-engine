@@ -71,6 +71,15 @@
         <button data-band="ice15" class="active">1–5 m</button>
         <button data-band="ice5">&gt; 5 m</button>
       </div>
+
+      <div class="sec-head"><h2>Weight sensitivity</h2><span class="hint">Monte Carlo</span></div>
+      <p class="help">Perturb every weight and re-rank 30 times to test whether top candidates survive weight uncertainty.</p>
+      <div class="control-group">
+        <label>Weight uncertainty <span id="sens-v">±20%</span>
+          <input type="range" id="sens" min="5" max="50" value="20"></label>
+      </div>
+      <div class="row"><button id="sens-run" class="ghost">Run robustness test</button></div>
+      <div id="sens-result"></div>
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
@@ -129,6 +138,7 @@
         <button data-ov="elev">Elevation</button>
         <button data-ov="ti">Thermal</button>
         <button data-ov="dust">Dust</button>
+        <button data-ov="rad">Radiation</button>
         <button data-ov="none">Imagery</button>
       </div>
       <label>Layer opacity <span id="opacity-v">45%</span>
@@ -251,7 +261,7 @@
       </div>
       <div>
         <h3>4 · Route planner</h3>
-        <p>A* over an 8-connected, longitude-wrapping grid. Each step costs <code>distance × (1 + k · slope)</code>; slopes above the limit are impassable. The straight line is shown for comparison.</p>
+        <p>Multi-hazard A* over an 8-connected, longitude-wrapping grid. Each step costs <code>distance × (1 + k · (slope + rough_pen + dust_pen))</code>, penalising steep grades, rough sub-cell relief (&gt;50 m) and low-TI fine dust traps (&lt;100 tiu); slopes above the limit are impassable. The straight line is shown for comparison.</p>
         <h3>5 · Dust-storm power model</h3>
         <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code>, fitted so that τ ≈ 10.8 reproduces Opportunity's 2018 loss (≈ 650 → 22 Wh/sol). Battery = clamp(battery + production − load).</p>
       </div>
