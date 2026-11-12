@@ -82,4 +82,26 @@ assert.ok(S.radDoseMsvYr(2000) > galeDose, 'higher elevation receives higher GCR
 assert.ok(T.dailySolar(-25, 0.5, 251) > T.dailySolar(-25, 0.5, 71), 'perihelion S. summer exceeds aphelion S. winter');
 assert.ok(T.dailySolar(35, 0.5, 90) > T.dailySolar(35, 0.5, 270), 'northern summer solstice exceeds northern winter solstice at +35N');
 
-console.log('All scoring / A* / storm / radiation / seasonal tests passed.');
+// --- Interplanetary Survival Guide: ISRU Life-Support Water Yield & Mass Balance
+const dryIsru = S.calcISRU(-0.8, 'ice01');
+assert.strictEqual(dryIsru.yieldLitersSol, 0);
+assert.strictEqual(dryIsru.status, 'DRY');
+const richIsru = S.calcISRU(0.9, 'ice01');
+assert.ok(richIsru.yieldLitersSol >= 50, 'rich shallow ice yields >= 50 L/sol');
+assert.ok(richIsru.crewMargin > 0 && richIsru.loxKgSol > 30, 'sustains 4-crew and propellant oxygen');
+assert.strictEqual(richIsru.status, 'SURPLUS_PROPELLANT');
+
+// --- Interplanetary Survival Guide: Thermal Life Support & Habitat Freeze-out Model
+const tempEq = T.surfaceTempC(0, 251);
+assert.ok(tempEq.mean > -65 && tempEq.mean < -35, 'equatorial summer surface temp sensible');
+assert.ok(tempEq.night < -70, 'diurnal radiative drop below -70C');
+const pTherm = T.thermalDemandKw(0, 251);
+assert.ok(pTherm >= 5 && pTherm <= 15, 'habitat heating demand between 5 and 15 kW');
+// Solar-only storm base experiences habitat freeze-out when batteries die
+assert.ok(res.freezeSol !== null && res.freezeSol >= res.blackoutSol, 'habitat freezes out after blackout');
+assert.strictEqual(res2.freezeSol, null, 'Kilopower base maintains habitable thermal life support');
+
+// --- Interplanetary Survival Guide: Emergency Safe Havens on traverse
+assert.ok(Array.isArray(safe.stats.safeHavens), 'safe havens list returned');
+
+console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal tests passed.');

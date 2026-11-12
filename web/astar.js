@@ -69,7 +69,7 @@
         // Sub-cell roughness hazard (>50 m) and TES low-TI fine-dust sinkage hazard (<100 tiu)
         let rPen = 0, dPen = 0;
         if (hasRough) { const r = L.rough[m] * rScale; if (r > 50) rPen = (r - 50) / 25; }
-        if (hasTi) { const tiRaw = L.ti[m]; if (tiRaw > 0) { const ti = tiRaw * tiScale; if (ti < 100) dPen = 15 * (1 - ti / 100); } }
+        if (hasTi) { const tiRaw = L.ti[m]; if (tiRaw > 0) { const ti = tiRaw * tiScale; if (ti < 100) dPen = 80 * (1 - ti / 100); } }
         const dist = Math.hypot(dx * kmCol[ny], dy * kmRow);
         const c = gScore[n] + dist * (1 + k * (s + rPen + dPen));
         if (c < gScore[m]) { gScore[m] = c; came[m] = n; heap.push(m, c + haversineKm(L.latOfRow(ny), L.lonOfCol(nx), glat, glon)); }
@@ -101,7 +101,26 @@
       }
       profile.push({ km, elev: L.meta.elev.offset + L.elev[n] * L.meta.elev.scale, slope: s, rough: r, ti });
     }
-    return { km, maxSlope: maxS, meanSlope: sumS / path.length, hazardKm, dustKm, meanRough: sumR / path.length, profile };
+
+    // Emergency Safe Havens / Natural Shelter Camps along traverse (Interplanetary Survival Guide)
+    // Identifies low-slope, smooth-bearing plains suitable for emergency dust-storm / radiation encampment
+    const safeHavens = [];
+    let lastHavenKm = -250;
+    for (let i = 0; i < profile.length; i++) {
+      const q = profile[i];
+      if (q.km - lastHavenKm >= 200 && q.slope <= 4.0 && q.rough <= 35 && (q.ti === null || q.ti >= 160)) {
+        safeHavens.push({
+          km: Math.round(q.km),
+          elev: Math.round(q.elev),
+          slope: q.slope.toFixed(1),
+          name: `Haven #${safeHavens.length + 1}`,
+          type: 'Smooth Basin / Natural Shelter'
+        });
+        lastHavenKm = q.km;
+      }
+    }
+
+    return { km, maxSlope: maxS, meanSlope: sumS / path.length, hazardKm, dustKm, meanRough: sumR / path.length, profile, safeHavens };
   }
 
   // Straight (great-circle-ish on the grid) line for comparison: Bresenham with wrap.

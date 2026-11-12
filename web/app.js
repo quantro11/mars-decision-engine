@@ -583,10 +583,11 @@
     S.candidates.forEach((c, i) => {
       const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
       const name = candidateName(v.lat, v.lon, nr);
+      const isru = SCORING.calcISRU(v.ice, S.iceBand);
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
       li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° block mean${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
+        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ISRU: <b>${isru.yieldLitersSol} L/sol</b> (${isru.status === 'SURPLUS_PROPELLANT' ? '🚀 fuel' : isru.status === 'CREW_SUSTAINED' ? '💧 crew' : 'arid'})${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
         <a class="trek" href="${trekUrl(v.lat, v.lon)}" target="_blank" rel="noopener">▸ Inspect in NASA Mars Trek (HiRISE / CTX)</a>`;
       const trekLink = li.querySelector('.trek');
       if (trekLink) trekLink.onclick = (e) => e.stopPropagation();
@@ -616,6 +617,9 @@
     const passSlope = v.slope <= SCORING.HARD.slopeMax;
     const passLat = Math.abs(v.lat) <= SCORING.HARD.latMax;
     const vetoed = S.hard && (!passElev || !passSlope || !passLat);
+    const isru = SCORING.calcISRU(v.ice, S.iceBand);
+    const sTemp = STORM.surfaceTempC(v.lat, S.crisis.ls);
+    const pTherm = STORM.thermalDemandKw(v.lat, S.crisis.ls);
 
     $('#detail').innerHTML = `
       <div class="detail-header">
@@ -636,11 +640,15 @@
         <tr><td>MOLA Elevation</td><td>${v.elev.toFixed(0)} m</td></tr>
         <tr><td>MOLA 90th-pct Slope</td><td>${v.slope.toFixed(1)}°</td></tr>
         <tr><td>SWIM Ice (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'outside ±60°' : v.ice.toFixed(2)}</td></tr>
+        <tr><td>ISRU Water Yield</td><td><b>${isru.yieldLitersSol} L/sol</b> (${isru.label})</td></tr>
+        <tr><td>ECLSS O₂ Equivalent</td><td>${isru.loxKgSol} kg O₂/sol</td></tr>
         <tr><td>Sub-cell Roughness (σ)</td><td>${v.rough.toFixed(0)} m</td></tr>
         <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
         <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
         <tr><td>Atmospheric Column</td><td>${SCORING.atmoColumnGcm2(v.elev).toFixed(1)} g/cm²</td></tr>
         <tr><td>GCR Dose (MSL-RAD)</td><td>${SCORING.radDoseMsvYr(v.elev).toFixed(0)} mSv/yr</td></tr>
+        <tr><td>Nocturnal Surface Temp</td><td>${sTemp.night.toFixed(0)} °C (diurnal mean ${sTemp.mean.toFixed(0)} °C)</td></tr>
+        <tr><td>Hab Thermal Demand</td><td>${pTherm} kWe heating required</td></tr>
       </table>
       <div class="row">
         <button id="use-route" class="ghost">Start a route here</button>
@@ -666,15 +674,19 @@
     if (!r.safe || !r.safe.ok) { el.innerHTML = `<div class="verdict bad">No slope-safe route found (${r.safe ? r.safe.reason : ''}). Increase slope threshold or relocate target.</div>`; return; }
     const a = r.straight.stats, b = r.safe.stats, sols = (km) => (km / r.speed).toFixed(0);
     const cls = (s) => s > r.maxSlope ? 'bad' : s > 10 ? 'warn' : 'ok';
+    const havens = b.safeHavens || [];
+    const havenStr = havens.length ? havens.map(h => `${h.name} (${h.km}km · sol ${Math.round(h.km / r.speed)})`).join(', ') : 'None detected';
+
     el.innerHTML = `<table class="stat-table"><tr><th>Metric</th><th class="straight">Direct</th><th class="safe">A* Safe</th></tr>
       <tr><td>Total Distance</td><td>${a.km.toFixed(0)} km</td><td>${b.km.toFixed(0)} km <small>(+${(100 * (b.km / a.km - 1)).toFixed(0)}%)</small></td></tr>
       <tr><td>Peak Slope</td><td class="${cls(a.maxSlope)}">${a.maxSlope.toFixed(1)}°</td><td class="${cls(b.maxSlope)}">${b.maxSlope.toFixed(1)}°</td></tr>
       <tr><td>Mean Slope</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
       <tr><td>Distance &gt;10° Slope</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
       <tr><td>Low-TI Dust (&lt;100 tiu)</td><td>${(a.dustKm || 0).toFixed(0)} km</td><td>${(b.dustKm || 0).toFixed(0)} km</td></tr>
-      <tr><td>Mean Roughness (σ)</td><td>${(a.meanRough || 0).toFixed(0)} m</td><td>${(b.meanRough || 0).toFixed(0)} m</td></tr>
+      <tr><td>Emergency Safe Havens</td><td>0 sites</td><td><b>${havens.length} sheltered sites</b></td></tr>
       <tr><td>Traverse Duration</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
       <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (limit ${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
+      ${havens.length ? `<div class="help" style="margin-top:6px;color:#a3e635">🛡️ <b>Safe Camps / Encampments:</b> ${havenStr}</div>` : ''}
       <div class="hint" style="margin-top:10px">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
   }
   function profileSVG(p) {
@@ -709,16 +721,28 @@
       storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
     const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, c.ls), peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak, c.ls);
     const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
+    const sTemp = STORM.surfaceTempC(v.lat, c.ls);
+    const pTherm = STORM.thermalDemandKw(v.lat, c.ls);
+
     const verdict = res.blackoutSol !== null
       ? `<div class="summary-big bad">Blackout on sol ${res.blackoutSol}</div><div class="help">Battery reserve exhausted ${res.blackoutSol - 20} sols after storm onset. Peak-storm generation ${(peakSolar + nuc).toFixed(0)} kWh/sol vs load ${c.cons} kWh/sol.</div>`
       : `<div class="summary-big ok">Survives the storm</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
+
+    const thermVerdict = res.freezeSol !== null
+      ? `<div class="summary-big bad" style="margin-top:8px">Habitat Freezes on Sol ${res.freezeSol}</div><div class="help">Thermal life-support fails post-blackout; interior drops below 0°C (reaches minimum ${res.minHabTemp}°C).</div>`
+      : `<div class="summary-big ok" style="margin-top:8px">Thermal Life Support Maintained</div><div class="help">Internal habitat comfort (+20°C) sustained throughout storm (night ambient drops to ${sTemp.night}°C).</div>`;
+
     el.innerHTML = `${verdict}
+      ${thermVerdict}
       <div class="kv"><span>Season (L<sub>s</sub> = ${c.ls}°)</span><b>${STORM.seasonName(c.ls)}</b></div>
+      <div class="kv"><span>Nocturnal Surface Cold</span><b>${sTemp.night}°C (mean ${sTemp.mean}°C)</b></div>
+      <div class="kv"><span>Hab Heating Baseline</span><b>${pTherm} kWe continuous</b></div>
       <div class="kv"><span>Clear-sky solar, τ 0.5</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
       <div class="kv"><span>Peak-storm solar, τ ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
+      <div class="kv"><span>Post-Storm Dust Fallout</span><b>−${res.postStormSolarLossPct}% permanent array loss</b></div>
       <div class="kv"><span>Kilopower baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
       ${crisisSVG(res.rows, c.batt)}
-      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add a Kilopower reactor to keep life support running.' : ''}</div>`;
+      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add a Kilopower reactor to prevent habitat freeze-out and keep ECLSS running.' : ''}</div>`;
   }
   function crisisSVG(rows, cap) {
     const w = 276, h = 118, pad = 26, n = rows.length;
@@ -922,10 +946,14 @@
         elev_m: Math.round(v.elev),
         slope_p90_deg: +v.slope.toFixed(1),
         swim_ice_consistency: v.ice === null ? null : +v.ice.toFixed(2),
+        isru_water_yield_l_sol: SCORING.calcISRU(v.ice, S.iceBand).yieldLitersSol,
+        isru_eclss_status: SCORING.calcISRU(v.ice, S.iceBand).status,
         roughness_m: Math.round(v.rough),
         tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
         atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
         gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
+        nocturnal_temp_c: STORM.surfaceTempC(v.lat, S.crisis.ls).night,
+        thermal_heating_kw: STORM.thermalDemandKw(v.lat, S.crisis.ls),
       };
     });
     const selCell = S.selected ? (() => {
@@ -966,6 +994,7 @@
         astar_max_slope_deg: +S.route.safe.stats.maxSlope.toFixed(1),
         astar_dust_trap_km: +(S.route.safe.stats.dustKm || 0).toFixed(1),
         astar_mean_roughness_m: Math.round(S.route.safe.stats.meanRough || 0),
+        emergency_safe_havens: S.route.safe.stats.safeHavens || [],
         speed_km_per_sol: S.route.speed,
       } : null,
       dust_storm_simulation: {
@@ -974,10 +1003,15 @@
         season_ls_deg: S.crisis.ls,
         season_name: STORM.seasonName(S.crisis.ls),
         tau_peak: S.crisis.tauPeak,
+        nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls).night,
+        hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls),
         panel_area_m2: S.crisis.area,
         kilopower_units: S.crisis.kp,
-        survives: sim.blackoutSol === null,
+        survives_blackout: sim.blackoutSol === null,
         blackout_sol: sim.blackoutSol,
+        thermal_freeze_sol: sim.freezeSol,
+        min_hab_interior_c: sim.minHabTemp,
+        post_storm_dust_loss_pct: sim.postStormSolarLossPct,
         min_battery_kwh: Math.round(sim.minBatt),
       },
     };

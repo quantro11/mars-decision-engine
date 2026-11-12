@@ -1,0 +1,23 @@
+{
+  "name": "mars-decision-engine",
+  "version": "2.4.0",
+  "description": "NASA Space Apps Challenge — Interplanetary Survival Guide: Martian Map. A client-side GIS & survival engine fusing MOLA, SWIM 2.0, TES, and Viking datasets.",
+  "main": "web/app.js",
+  "scripts": {
+    "test": "node tests/scoring.test.js",
+    "start": "npx serve web"
+  },
+  "keywords": [
+    "nasa",
+    "space-apps-challenge",
+    "mars",
+    "martian-map",
+    "interplanetary-survival-guide",
+    "isru",
+    "mola",
+    "swim",
+    "webgl"
+  ],
+  "author": "quantro11",
+  "license": "MIT"
+}

@@ -26,6 +26,33 @@
   }
   const radDoseMsvYr = radDose;
 
+  // NASA ECLSS & ISRU Mass Balance Model (Interplanetary Survival Guide)
+  // Human metabolic life-support consumption (4-crew baseline):
+  // ~10.0 L/sol potable water (drinking + food rehydration + hygiene with 85% urine processor recovery).
+  // Stoichiometric water electrolysis produces 0.888 kg O2 per liter of H2O.
+  // Sabatier propellant production (CH4 / LOX return fuel) requires >= 25 L/sol water extraction.
+  function calcISRU(c, depthBand) {
+    if (c === null || c < -0.2) {
+      return { yieldLitersSol: 0, crewMargin: -10, loxKgSol: 0, status: 'DRY', label: 'Arid / No Extractable Ice' };
+    }
+    const cNorm = Math.max(0, Math.min(1, (c + 1) / 2));
+    const depthFactor = depthBand === 'ice01' ? 1.0 : depthBand === 'ice15' ? 0.65 : 0.35;
+    // Standard 5 kWe thermal-drill / sublimator ISRU pilot unit:
+    const yieldLitersSol = Math.round(cNorm * depthFactor * 68.0 * 10) / 10;
+    const crewDemand = 10.0;
+    const crewMargin = Math.round((yieldLitersSol - crewDemand) * 10) / 10;
+    const loxKgSol = Math.round(yieldLitersSol * 0.888 * 10) / 10;
+    let status = 'DEFICIT', label = 'Sub-critical Yield';
+    if (crewMargin >= 25) {
+      status = 'SURPLUS_PROPELLANT';
+      label = 'Full Crew & Propellant ISRU';
+    } else if (crewMargin >= 0) {
+      status = 'CREW_SUSTAINED';
+      label = 'Sustains 4-Crew Life Support';
+    }
+    return { yieldLitersSol, crewMargin, loxKgSol, status, label };
+  }
+
   const F = {
     // Lower is better: thick atmosphere for parachutes / retro-propulsion margin.
     elev(h_m) { return ramp(h_m, -2000, 2000); },
@@ -157,5 +184,5 @@
 
   function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, sensitivity, mulberry32 };
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcISRU, sensitivity, mulberry32 };
 })(typeof window !== 'undefined' ? window : module.exports);

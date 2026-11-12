@@ -60,6 +60,31 @@
     return 'N. Winter / S. Summer Solstice';
   }
 
+  // Empirical Martian surface temperature model (Viking / MSL Curiosity / InSight calibrated):
+  // Returns { mean, night, day } surface temperatures in Celsius as a function of latitude and season (Ls).
+  function surfaceTempC(lat, ls) {
+    const phi = Math.abs(lat) * DEG;
+    let mean = -50.0 - 55.0 * Math.sin(phi); // Equatorial ~-50C, polar ~-105C
+    if (ls !== undefined && ls !== null) {
+      // Seasonal shift: Mars obliquity (25.19 deg) + eccentricity (perihelion Ls=251 warms planet globally ~10C)
+      const eccBoost = 6.0 * Math.cos((ls - LS_PERIHELION) * DEG);
+      const isNorth = lat > 0;
+      const declinationDelta = Math.abs(lat) > 5 ? 14.0 * Math.cos((ls - (isNorth ? 71.0 : 251.0)) * DEG) : 0;
+      mean += eccBoost + declinationDelta;
+    }
+    const night = mean - 36.0; // Diurnal drop (thin atmosphere causes steep radiative cooling)
+    const day = mean + 28.0;
+    return { mean: Math.round(mean * 10) / 10, night: Math.round(night * 10) / 10, day: Math.round(day * 10) / 10 };
+  }
+
+  // Habitat Thermal Life Support Model (NASA Human Exploration Architecture baseline):
+  // Envelope area ~220 m2, aerogel MLI insulation UA ~ 90 W/K, plus 2.2 kWe battery/avionics thermal heaters.
+  function thermalDemandKw(lat, ls) {
+    const t = surfaceTempC(lat, ls);
+    const deltaT = Math.max(0, 20.0 - t.mean); // Target interior comfort: +20 C
+    return Math.round((2.2 + 0.090 * deltaT) * 10) / 10;
+  }
+
   function tauAt(sol, s) {
     if (sol < s.startSol) return s.tau0;
     const t = sol - s.startSol;
@@ -70,26 +95,61 @@
     return s.tau0;
   }
 
-  // cfg: {lat, ls|Ls0, panelArea, efficiency, consumption(kWh/sol), capacity(kWh), kilopower(units), sols, storm:{...}}
+  // cfg: {lat, ls|Ls0, panelArea, efficiency, consumption(kWh/sol), capacity(kWh), kilopower(units), sols, storm:{...}, dustCleaning?:bool}
   function simulate(cfg) {
     const rows = [];
     let batt = cfg.capacity;
-    let blackoutSol = null, minBatt = batt;
+    let blackoutSol = null, freezeSol = null, minBatt = batt;
+    let habTemp = 20.0, minHabTemp = 20.0;
     const ls0 = cfg.ls !== undefined ? cfg.ls : cfg.Ls0;
+    const dustCleaning = cfg.dustCleaning ?? false;
+    let dustLoss = 1.0;
+
     for (let sol = 0; sol < cfg.sols; sol++) {
       const tau = tauAt(sol, cfg.storm);
       const lsSol = (ls0 === undefined || ls0 === null) ? null : (ls0 + sol * LS_PER_SOL + 360) % 360;
-      const solar = cfg.panelArea * cfg.efficiency * dailySolar(cfg.lat, tau, lsSol);
+      const sTemp = surfaceTempC(cfg.lat, lsSol);
+      const pThermKw = thermalDemandKw(cfg.lat, lsSol);
+      const eThermKwh = pThermKw * SOL_H;
+
+      // Dust accumulation penalty (0.2% per sol during active storm unless cleaned)
+      if (!dustCleaning && sol >= cfg.storm.startSol && tau > cfg.storm.tau0) {
+        dustLoss = Math.max(0.35, dustLoss - 0.002);
+      }
+
+      const solar = cfg.panelArea * cfg.efficiency * dailySolar(cfg.lat, tau, lsSol) * dustLoss;
       const nuclear = cfg.kilopower * KILOPOWER_KW * SOL_H;
-      const net = solar + nuclear - cfg.consumption;
+      const totalGen = solar + nuclear;
+      const net = totalGen - cfg.consumption;
+
       batt = Math.max(0, Math.min(cfg.capacity, batt + net));
       if (batt <= 0 && blackoutSol === null) blackoutSol = sol;
       minBatt = Math.min(minBatt, batt);
-      rows.push({ sol, tau, solar, nuclear, net, batt, ls: lsSol, Ls: lsSol });
+
+      // Thermal Life-Support interior dynamics:
+      // If power is blacked out, hab cools toward ambient with ~1.5 sol thermal inertia
+      if (batt <= 0 && totalGen < eThermKwh) {
+        habTemp = sTemp.mean + (habTemp - sTemp.mean) * Math.exp(-1.0 / 1.5);
+      } else {
+        habTemp = Math.min(20.0, habTemp + 5.0); // Heating restores comfort
+      }
+      minHabTemp = Math.min(minHabTemp, habTemp);
+      if (habTemp <= 0.0 && freezeSol === null) freezeSol = sol;
+
+      rows.push({
+        sol, tau, solar, nuclear, net, batt, habTemp: Math.round(habTemp * 10) / 10,
+        tempMean: sTemp.mean, tempNight: sTemp.night, dustLoss, ls: lsSol, Ls: lsSol
+      });
     }
     const peakRow = rows.reduce((a, b) => (b.tau > a.tau ? b : a), rows[0]);
-    return { rows, blackoutSol, minBatt, peakSolarDropPct: 100 * (1 - fTau(cfg.storm.tauPeak) / fTau(cfg.storm.tau0)), peakRow };
+    const finalRow = rows[rows.length - 1];
+    return {
+      rows, blackoutSol, freezeSol, minBatt, minHabTemp: Math.round(minHabTemp * 10) / 10,
+      peakSolarDropPct: 100 * (1 - fTau(cfg.storm.tauPeak) / fTau(cfg.storm.tau0)),
+      postStormSolarLossPct: Math.round((1 - finalRow.dustLoss) * 100),
+      peakRow
+    };
   }
 
-  global.STORM = { fTau, insolationTOA, seasonalFactor, seasonName, dailySolar, tauAt, simulate, SOL_H, KILOPOWER_KW, LS_PER_SOL };
+  global.STORM = { fTau, insolationTOA, seasonalFactor, seasonName, dailySolar, tauAt, simulate, surfaceTempC, thermalDemandKw, SOL_H, KILOPOWER_KW, LS_PER_SOL };
 })(typeof window !== 'undefined' ? window : module.exports);

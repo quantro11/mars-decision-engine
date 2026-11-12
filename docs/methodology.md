@@ -48,34 +48,50 @@ Presets (elev / slope / ice / rough / lat / thermal inertia):
 
 Mean score per 2° × 2° block (11 × 11 px); greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer (within 6°; otherwise compass-sector offset from nearest region). Cards show block means.
 
-## 6. Multi-hazard route planner (A*)
+## 6. Multi-hazard route planner (A*) & Emergency Safe Havens
 
 A* on the 2048 × 1024 grid, 8-connected, longitude wrapping, search window = bounding box ± 160 px.
-Edge cost integrates slope, sub-cell roughness ($r > 50\text{ m}$), and TES low-TI fine-dust sinkage ($I < 100\text{ tiu}$, e.g. Spirit-like dust traps):
+Edge cost integrates slope, sub-cell roughness ($r > 50\text{ m}$), and TES low-TI fine-dust sinkage ($I < 100\text{ tiu}$, e.g. Spirit-like Troy dust traps):
 
 ```
-cost(a → b) = d · [ 1 + k · (s_b + max(0, (r_b − 50)/50) + 6 · max(0, 1 − I_b/100)) ]
+cost(a → b) = d · [ 1 + k · (s_b + max(0, (r_b − 50)/25) + 80 · max(0, 1 − I_b/100)) ]
 ```
 
 where `k` = 0.3 default, and `s_b > s_max` (15° default) is strictly impassable.
 Heuristic = haversine distance (admissible, Mars radius 3389.5 km).
 Reported: distance, max / mean slope, km on > 10° terrain, km across low-TI dust (< 100 tiu), mean sub-cell roughness (σ), travel time at user-set speed (default 20 km/sol — representing a crewed pressurised rover), and elevation profile.
 
-## 7. Dust-storm & seasonal energy model
+**Emergency Safe Havens along Traverse:**
+For crew survival during multi-sol traverses, the pathfinder identifies natural encampment shelters where slope $\le 4.0^\circ$, sub-cell roughness $\le 35\text{ m}$, and firm bearing capacity ($I \ge 160\text{ tiu}$) provide safe parking and topography protection against localized dust winds.
+
+## 7. Dust-storm, Thermal Life Support & ECLSS Energy Model
 
 ```
-E_solar(kWh/sol) = A · η · 3.0 · S_season(φ, Ls) · exp(−0.35 (τ − 0.5))
+E_solar(kWh/sol) = A · η · 3.0 · S_season(φ, Ls) · exp(−0.35 (τ − 0.5)) · (1 − f_dust)
 E_nuclear        = n_Kilopower · 10 kW · 24.66 h
 battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption, 0, capacity)
 ```
 
-* 3.0 kWh/m²/sol: clear-sky equatorial daily insolation (Appelbaum & Flood, *Solar radiation on Mars*, NASA TM-102299, 1989 — order of magnitude).
+* 3.0 kWh/m²/sol: clear-sky equatorial daily insolation (Appelbaum & Flood, *Solar radiation on Mars*, NASA TM-102299, 1989).
 * `S_season(φ, Ls)` models Mars's axial obliquity ($\varepsilon = 25.19^\circ$, solar declination $\sin\delta = \sin\varepsilon\sin L_s$) and orbital eccentricity ($e = 0.0934$, perihelion at $L_s = 251^\circ$) via the diurnal insolation integral. When $L_s$ is omitted, it reduces to $\cos\phi$.
 * `exp(−0.35 (τ − 0.5))` is an **empirical** attenuation normalised to a typical clear sky (τ = 0.5) and fitted so that τ ≈ 10.8 yields ≈ 3 % of clear-sky output, matching Opportunity's drop from ≈ 650 to ≈ 22 Wh/sol in June 2018.
-* Storm timeline default: onset sol 20, 10-sol rise, 40-sol plateau, 30-sol decay (the 2018 storm lasted ≈ 100 sols at Opportunity's site).
+* **Post-Storm Permanent Dust Fallout:** During active storms, atmospheric dust settles on horizontal arrays at $\approx 0.2\%\text{ per sol}$ (MER Opportunity and InSight radiometer calibrated), causing permanent degradation unless active cleaning mechanisms (electrostatic or mechanical wipers) are deployed.
+* **Thermal Life-Support & Habitat Freeze-out:** Mars nocturnal temperatures plummet to $-70^\circ\text{C}$ to $-125^\circ\text{C}$. Pressurized habitat insulation ($UA \approx 90\text{ W/K}$) and battery warmers require continuous thermal baseline heating:
+  $$P_{\text{thermal}}(\text{kWe}) = 2.2 + 0.090 \cdot \max(0, 20^\circ\text{C} - T_{\text{mean}})$$
+  When base power blacks out, habitat interior cools toward ambient ($\tau_{\text{thermal}} \approx 1.5\text{ sols}$). The engine detects and reports the exact `Freeze-out Sol` when interior temperatures drop below $0^\circ\text{C}$.
 * Kilopower: 10 kWe fission unit (NASA KRUSTY test 2018).
 
-## 8. Atmospheric column & GCR surface radiation model
+## 8. ISRU Life-Support Water Yield & Mass Balance
+
+```
+Yield(H₂O L/sol) = c_norm · DepthFactor · 68.0 L/sol   (5 kWe thermal-drill baseline)
+O₂ Production     = Yield · 0.888 kg O₂/L              (stoichiometric electrolysis)
+Crew Margin       = Yield − 10.0 L/sol                (4-crew metabolic demand with 85% ECLSS recovery)
+```
+
+* Evaluates viability for human survival and Mars Ascent Vehicle (MAV) Sabatier propellant production (requiring $\ge 25\text{ L/sol}$ net surplus).
+
+## 9. Atmospheric column & GCR surface radiation model
 
 ```
 Σ(h)       = clamp(16.0 · exp(−h / 11100), 1.5, 38.0)   [g/cm²]
@@ -85,7 +101,7 @@ D_GCR(h)   = 155 + 245 · exp(−Σ(h) / 20.5)              [mSv/yr]
 * Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4500\text{ m}$, $\Sigma \approx 24\text{ g/cm}^2 \Rightarrow D_{\text{GCR}} \approx 231\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $232 \pm 10\text{ mSv/yr}$).
 * Because $D_{\text{GCR}}(h)$ is a monotonic function of elevation $h$ (already weighted in `S`), it is reported as an explicit diagnostic metric in the site inspector and Mission Brief rather than a separate weight slider, avoiding collinear double-counting.
 
-## 9. Known limitations
+## 10. Known limitations
 
 1. 10 km/px cells cannot see individual boulders, small craters, dunes or scarps — output is a regional reconnaissance ranking, not a 100 m landing ellipse.
 2. 8-bit elevation (≈ 115 m steps) makes slopes regional; local slopes are higher.
