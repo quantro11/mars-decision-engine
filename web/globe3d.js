@@ -242,8 +242,8 @@
       rotLon: 65,      // degrees (starts facing Syrtis / Jezero / Hellas hemisphere)
       targetLat: 16,
       targetLon: 65,
-      camDist: 2.55,
-      targetDist: 2.55,
+      camDist: 3.1,
+      targetDist: 3.1,
       fov: 38 * DEG,
       exaggeration: 8, // 1x, 5x, 8x, 15x
       autoSpin: false,
@@ -259,14 +259,32 @@
       return 0.0087 * state.exaggeration;
     }
 
+    // Upload (or replace) the colour texture. Power-of-two images get mipmaps + anisotropic
+    // filtering so the 4096x2048 Viking mosaic stays sharp at every zoom. Throws on a tainted image.
+    function setBaseTexture(img) {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.bindTexture(gl.TEXTURE_2D, texBase);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      const pot = (w & (w - 1)) === 0 && (h & (h - 1)) === 0;
+      if (pot) {
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        const aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+        if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+      } else {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      }
+      if (gl.getError() !== gl.NO_ERROR) throw new Error('texture upload failed');
+    }
+
     function setLayers(baseImg, elevUint8, width, height) {
       state.W = width;
       state.H = height;
       state.elevData = elevUint8;
 
+      setBaseTexture(baseImg);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      gl.bindTexture(gl.TEXTURE_2D, texBase);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, baseImg);
 
       gl.bindTexture(gl.TEXTURE_2D, texElev);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, width, height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, elevUint8);
@@ -515,6 +533,7 @@
     return {
       state,
       setLayers,
+      setBaseTexture,
       updateOverlay,
       flyTo,
       stepPhysics,

@@ -88,7 +88,7 @@
   const S = {
     viewMode: '2d', // '2d' | '3d'
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
-    overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false,
+    overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
     crisis: { site: null, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
@@ -226,7 +226,7 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     if (S.viewMode === '3d' && globe) {
-      globe.render({ opacity: S.opacity, showOverlay: S.overlay !== 'none' });
+      globe.render({ opacity: S.opacity, showOverlay: S.overlay !== 'none' && S.globeOverlay });
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       draw3DGraticule(dpr);
     } else {
@@ -739,6 +739,14 @@
       draw();
     };
   }
+  if ($('#btn-ov3d') && globe) {
+    $('#btn-ov3d').onclick = () => {
+      S.globeOverlay = !S.globeOverlay;
+      $('#btn-ov3d').classList.toggle('active', S.globeOverlay);
+      $('#btn-ov3d').textContent = S.globeOverlay ? 'OVERLAY: ON' : 'OVERLAY: OFF';
+      draw();
+    };
+  }
   if ($('#btn-sun') && globe) {
     $('#btn-sun').onclick = () => {
       globe.state.sunLight = !globe.state.sunLight;
@@ -976,11 +984,25 @@
   Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode)).then(() => {
     L.ice = L[S.iceBand];
     if (globe) globe.setLayers(baseImg, L.elev, W, H);
+    loadHiResBase();
     window.addEventListener('resize', resize); resize();
     rescore();
     $('#loading').classList.add('hidden');
     applyDemoLink();
   }).catch(err => { $('#loading').innerHTML = 'Failed to decode layers: ' + err; });
+
+  // Full-resolution Viking MDIM 2.1 mosaic (4096x2048 JPEG, served next to the page). Falls back silently to the
+  // embedded 2048x1024 basemap when it cannot be used (e.g. opened from file:// where WebGL refuses the image).
+  function loadHiResBase() {
+    const hi = new Image();
+    hi.onload = () => {
+      baseImg = hi;                                   // 2D map can always draw it
+      try { if (globe) globe.setBaseTexture(hi); } catch (e) { /* keep embedded texture on the globe */ }
+      draw();
+    };
+    hi.onerror = () => {};
+    hi.src = 'layers/viking_4k.jpg';
+  }
 
   // Deep links for the demo / presentation:
   //   ?preset=isru  ?view=3d  ?demo=route&from=Jezero&to=Nili   ?demo=crisis&site=Arcadia&tau=9&kp=1
