@@ -91,7 +91,7 @@
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
-    crisis: { site: null, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
+    crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
     hover: null,
   };
 
@@ -267,7 +267,7 @@
         ctx.lineWidth = 1.3 * dpr;
         ctx.strokeRect(x - s, y - s, s * 2, s * 2);
       } else {
-        ctx.fillStyle = r.mission ? '#38bdf8' : 'rgba(226, 232, 240, 0.78)';
+        ctx.fillStyle = r.mission ? '#7f9bb3' : 'rgba(226, 232, 240, 0.78)';
         ctx.beginPath();
         ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2);
         ctx.fill();
@@ -306,8 +306,8 @@
     };
     if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
     if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
-    if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#10b981', 'WP-A');
-    if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#f59e0b', 'WP-B');
+    if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', 'Start');
+    if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#cfa25c', 'Goal');
 
     // Candidate reticles
     S.candidates.forEach((c, i) => {
@@ -369,7 +369,7 @@
       ctx.stroke();
       if (y0 > 46 * dpr && y0 < canvas.height - 40 * dpr) {
         ctx.fillStyle = 'rgba(245, 158, 11, 0.72)';
-        ctx.fillText(`HLS LIMIT ${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`, canvas.width - 115 * dpr, y0 - 4 * dpr);
+        ctx.textAlign = 'right'; ctx.fillText(`${Math.abs(lat)}° ${lat > 0 ? 'N' : 'S'} · NASA latitude limit`, canvas.width - 16 * dpr, y0 - 4 * dpr); ctx.textAlign = 'left';
       }
     }
     ctx.setLineDash([]);
@@ -425,7 +425,7 @@
     if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
     const r = (active ? 11 : 9) * dpr;
-    const primary = active ? '#38bdf8' : '#fc3d21';
+    const primary = active ? '#7f9bb3' : '#c8743c';
 
     ctx.strokeStyle = primary;
     ctx.lineWidth = (active ? 2 : 1.5) * dpr;
@@ -450,7 +450,7 @@
     ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
     const bx = x + r + 5 * dpr, by = y - r - 2 * dpr;
     const bw = 20 * dpr, bh = 13 * dpr;
-    ctx.fillStyle = active ? '#38bdf8' : 'rgba(8, 12, 18, 0.92)';
+    ctx.fillStyle = active ? '#7f9bb3' : 'rgba(8, 12, 18, 0.92)';
     ctx.strokeStyle = primary;
     ctx.lineWidth = 1 * dpr;
     ctx.fillRect(bx, by - bh / 2, bw, bh);
@@ -467,7 +467,7 @@
     if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
     const s = 9 * dpr, c = 4 * dpr;
-    ctx.strokeStyle = '#38bdf8';
+    ctx.strokeStyle = '#7f9bb3';
     ctx.lineWidth = 1.6 * dpr;
     ctx.beginPath();
     ctx.moveTo(x - s, y - s + c); ctx.lineTo(x - s, y - s); ctx.lineTo(x - s + c, y - s);
@@ -503,12 +503,12 @@
     const [x, y, vis] = projectGrid(gx, gy);
     if (!vis) return;
     const dpr = window.devicePixelRatio || 1;
-    ctx.strokeStyle = '#38bdf8';
+    ctx.strokeStyle = '#7f9bb3';
     ctx.lineWidth = 1.6 * dpr;
     ctx.beginPath();
     ctx.arc(x, y, 11 * dpr, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = '#38bdf8';
+    ctx.fillStyle = '#7f9bb3';
     ctx.beginPath();
     ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
     ctx.fill();
@@ -537,10 +537,10 @@
     const fmt = {
       elev: `${(v.elev / 1000).toFixed(1)} km`,
       slope: `${v.slope.toFixed(1)}°`,
-      ice: v.ice === null ? 'NO DATA' : v.ice.toFixed(2),
+      ice: v.ice === null ? 'no data' : v.ice.toFixed(2),
       rough: `${v.rough.toFixed(0)} m`,
       lat: `${v.lat.toFixed(1)}°`,
-      ti: v.ti === null ? 'NO DATA' : `${v.ti.toFixed(0)} tiu`,
+      ti: v.ti === null ? 'no data' : `${v.ti.toFixed(0)} tiu`,
     };
     return SCORING.CRITERIA.map(c => {
       const f = SCORING.F[c.key](v[c.key]);
@@ -557,8 +557,8 @@
       const name = candidateName(v.lat, v.lon, nr);
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
-      li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">CAND-0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° REGIONAL MEAN</div>${critRows(v, S.weights)}`;
+      li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
+        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° block mean</div>${critRows(v, S.weights)}`;
       li.onclick = () => {
         select(c.x, c.y, i);
         if (S.viewMode === '3d' && globe) { globe.flyTo(v.lat, v.lon); schedule3D(); }
@@ -588,29 +588,31 @@
     $('#detail').innerHTML = `
       <div class="detail-header">
         <div>
-          <div class="hint">COMPOSITE SUITABILITY INDEX</div>
+          <div class="hint">Composite suitability</div>
           <div class="big">${s.toFixed(3)}</div>
         </div>
-        <span class="status-pill ${vetoed ? 'bad' : 'ok'}">${vetoed ? 'HLS HARD VETO' : 'NOMINAL CELL'}</span>
+        <span class="status-pill ${vetoed ? 'bad' : 'ok'}">${vetoed ? 'Vetoed' : 'Within constraints'}</span>
       </div>
-      <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ${nr.distDeg < 6 ? nr.region.name : 'NEAR ' + nr.region.name.toUpperCase()} (${(nr.distDeg * 59.3).toFixed(0)} KM)</div>
+      <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name} · ${(nr.distDeg * 59.3).toFixed(0)} km</div>
       <div class="hls-checks">
-        <div class="hls-check"><span class="hint">ELEV ≤ +2KM</span><b class="${passElev ? 'ok' : 'bad'}">${passElev ? 'PASS' : 'VETO'}</b></div>
-        <div class="hls-check"><span class="hint">SLOPE ≤ 15°</span><b class="${passSlope ? 'ok' : 'bad'}">${passSlope ? 'PASS' : 'VETO'}</b></div>
-        <div class="hls-check"><span class="hint">|LAT| ≤ 50°</span><b class="${passLat ? 'ok' : 'bad'}">${passLat ? 'PASS' : 'VETO'}</b></div>
+        <div class="hls-check"><span class="hint">Elevation ≤ +2 km</span><b class="${passElev ? 'ok' : 'bad'}">${passElev ? 'pass' : 'veto'}</b></div>
+        <div class="hls-check"><span class="hint">Slope ≤ 15°</span><b class="${passSlope ? 'ok' : 'bad'}">${passSlope ? 'pass' : 'veto'}</b></div>
+        <div class="hls-check"><span class="hint">Latitude ≤ 50°</span><b class="${passLat ? 'ok' : 'bad'}">${passLat ? 'pass' : 'veto'}</b></div>
       </div>
       ${critRows(v, S.weights)}
       <table>
         <tr><td>MOLA Elevation</td><td>${v.elev.toFixed(0)} m</td></tr>
         <tr><td>MOLA 90th-pct Slope</td><td>${v.slope.toFixed(1)}°</td></tr>
-        <tr><td>SWIM Ice (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'OUTSIDE ±60°' : v.ice.toFixed(2)}</td></tr>
+        <tr><td>SWIM Ice (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'outside ±60°' : v.ice.toFixed(2)}</td></tr>
         <tr><td>Sub-cell Roughness (σ)</td><td>${v.rough.toFixed(0)} m</td></tr>
-        <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'NO DATA' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
-        <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'NO DATA' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
+        <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
+        <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
+        <tr><td>Atmospheric Column</td><td>${SCORING.atmoColumnGcm2(v.elev).toFixed(1)} g/cm²</td></tr>
+        <tr><td>GCR Dose (MSL-RAD)</td><td>${SCORING.radDoseMsvYr(v.elev).toFixed(0)} mSv/yr</td></tr>
       </table>
       <div class="row">
-        <button id="use-route" class="ghost">Set Traverse Origin</button>
-        <button id="use-crisis" class="ghost">Load in Power Sim</button>
+        <button id="use-route" class="ghost">Start a route here</button>
+        <button id="use-crisis" class="ghost">Use in storm model</button>
       </div>`;
     $('#use-route').onclick = () => { setMode('route'); S.route.start = { x, y }; S.route.goal = null; S.route.safe = S.route.straight = null; renderRoute(); draw(); };
     $('#use-crisis').onclick = () => { setMode('crisis'); setCrisisSite(x, y); };
@@ -627,9 +629,9 @@
   }
   function renderRoute() {
     const r = S.route, el = $('#route-stats');
-    if (!r.start) { el.innerHTML = '<div class="verdict">STEP 01 // DESIGNATE ORIGIN WAYPOINT (WP-A) ON MAP</div>'; return; }
-    if (!r.goal) { el.innerHTML = '<div class="verdict">STEP 02 // DESIGNATE TARGET WAYPOINT (WP-B) ON MAP</div>'; return; }
-    if (!r.safe || !r.safe.ok) { el.innerHTML = `<div class="verdict bad">TRAVERSE BLOCKED // No slope-safe corridor (${r.safe ? r.safe.reason : ''}). Increase slope threshold or relocate target.</div>`; return; }
+    if (!r.start) { el.innerHTML = '<div class="verdict">Choose a start point on the map.</div>'; return; }
+    if (!r.goal) { el.innerHTML = '<div class="verdict">Now choose the destination.</div>'; return; }
+    if (!r.safe || !r.safe.ok) { el.innerHTML = `<div class="verdict bad">No slope-safe route found (${r.safe ? r.safe.reason : ''}). Increase slope threshold or relocate target.</div>`; return; }
     const a = r.straight.stats, b = r.safe.stats, sols = (km) => (km / r.speed).toFixed(0);
     const cls = (s) => s > r.maxSlope ? 'bad' : s > 10 ? 'warn' : 'ok';
     el.innerHTML = `<table class="stat-table"><tr><th>Metric</th><th class="straight">Direct</th><th class="safe">A* Safe</th></tr>
@@ -638,8 +640,8 @@
       <tr><td>Mean Slope</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
       <tr><td>Distance &gt;10° Slope</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
       <tr><td>Traverse Duration</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
-      <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `HAZARD ALERT // Direct path intersects ${a.maxSlope.toFixed(1)}° grade (exceeds ${r.maxSlope}° limit). A* detour adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
-      <div class="hint" style="margin-top:10px">MOLA ELEVATION PROFILE · A* SOLVED IN ${r.ms.toFixed(0)} MS (${r.safe.path.length} CELLS)</div>${profileSVG(b.profile)}`;
+      <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (limit ${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
+      <div class="hint" style="margin-top:10px">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
   }
   function profileSVG(p) {
     const w = 276, h = 118, pad = 32;
@@ -650,15 +652,15 @@
     const areaD = `${d}L${X(kmMax).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
     p.forEach((q, i) => { if (i && q.slope > 10) segs += `<line x1="${X(p[i - 1].km).toFixed(1)}" y1="${Y(p[i - 1].elev).toFixed(1)}" x2="${X(q.km).toFixed(1)}" y2="${Y(q.elev).toFixed(1)}" stroke="#f59e0b" stroke-width="2.8"/>`; });
     return `<svg class="chart" viewBox="0 0 ${w} ${h}">
-      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(148,163,184,0.12)" stroke-dasharray="2 2"/>
-      <line x1="${pad}" y1="${(h - 6) / 2}" x2="${w - 8}" y2="${(h - 6) / 2}" stroke="rgba(148,163,184,0.12)" stroke-dasharray="2 2"/>
-      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(148,163,184,0.25)"/>
+      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
+      <line x1="${pad}" y1="${(h - 6) / 2}" x2="${w - 8}" y2="${(h - 6) / 2}" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
+      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
       <path d="${areaD}" fill="rgba(16, 185, 129, 0.12)"/>
       <path d="${d}" fill="none" stroke="#10b981" stroke-width="1.6"/>${segs}
-      <text x="4" y="15" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMax / 1000).toFixed(1)}km</text>
-      <text x="4" y="${h - 18}" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMin / 1000).toFixed(1)}km</text>
-      <text x="${pad}" y="${h - 5}" fill="#56657e" font-size="8.5" font-family="JetBrains Mono, monospace">0 km</text>
-      <text x="${w - 8}" y="${h - 5}" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">${kmMax.toFixed(0)} km</text>
+      <text x="4" y="15" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMax / 1000).toFixed(1)}km</text>
+      <text x="4" y="${h - 18}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMin / 1000).toFixed(1)}km</text>
+      <text x="${pad}" y="${h - 5}" fill="#5e5950" font-size="8.5" font-family="JetBrains Mono, monospace">0 km</text>
+      <text x="${w - 8}" y="${h - 5}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">${kmMax.toFixed(0)} km</text>
     </svg>`;
   }
 
@@ -666,22 +668,23 @@
   function setCrisisSite(x, y) { S.crisis.site = { x, y }; runCrisis(); draw(); }
   function runCrisis() {
     const c = S.crisis, el = $('#crisis-summary');
-    if (!c.site) { $('#crisis-site').textContent = '— SELECT COORDINATE ON MAP —'; el.innerHTML = ''; return; }
+    if (!c.site) { $('#crisis-site').textContent = 'Choose a site on the map'; el.innerHTML = ''; return; }
     const v = cellValues(c.site.x, c.site.y), nr = nearestRegion(v.lat, v.lon);
-    $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : 'NEAR ' + nr.region.name} (${fmtLat(v.lat)}, ${fmtLon(v.lon)})`;
-    const res = STORM.simulate({ lat: v.lat, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
+    $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name} · ${fmtLat(v.lat)}, ${fmtLon(v.lon)}`;
+    const res = STORM.simulate({ lat: v.lat, ls: c.ls, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
       storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
-    const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5), peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak);
+    const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, c.ls), peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak, c.ls);
     const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
     const verdict = res.blackoutSol !== null
-      ? `<div class="summary-big bad">CRITICAL BLACKOUT // SOL ${res.blackoutSol}</div><div class="help">Battery reserve exhausted ${res.blackoutSol - 20} sols after storm onset. Peak-storm generation ${(peakSolar + nuc).toFixed(0)} kWh/sol vs load ${c.cons} kWh/sol.</div>`
-      : `<div class="summary-big ok">NOMINAL // SURVIVES GLOBAL STORM</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
+      ? `<div class="summary-big bad">Blackout on sol ${res.blackoutSol}</div><div class="help">Battery reserve exhausted ${res.blackoutSol - 20} sols after storm onset. Peak-storm generation ${(peakSolar + nuc).toFixed(0)} kWh/sol vs load ${c.cons} kWh/sol.</div>`
+      : `<div class="summary-big ok">Survives the storm</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
     el.innerHTML = `${verdict}
-      <div class="kv"><span>Clear-Sky Solar (τ = 0.5)</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
-      <div class="kv"><span>Peak-Storm Solar (τ = ${c.tauPeak.toFixed(1)})</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
-      <div class="kv"><span>Kilopower Fission Baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
+      <div class="kv"><span>Season (L<sub>s</sub> = ${c.ls}°)</span><b>${STORM.seasonName(c.ls)}</b></div>
+      <div class="kv"><span>Clear-sky solar, τ 0.5</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
+      <div class="kv"><span>Peak-storm solar, τ ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
+      <div class="kv"><span>Kilopower baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
       ${crisisSVG(res.rows, c.batt)}
-      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add Kilopower fission units (10 kWe each) to maintain life-support baseload.' : ''}</div>`;
+      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add a Kilopower reactor to keep life support running.' : ''}</div>`;
   }
   function crisisSVG(rows, cap) {
     const w = 276, h = 118, pad = 26, n = rows.length;
@@ -690,22 +693,22 @@
     rows.forEach((r, i) => { db += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yb(r.batt).toFixed(1); dt += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yt(r.tau).toFixed(1); });
     const areaB = `${db}L${X(n - 1).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
     return `<svg class="chart" viewBox="0 0 ${w} ${h}">
-      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(148,163,184,0.12)" stroke-dasharray="2 2"/>
-      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(148,163,184,0.25)"/>
-      <path d="${areaB}" fill="rgba(56, 189, 248, 0.10)"/>
-      <path d="${dt}" fill="none" stroke="#fc3d21" stroke-width="1.2" stroke-dasharray="3 3"/>
-      <path d="${db}" fill="none" stroke="#38bdf8" stroke-width="1.8"/>
-      <text x="${pad}" y="10" fill="#38bdf8" font-size="8.5" font-family="JetBrains Mono, monospace">BATTERY RESERVE</text>
-      <text x="${w - 8}" y="10" fill="#fc3d21" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">OPTICAL DEPTH τ (0–12)</text>
-      <text x="${pad}" y="${h - 5}" fill="#56657e" font-size="8.5" font-family="JetBrains Mono, monospace">SOL 0</text>
-      <text x="${w - 8}" y="${h - 5}" fill="#8b9bb4" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">SOL ${n}</text>
+      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
+      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
+      <path d="${areaB}" fill="rgba(127,155,179,.14)"/>
+      <path d="${dt}" fill="none" stroke="#c8743c" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <path d="${db}" fill="none" stroke="#7f9bb3" stroke-width="1.8"/>
+      <text x="${pad}" y="10" fill="#7f9bb3" font-size="8.5" font-family="JetBrains Mono, monospace">battery</text>
+      <text x="${w - 8}" y="10" fill="#c8743c" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">τ, 0–12</text>
+      <text x="${pad}" y="${h - 5}" fill="#5e5950" font-size="8.5" font-family="JetBrains Mono, monospace">sol 0</text>
+      <text x="${w - 8}" y="${h - 5}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">sol ${n}</text>
     </svg>`;
   }
 
   // ------------------------------------------------------------ UI wiring
   function updateHudLayer() {
     const el = $('#hud-layer');
-    if (el) el.textContent = `OVERLAY: ${OVERLAY_NAMES[S.overlay] || S.overlay.toUpperCase()}`;
+    if (el) el.textContent = `Overlay · ${(OVERLAY_NAMES[S.overlay] || S.overlay).toLowerCase()}`;
   }
 
   function setViewMode(vm) {
@@ -714,8 +717,8 @@
     document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === vm));
     if (globeCanvas) globeCanvas.classList.toggle('hidden', vm !== '3d');
     if ($('#globe-tools')) $('#globe-tools').classList.toggle('hidden', vm !== '3d');
-    if ($('#hud-proj')) $('#hud-proj').textContent = vm === '3d' ? 'PROJ: 3D WEBGL MOLA SPHERICAL DEM' : 'PROJ: 2D EQUIRECTANGULAR IAU-2000';
-    if ($('#hud-hint')) $('#hud-hint').textContent = vm === '3d' ? 'DRAG: ORBIT 3D · SCROLL: ZOOM · CLICK: DESIGNATE' : 'SCROLL: ZOOM · DRAG: PAN · CLICK: DESIGNATE';
+    if ($('#hud-proj')) $('#hud-proj').textContent = vm === '3d' ? 'Globe · MOLA relief' : 'Map · equirectangular';
+    if ($('#hud-hint')) $('#hud-hint').textContent = vm === '3d' ? 'Drag to orbit · scroll to zoom · click to inspect' : 'Drag to pan · scroll to zoom · click to inspect';
     if (vm === '3d' && globe) {
       if (S.selected) {
         globe.flyTo(L.latOfRow(S.selected.y), L.lonOfCol(S.selected.x));
@@ -735,7 +738,7 @@
     $('#btn-relief').onclick = () => {
       const idx = (levels.indexOf(globe.state.exaggeration) + 1) % levels.length;
       globe.state.exaggeration = levels[idx];
-      $('#btn-relief').textContent = `RELIEF: ${levels[idx]}×`;
+      $('#btn-relief').textContent = `Relief ${levels[idx]}×`;
       draw();
     };
   }
@@ -743,7 +746,7 @@
     $('#btn-ov3d').onclick = () => {
       S.globeOverlay = !S.globeOverlay;
       $('#btn-ov3d').classList.toggle('active', S.globeOverlay);
-      $('#btn-ov3d').textContent = S.globeOverlay ? 'OVERLAY: ON' : 'OVERLAY: OFF';
+      $('#btn-ov3d').textContent = S.globeOverlay ? 'Overlay on' : 'Overlay off';
       draw();
     };
   }
@@ -825,6 +828,9 @@
       computeRoute();
     };
   }
+  if ($('#ls')) {
+    bindRange('ls', v => `${v}° · ${STORM.seasonName(v).split(' /')[0]}`, v => { S.crisis.ls = v; runCrisis(); });
+  }
   bindRange('tau', v => (v / 10).toFixed(1), v => { S.crisis.tauPeak = v / 10; runCrisis(); });
   bindRange('area', v => v + ' m²', v => { S.crisis.area = v; runCrisis(); });
   bindRange('cons', v => v + ' kWh/sol', v => { S.crisis.cons = v; runCrisis(); });
@@ -833,7 +839,145 @@
   $('#btn-about').onclick = () => $('#about').classList.remove('hidden');
   $('#about-close').onclick = () => $('#about').classList.add('hidden');
   $('#about').onclick = (e) => { if (e.target.id === 'about') $('#about').classList.add('hidden'); };
-  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#about').classList.add('hidden'); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      $('#about').classList.add('hidden');
+      if ($('#brief-modal')) $('#brief-modal').classList.add('hidden');
+    }
+  });
+
+  // ------------------------------------------------------------ Mission Brief Exporter
+  function buildBriefPayload() {
+    const wn = SCORING.normalize(S.weights);
+    const cands = S.candidates.map((c, i) => {
+      const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
+      return {
+        rank: i + 1,
+        designation: candidateName(v.lat, v.lon, nr),
+        hls2015_ez: !!(nr.region.ez && nr.distDeg < 6),
+        lat_deg: +v.lat.toFixed(2),
+        lon_deg: +v.lon.toFixed(2),
+        suitability_score: +c.score.toFixed(3),
+        elev_m: Math.round(v.elev),
+        slope_p90_deg: +v.slope.toFixed(1),
+        swim_ice_consistency: v.ice === null ? null : +v.ice.toFixed(2),
+        roughness_m: Math.round(v.rough),
+        tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
+        atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
+        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
+      };
+    });
+    const selCell = S.selected ? (() => {
+      const v = cellValues(S.selected.x, S.selected.y);
+      const nr = nearestRegion(v.lat, v.lon);
+      return {
+        region: nr.region.name,
+        lat_deg: +v.lat.toFixed(2),
+        lon_deg: +v.lon.toFixed(2),
+        score: +S.score[S.selected.y * W + S.selected.x].toFixed(3),
+        elev_m: Math.round(v.elev),
+        slope_deg: +v.slope.toFixed(1),
+        ice: v.ice === null ? null : +v.ice.toFixed(2),
+        ti: v.ti === null ? null : Math.round(v.ti),
+        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
+      };
+    })() : null;
+    const crisisSite = S.crisis.site || (S.candidates[0] ? { x: S.candidates[0].x, y: S.candidates[0].y } : { x: 1024, y: 512 });
+    const cv = cellValues(crisisSite.x, crisisSite.y), cnr = nearestRegion(cv.lat, cv.lon);
+    const sim = STORM.simulate({
+      lat: cv.lat, ls: S.crisis.ls, panelArea: S.crisis.area, efficiency: 0.2,
+      consumption: S.crisis.cons, capacity: S.crisis.batt, kilopower: S.crisis.kp, sols: 120,
+      storm: { tau0: 0.5, tauPeak: S.crisis.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
+    });
+    return {
+      generated_at: new Date().toISOString(),
+      system: 'Mars Base Decision Engine (MDE-2.4)',
+      architecture_preset: S.preset || 'custom',
+      hard_constraints_hls2015: S.hard,
+      swim_ice_horizon: S.iceBand,
+      normalized_weights: Object.fromEntries(Object.entries(wn).map(([k, v]) => [k, +v.toFixed(3)])),
+      top_candidates: cands,
+      selected_site: selCell,
+      traverse_plan: S.route.safe && S.route.safe.ok ? {
+        direct_km: +S.route.straight.stats.km.toFixed(1),
+        direct_max_slope_deg: +S.route.straight.stats.maxSlope.toFixed(1),
+        astar_safe_km: +S.route.safe.stats.km.toFixed(1),
+        astar_max_slope_deg: +S.route.safe.stats.maxSlope.toFixed(1),
+        speed_km_per_sol: S.route.speed,
+      } : null,
+      dust_storm_simulation: {
+        station_region: cnr.region.name,
+        lat_deg: +cv.lat.toFixed(2),
+        season_ls_deg: S.crisis.ls,
+        season_name: STORM.seasonName(S.crisis.ls),
+        tau_peak: S.crisis.tauPeak,
+        panel_area_m2: S.crisis.area,
+        kilopower_units: S.crisis.kp,
+        survives: sim.blackoutSol === null,
+        blackout_sol: sim.blackoutSol,
+        min_battery_kwh: Math.round(sim.minBatt),
+      },
+    };
+  }
+
+  function openBriefModal() {
+    const modal = $('#brief-modal'), body = $('#brief-body');
+    if (!modal || !body) return;
+    const p = buildBriefPayload();
+    const top = p.top_candidates[0];
+    body.innerHTML = `
+      <div class="brief-meta">
+        <div class="brief-kpi"><span>Mission Profile</span><b>${(p.architecture_preset).toUpperCase()}</b></div>
+        <div class="brief-kpi"><span>Primary Candidate</span><b>${top ? top.designation.split(' ·')[0] : 'N/A'}</b></div>
+        <div class="brief-kpi"><span>GCR Radiation (Top-1)</span><b>${top ? top.gcr_dose_msv_yr + ' mSv/yr' : '—'}</b></div>
+        <div class="brief-kpi"><span>Storm Survival (τ=${p.dust_storm_simulation.tau_peak})</span><b class="${p.dust_storm_simulation.survives ? 'ok' : 'bad'}">${p.dust_storm_simulation.survives ? 'NOMINAL' : 'BLACKOUT SOL ' + p.dust_storm_simulation.blackout_sol}</b></div>
+      </div>
+      <h3>01 // Top-5 Reconnaissance Candidates (2°×2° Regional Means, ≥800 km Sep)</h3>
+      <table class="tbl">
+        <thead>
+          <tr><th>Rank</th><th>Region Designation</th><th>Coordinates</th><th>Score</th><th>Elev</th><th>Slope</th><th>SWIM Ice</th><th>TES TI</th><th>GCR Dose</th></tr>
+        </thead>
+        <tbody>
+          ${p.top_candidates.map(c => `<tr>
+            <td><b>#0${c.rank}</b></td>
+            <td>${c.designation} ${c.hls2015_ez ? '<span class="flag ez">HLS-EZ</span>' : ''}</td>
+            <td><code>${fmtLat(c.lat_deg)}, ${fmtLon(c.lon_deg)}</code></td>
+            <td><b>${c.suitability_score.toFixed(2)}</b></td>
+            <td>${c.elev_m} m</td>
+            <td>${c.slope_p90_deg}°</td>
+            <td>${c.swim_ice_consistency === null ? '—' : c.swim_ice_consistency.toFixed(2)}</td>
+            <td>${c.tes_thermal_inertia === null ? '—' : c.tes_thermal_inertia + ' tiu'}</td>
+            <td>${c.gcr_dose_msv_yr} mSv/yr</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="modal-grid" style="margin-top:10px">
+        <div>
+          <h3>02 // Surface Traverse Analysis (A*)</h3>
+          ${p.traverse_plan ? `<p>A* slope-safe corridor requires <b>${p.traverse_plan.astar_safe_km} km</b> (max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>` : '<p class="help">No active traverse waypoints designated. Switch to Module 02 (Rover Traverse A*) to include path telemetry.</p>'}
+        </div>
+        <div>
+          <h3>03 // Global Dust-Storm Power Balance</h3>
+          <p>Simulated at <b>${p.dust_storm_simulation.station_region}</b> (<code>${fmtLat(p.dust_storm_simulation.lat_deg)}</code>) during <b>L<sub>s</sub> = ${p.dust_storm_simulation.season_ls_deg}°</b> (${p.dust_storm_simulation.season_name}), peak <code>τ = ${p.dust_storm_simulation.tau_peak}</code>, ${p.dust_storm_simulation.panel_area_m2} m² array + ${p.dust_storm_simulation.kilopower_units} Kilopower unit(s): <b>${p.dust_storm_simulation.survives ? 'Base survives (min reserve ' + p.dust_storm_simulation.min_battery_kwh + ' kWh)' : 'Battery exhausted on Sol ' + p.dust_storm_simulation.blackout_sol}</b>.</p>
+        </div>
+      </div>`;
+    modal.classList.remove('hidden');
+  }
+
+  if ($('#btn-export')) $('#btn-export').onclick = openBriefModal;
+  if ($('#brief-close')) $('#brief-close').onclick = () => $('#brief-modal').classList.add('hidden');
+  if ($('#brief-modal')) $('#brief-modal').onclick = (e) => { if (e.target.id === 'brief-modal') $('#brief-modal').classList.add('hidden'); };
+  if ($('#btn-dl-json')) {
+    $('#btn-dl-json').onclick = () => {
+      const blob = new Blob([JSON.stringify(buildBriefPayload(), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mars-mission-brief.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+  }
+  if ($('#btn-print-brief')) $('#btn-print-brief').onclick = () => window.print();
 
   // Map zoom buttons
   const zoomBy = (factor) => {
@@ -949,7 +1093,7 @@
     if (!g) { tip.classList.add('hidden'); return; }
     const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
     $('#hud-coord').textContent = `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
-    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'Near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · SCORE <b>${s.toFixed(2)}</b><br>ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}°<br>ICE ${v.ice === null ? '—' : v.ice.toFixed(2)} · ROUGH ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · DUST ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
+    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · score <b>${s.toFixed(2)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>ice ${v.ice === null ? '—' : v.ice.toFixed(2)} · rough ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
     const r = canvas.getBoundingClientRect();
     const tx = Math.min(r.width - 210, e.clientX - r.left + 14);
     const ty = Math.min(r.height - 95, e.clientY - r.top + 14);
@@ -958,6 +1102,74 @@
     tip.classList.remove('hidden');
   });
   canvas.addEventListener('mouseleave', () => $('#tooltip').classList.add('hidden'));
+
+  // Touch gestures (1-finger pan/orbit & tap, 2-finger pinch-to-zoom)
+  let touchState = null;
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchState = {
+        mode: 'drag', x: t.clientX, y: t.clientY, moved: false,
+        tx: S.view.tx, ty: S.view.ty,
+        rLat: globe ? globe.state.targetLat : 0, rLon: globe ? globe.state.targetLon : 0,
+      };
+    } else if (e.touches.length === 2) {
+      const [t1, t2] = e.touches;
+      touchState = {
+        mode: 'pinch', moved: true,
+        dist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY) || 1,
+        scale: S.view.scale,
+        camDist: globe ? globe.state.targetDist : 2.55,
+      };
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => {
+    if (!touchState) return;
+    e.preventDefault();
+    if (touchState.mode === 'drag' && e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = (t.clientX - touchState.x) * devicePixelRatio, dy = (t.clientY - touchState.y) * devicePixelRatio;
+      if (Math.hypot(dx, dy) > 6) touchState.moved = true;
+      if (S.viewMode === '3d' && globe) {
+        const sens = 0.14 * (globe.state.camDist - 0.85) / (window.devicePixelRatio || 1);
+        globe.state.targetLon = touchState.rLon - dx * sens;
+        globe.state.targetLat = Math.max(-82, Math.min(82, touchState.rLat + dy * sens));
+        schedule3D();
+      } else {
+        S.view.tx = touchState.tx + dx; S.view.ty = touchState.ty + dy; wrapView(); draw();
+      }
+    } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
+      const [t1, t2] = e.touches;
+      const d = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY) || 1;
+      const ratio = d / touchState.dist;
+      if (S.viewMode === '3d' && globe) {
+        globe.state.targetDist = Math.max(1.22, Math.min(4.6, touchState.camDist / ratio));
+        schedule3D();
+      } else {
+        const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
+        S.view.scale = Math.max(minS, Math.min(40, touchState.scale * ratio));
+        wrapView(); updateScaleBar(); draw();
+      }
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', (e) => {
+    if (touchState && touchState.mode === 'drag' && !touchState.moved && e.changedTouches.length === 1) {
+      const t = e.changedTouches[0];
+      const g = gridAt({ clientX: t.clientX, clientY: t.clientY });
+      if (g) {
+        const [x, y] = g;
+        if (S.mode === 'route') {
+          const r = S.route;
+          if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; }
+          renderRoute(); if (r.goal) computeRoute(); draw();
+        } else {
+          if (S.mode === 'crisis') setCrisisSite(x, y);
+          select(x, y, null);
+        }
+      }
+    }
+    if (e.touches.length === 0) touchState = null;
+  });
   function gridAt(e) {
     const r = canvas.getBoundingClientRect();
     const sx = (e.clientX - r.left) * devicePixelRatio;

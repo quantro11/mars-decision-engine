@@ -67,4 +67,13 @@ assert.ok(res.blackoutSol !== null, 'solar-only base blacks out in a tau-8 storm
 const res2 = T.simulate({ lat: 20, panelArea: 1000, efficiency: 0.2, consumption: 300, capacity: 2000, kilopower: 2, sols: 120, storm: { tau0: 0.5, tauPeak: 8, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
 assert.strictEqual(res2.blackoutSol, null, 'two Kilopower units survive');
 
-console.log('All scoring / A* / storm tests passed.');
+// --- radiation shielding (MSL RAD calibration: Gale -4500m ~232 mSv/yr, higher elevation = higher dose)
+const galeDose = S.radDoseMsvYr(-4500);
+assert.ok(galeDose > 220 && galeDose < 245, 'MSL RAD Gale Crater ~232 mSv/yr');
+assert.ok(S.radDoseMsvYr(2000) > galeDose, 'higher elevation receives higher GCR dose');
+
+// --- seasonal solar longitude (Ls): perihelion southern summer > aphelion northern winter
+assert.ok(T.dailySolar(-25, 0.5, 251) > T.dailySolar(-25, 0.5, 71), 'perihelion S. summer exceeds aphelion S. winter');
+assert.ok(T.dailySolar(35, 0.5, 90) > T.dailySolar(35, 0.5, 270), 'northern summer solstice exceeds northern winter solstice at +35N');
+
+console.log('All scoring / A* / storm / radiation / seasonal tests passed.');

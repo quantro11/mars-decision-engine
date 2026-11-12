@@ -121,5 +121,15 @@
     }));
   }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp };
+  // Atmospheric column mass (g/cm^2) and MSL Curiosity RAD-calibrated GCR surface dose (mSv/yr).
+  // Reference: Hassler et al. (Science, 2014) — MSL RAD measured ~232 mSv/yr at Gale Crater (-4.5 km, ~24 g/cm^2).
+  function atmoColumnGcm2(h_m) {
+    return Math.max(1.5, Math.min(38, 16.0 * Math.exp(-h_m / 11100)));
+  }
+  function radDoseMsvYr(h_m) {
+    const col = atmoColumnGcm2(h_m);
+    return 155 + 245 * Math.exp(-col / 20.5);
+  }
+
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDoseMsvYr };
 })(typeof window !== 'undefined' ? window : module.exports);
