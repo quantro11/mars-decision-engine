@@ -52,25 +52,33 @@ Edge cost `d · (1 + k · s_target)`, `k` = 0.3 default; `s > s_max` (15° defau
 Heuristic = haversine distance (admissible, Mars radius 3389.5 km).
 Reported: distance, max / mean slope, km on > 10° terrain, travel time at a user-set speed (default 20 km/sol — Perseverance's best single-sol drives are ≈ 350 m, so 20 km/sol represents a crewed pressurised rover, not today's robots), elevation profile.
 
-## 7. Dust-storm energy model
+## 7. Dust-storm & seasonal energy model
 
 ```
-E_solar(kWh/sol) = A · η · 3.0 · cos φ · exp(−0.35 (τ − 0.5))
+E_solar(kWh/sol) = A · η · 3.0 · S_season(φ, Ls) · exp(−0.35 (τ − 0.5))
 E_nuclear        = n_Kilopower · 10 kW · 24.66 h
 battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption, 0, capacity)
 ```
 
 * 3.0 kWh/m²/sol: clear-sky equatorial daily insolation (Appelbaum & Flood, *Solar radiation on Mars*, NASA TM-102299, 1989 — order of magnitude).
-* `exp(−0.35 (τ − 0.5))` is an **empirical** attenuation normalised to a typical clear sky (τ = 0.5) and fitted so that τ ≈ 10.8 yields ≈ 3 % of clear-sky output, matching Opportunity's drop from ≈ 650 to ≈ 22 Wh/sol in June 2018. It is intentionally simpler than a radiative-transfer model; diffuse light is why the decay is slower than Beer-Lambert.
+* `S_season(φ, Ls)` models Mars's axial obliquity ($\varepsilon = 25.19^\circ$, solar declination $\sin\delta = \sin\varepsilon\sin L_s$) and orbital eccentricity ($e = 0.0934$, perihelion at $L_s = 251^\circ$) via the diurnal insolation integral. When $L_s$ is omitted, it reduces to $\cos\phi$.
+* `exp(−0.35 (τ − 0.5))` is an **empirical** attenuation normalised to a typical clear sky (τ = 0.5) and fitted so that τ ≈ 10.8 yields ≈ 3 % of clear-sky output, matching Opportunity's drop from ≈ 650 to ≈ 22 Wh/sol in June 2018.
 * Storm timeline default: onset sol 20, 10-sol rise, 40-sol plateau, 30-sol decay (the 2018 storm lasted ≈ 100 sols at Opportunity's site).
 * Kilopower: 10 kWe fission unit (NASA KRUSTY test 2018).
 
-## 8. Known limitations
+## 8. Atmospheric column & GCR surface radiation model
+
+```
+Σ(h)       = clamp(16.0 · exp(−h / 11100), 1.5, 38.0)   [g/cm²]
+D_GCR(h)   = 155 + 245 · exp(−Σ(h) / 20.5)              [mSv/yr]
+```
+
+* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4500\text{ m}$, $\Sigma \approx 24\text{ g/cm}^2 \Rightarrow D_{\text{GCR}} \approx 231\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $232 \pm 10\text{ mSv/yr}$).
+
+## 9. Known limitations
 
 1. 10 km/px cells cannot see boulders, small craters, dunes or scarps — output is a region ranking, not a landing ellipse.
 2. 8-bit elevation (≈ 115 m steps) makes slopes regional; local slopes are higher.
 3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
-4. No radiation model (GCR is nearly isotropic; local topography is a second-order shield).
-5. No seasonal / diurnal insolation, no thermal cycling, no dust-devil cleaning.
-6. SWIM coverage ends at ±60°.
-7. The storm model has one empirical constant; it is for comparing sites and power architectures, not for sizing flight hardware.
+4. SWIM coverage ends at ±60°.
+5. The storm model has one empirical optical-depth constant; it is for comparing sites and power architectures, not for sizing flight hardware.
