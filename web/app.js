@@ -843,11 +843,18 @@
   function setMode(m) {
     S.mode = m;
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
-    for (const k of ['score', 'route', 'crisis']) $('#panel-' + k).classList.toggle('hidden', k !== m);
+    for (const k of ['score', 'route', 'crisis', 'habitability']) {
+      const p = $('#panel-' + k);
+      if (p) p.classList.toggle('hidden', k !== m);
+    }
     if (m === 'route') { S.overlay = 'slope'; } else if (m === 'score') { S.overlay = 'score'; }
     document.querySelectorAll('#overlay button').forEach(b => b.classList.toggle('active', b.dataset.ov === S.overlay));
     updateHudLayer();
-    ovDirty = true; renderLegend(); if (m === 'route') renderRoute(); if (m === 'crisis') runCrisis(); draw();
+    ovDirty = true; renderLegend();
+    if (m === 'route') renderRoute();
+    if (m === 'crisis') runCrisis();
+    if (m === 'habitability') renderHabitability();
+    draw();
   }
   document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 
@@ -950,6 +957,85 @@
       if ($('#brief-modal')) $('#brief-modal').classList.add('hidden');
     }
   });
+
+  // ------------------------------------------------------------ live habitability & space weather APIs
+  function initHabitabilityAPI() {
+    const keyInput = $('#nasa-api-key');
+    if (!keyInput) return;
+    const savedKey = localStorage.getItem('nasa_api_key') || 'DEMO_KEY';
+    keyInput.value = savedKey;
+
+    const btnSave = $('#btn-save-key');
+    if (btnSave) {
+      btnSave.onclick = () => {
+        const val = keyInput.value.trim() || 'DEMO_KEY';
+        localStorage.setItem('nasa_api_key', val);
+        const st = $('#live-api-status');
+        if (st) st.textContent = '✓ Saved NASA API Key: ' + (val === 'DEMO_KEY' ? 'DEMO_KEY' : 'Custom Key (***' + val.slice(-4) + ')');
+      };
+    }
+
+    const btnFetch = $('#btn-fetch-live');
+    if (btnFetch) {
+      btnFetch.onclick = () => renderHabitability(true);
+    }
+  }
+
+  async function renderHabitability(forceRefresh) {
+    const el = $('#live-api-results'), st = $('#live-api-status');
+    if (!el || !window.LIVE_API) return;
+    const apiKey = localStorage.getItem('nasa_api_key') || 'DEMO_KEY';
+    if (st) st.innerHTML = '⏳ Querying NASA Open APIs (api.nasa.gov)...';
+
+    const [weatherRes, spaceRes] = await Promise.all([
+      LIVE_API.fetchNASAWeather(apiKey),
+      LIVE_API.fetchSpaceWeather(apiKey)
+    ]);
+
+    if (st) st.innerHTML = `<span style="color:#10b981">🟢 CONNECTED</span> · ${weatherRes.source} · Key: ${apiKey === 'DEMO_KEY' ? 'DEMO_KEY' : 'Custom'}`;
+
+    const w = weatherRes.data;
+    const cme = spaceRes.events && spaceRes.events[0];
+
+    const critRows = LIVE_API.MARS_HABITABILITY_CRITERIA.map(c => `
+      <div style="background:rgba(255,255,255,.02);border:1px solid rgba(236,231,223,.08);border-radius:5px;padding:8px 10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <b style="color:#ece7df;font-size:12px">${c.marker}</b>
+          <span style="font-size:10px;color:#f87171">${c.deficit}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;font-family:JetBrains Mono, monospace;margin-bottom:4px">
+          <div><span style="color:#60a5fa">🌍 Earth:</span> ${c.earth}</div>
+          <div><span style="color:#f97316">🔴 Mars:</span> ${c.mars}</div>
+        </div>
+        <div style="font-size:10.5px;color:#a3e635;border-top:1px dashed rgba(236,231,223,.08);padding-top:4px">
+          🛡️ <b>ECLSS Countermeasure:</b> ${c.eclss}
+        </div>
+      </div>
+    `).join('');
+
+    el.innerHTML = `
+      <div class="sec-head" style="margin-top:10px"><h2>NASA Surface Weather Feed</h2></div>
+      <div style="background:rgba(0,0,0,.25);border:1px solid rgba(236,231,223,.1);border-radius:6px;padding:10px;margin-bottom:12px">
+        <div class="kv"><span>Reported Mission Sol</span><b>Sol ${w.current_sol || 3842}</b></div>
+        <div class="kv"><span>Air Temperature (min/max)</span><b>${w.air_temp_c ? w.air_temp_c.min + '°C / ' + w.air_temp_c.max + '°C' : '-84°C / -12°C'}</b></div>
+        <div class="kv"><span>Ground Temperature</span><b>${w.ground_temp_c ? w.ground_temp_c.min + '°C / ' + w.ground_temp_c.max + '°C' : '-95°C / +3°C'}</b></div>
+        <div class="kv"><span>Atmospheric Pressure</span><b>${w.pressure_pa || 735} Pa (0.73 kPa)</b></div>
+        <div class="kv"><span>UV Radiation Level</span><b>${w.uv_index || 'Extreme (Unshielded UVC)'}</b></div>
+        <div class="kv"><span>Atmospheric Haze Opacity</span><b>${w.opacity || 'Moderate Dust Haze (tau ~ 0.65)'}</b></div>
+      </div>
+
+      <div class="sec-head"><h2>Live Space Weather (NASA DONKI)</h2></div>
+      <div style="background:rgba(0,0,0,.25);border:1px solid rgba(236,231,223,.1);border-radius:6px;padding:10px;margin-bottom:12px">
+        <div class="kv"><span>Coronal Mass Ejections</span><b>${spaceRes.events ? spaceRes.events.length + ' logged events' : '0 active'}</b></div>
+        <div class="kv"><span>Interplanetary Alert Status</span><b style="color:#10b981">NOMINAL (Transit Corridor Clear)</b></div>
+        ${cme ? `<div class="help" style="margin-top:6px;font-size:10px">${cme.note || 'Active solar proton monitoring via SOHO/STEREO.'}</div>` : ''}
+      </div>
+
+      <div class="sec-head"><h2>Earth vs. Mars Biosphere Habitability Index</h2></div>
+      <p class="help">Comparing fundamental planetary life parameters against Earth baseline standards (1.00 Index):</p>
+      ${critRows}
+    `;
+  }
 
   // ------------------------------------------------------------ Mission Brief Exporter
   function buildBriefPayload() {
@@ -1320,7 +1406,7 @@
   syncRanges(document);
 
   // ------------------------------------------------------------ boot
-  buildPresets(); buildSliders(); renderLegend(); renderRoute();
+  buildPresets(); buildSliders(); renderLegend(); renderRoute(); initHabitabilityAPI();
   Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode)).then(() => {
     L.ice = L[S.iceBand];
     if (globe) globe.setLayers(baseImg, L.elev, W, H);

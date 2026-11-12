@@ -31,6 +31,7 @@
     <button class="mode-btn active" data-mode="score"><span class="mode-idx">I</span><span class="mode-label">Site selection</span></button>
     <button class="mode-btn" data-mode="route"><span class="mode-idx">II</span><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis"><span class="mode-idx">III</span><span class="mode-label">Dust-storm power</span></button>
+    <button class="mode-btn" data-mode="habitability"><span class="mode-idx">IV</span><span class="mode-label">Live habitability</span></button>
   </nav>
 
   <div class="topbar-right">
@@ -129,6 +130,27 @@
       </div>
 
       <div id="crisis-summary"></div>
+    </section>
+
+    <section id="panel-habitability" class="mode-panel hidden">
+      <div class="sec-head"><h2>Live Planetary &amp; Habitability APIs</h2></div>
+      <p class="help">Live space weather, Mars surface telemetry, and Earth vs. Mars biosphere habitability metrics powered by NASA Open APIs.</p>
+
+      <div class="api-key-box" style="margin-bottom:12px;background:rgba(255,255,255,.03);padding:10px;border-radius:6px;border:1px solid rgba(236,231,223,.1)">
+        <label style="font-size:11px;color:#8f897e;display:block;margin-bottom:4px">NASA Open API Key</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="nasa-api-key" placeholder="DEMO_KEY" style="flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(236,231,223,.2);color:#ece7df;padding:5px 8px;border-radius:4px;font-family:JetBrains Mono, monospace;font-size:11px">
+          <button id="btn-save-key" class="ghost" style="padding:4px 8px;font-size:11px">Save</button>
+        </div>
+        <div class="help" style="font-size:10px;margin-top:4px">Using official NASA Open API (api.nasa.gov). Pre-configured with DEMO_KEY.</div>
+      </div>
+
+      <div class="row">
+        <button id="btn-fetch-live" class="btn-spec" style="width:100%;margin-bottom:10px">📡 Connect &amp; Fetch Live Telemetry</button>
+      </div>
+
+      <div id="live-api-status" style="font-size:11px;font-family:JetBrains Mono, monospace;color:#7f9bb3;margin-bottom:10px">● Ready to query NASA APIs</div>
+      <div id="live-api-results"></div>
     </section>
 
     <section class="layers">
@@ -305,6 +327,7 @@
 <script src="astar.js"></script>
 <script src="storm.js"></script>
 <script src="globe3d.js"></script>
+<script src="live_api.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

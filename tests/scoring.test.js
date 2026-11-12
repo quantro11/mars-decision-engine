@@ -121,4 +121,9 @@ const roughMicro = S.calcMicroHazard(18.0, 180);
 assert.strictEqual(roughMicro.tacticalGrade, 'HIGH_HAZARD');
 assert.ok(roughMicro.boulderRiskPct >= 50 && roughMicro.trnRequired);
 
-console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal / SPE / micro-hazard tests passed.');
+// --- Live Planetary APIs & Earth vs Mars Habitability Baseline
+const Live = require('../web/live_api.js').LIVE_API;
+assert.ok(Live.EARTH_BASELINE.pressure_kpa === 101.3);
+assert.ok(Live.MARS_HABITABILITY_CRITERIA.length === 6, '6 vital biosphere habitability markers defined');
+
+console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal / SPE / micro-hazard / live-API tests passed.');
