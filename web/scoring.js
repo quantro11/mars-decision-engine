@@ -14,6 +14,17 @@
     return 1 - (x - x0) / (x1 - x0);
   }
 
+  // Surface GCR dose from MOLA elevation (no extra dataset needed).
+  // Atmospheric column mass sigma(h) = 16.4 g/cm2 * exp(-h / 11.1 km)  (610 Pa datum, g = 3.71, scale height 11.1 km).
+  // Dose equivalent D = 0.64 mSv/day * exp(-(sigma - 24.6) / 60): anchored on MSL/RAD at Gale crater
+  // (Hassler et al. 2014, Science 343: 0.64 +- 0.12 mSv/day at ~ -4.4 km, sigma ~ 24.6 g/cm2); the 60 g/cm2
+  // attenuation length is an empirical fit to published GCR transport curves (secondary build-up keeps it shallow).
+  // Returns mSv per Earth year (365.25 d).
+  function radDose(h_m) {
+    const sigma = 16.4 * Math.exp(-h_m / 11100);
+    return 0.64 * Math.exp(-(sigma - 24.6) / 60) * 365.25;
+  }
+
   const F = {
     // Lower is better: thick atmosphere for parachutes / retro-propulsion margin.
     elev(h_m) { return ramp(h_m, -2000, 2000); },
@@ -27,6 +38,8 @@
     // 150-400 = sand / duricrust / cemented soil (ideal); > 500 = rock / bedrock (hazard, hard to dig). null = no data.
     ti(v) { if (v === null) return 0.5; if (v < 100) return Math.max(0, v / 100 * 0.3); if (v < 150) return 0.3 + 0.7 * (v - 100) / 50; if (v <= 400) return 1; return ramp(v, 400, 700); },
     // Solar energy and thermal budget: mean insolation ~ cos(lat), rescaled so 0 deg = 1 and 50 deg = 0.
+    // Radiation: lower dose is better. <= 200 mSv/yr (Hellas floor) = 1, >= 290 mSv/yr (above +2 km) = 0.
+    rad(h_m) { return ramp(radDose(h_m), 200, 290); },
     lat(deg) { const c = Math.cos(Math.abs(deg) * Math.PI / 180), c50 = Math.cos(50 * Math.PI / 180); return Math.max(0, Math.min(1, (c - c50) / (1 - c50))); },
   };
 
@@ -37,19 +50,20 @@
     { key: 'rough', label: 'Terrain roughness',         unit: 'm' },
     { key: 'lat',   label: 'Latitude (solar / thermal)', unit: '°' },
     { key: 'ti',    label: 'Thermal inertia (surface)',  unit: 'tiu' },
+    { key: 'rad',   label: 'Radiation (GCR dose)',       unit: 'mSv/yr' },
   ];
 
   const PRESETS = {
-    landing:  { name: 'Landing safety',       icon: '🛬', w: { elev: 0.30, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15 } },
-    isru:     { name: 'ISRU / sustainability', icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.45, rough: 0.10, lat: 0.10, ti: 0.10 } },
-    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.20, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15 } },
+    landing:  { name: 'Landing safety',       icon: '🛬', w: { elev: 0.25, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15, rad: 0.05 } },
+    isru:     { name: 'ISRU / sustainability', icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.40, rough: 0.10, lat: 0.10, ti: 0.10, rad: 0.05 } },
+    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.15, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15, rad: 0.05 } },
   };
 
   const HARD = { elevMax: 2000, slopeMax: 15, latMax: 50 };
 
   function normalize(w) {
     const s = Object.values(w).reduce((a, b) => a + b, 0) || 1;
-    const out = {};
+    const out = { elev: 0, slope: 0, ice: 0, rough: 0, lat: 0, ti: 0, rad: 0 };
     for (const k in w) out[k] = w[k] / s;
     return out;
   }
@@ -58,7 +72,7 @@
   function scoreCell(v, w, hard) {
     if (hard && (v.elev > HARD.elevMax || v.slope > HARD.slopeMax || Math.abs(v.lat) > HARD.latMax)) return 0;
     return w.elev * F.elev(v.elev) + w.slope * F.slope(v.slope) + w.ice * F.ice(v.ice)
-         + w.rough * F.rough(v.rough) + w.lat * F.lat(v.lat) + w.ti * F.ti(v.ti);
+         + w.rough * F.rough(v.rough) + w.lat * F.lat(v.lat) + w.ti * F.ti(v.ti) + w.rad * F.rad(v.elev);
   }
 
   // Full-map scoring. layers: {elev, slope, rough, ice: Float32Array|null-coded, lat: Float32Array (per row)}
@@ -68,7 +82,7 @@
     const { width, height } = L;
     const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256), ft = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
-      fe[i] = F.elev(L.meta.elev.offset + i * L.meta.elev.scale);
+      fe[i] = w.elev * F.elev(L.meta.elev.offset + i * L.meta.elev.scale) + w.rad * F.rad(L.meta.elev.offset + i * L.meta.elev.scale);
       fs[i] = F.slope(i * L.meta.slope.scale);
       fr[i] = F.rough(i * L.meta.rough.scale);
       fi[i] = i === 0 ? 0 : F.ice(L.meta.ice.offset + i * L.meta.ice.scale);
@@ -84,7 +98,7 @@
         const i = row + x;
         const e = L.elev[i], s = L.slope[i];
         if (hard && (e > elevHardIdx || s > slopeHardIdx)) { out[i] = 0; continue; }
-        out[i] = w.elev * fe[e] + w.slope * fs[s] + w.ice * fi[L.ice[i]] + w.rough * fr[L.rough[i]] + w.ti * ft[L.ti[i]] + fl;
+        out[i] = fe[e] + w.slope * fs[s] + w.ice * fi[L.ice[i]] + w.rough * fr[L.rough[i]] + w.ti * ft[L.ti[i]] + fl;
       }
     }
     return out;
@@ -121,5 +135,25 @@
     }));
   }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp };
+  // Weight-sensitivity (Monte Carlo): perturb every weight by a uniform factor in [1-spread, 1+spread], re-score,
+  // and report for each reference candidate the fraction of runs in which a top-N candidate lies within sepPx of it.
+  // rng: () => [0,1). Deterministic when a seeded rng is passed (tests).
+  function sensitivity(L, weights, hard, ref, o, rng) {
+    const runs = o.runs || 30, spread = o.spread ?? 0.2, keep = new Array(ref.length).fill(0);
+    const buf = new Float32Array(L.width * L.height);
+    for (let r = 0; r < runs; r++) {
+      const w = {};
+      for (const k in weights) w[k] = weights[k] * (1 - spread + 2 * spread * rng());
+      scoreMap(L, w, hard, buf);
+      const top = topCandidates(buf, L.width, L.height, o.n || 5, o.blockPx, o.minSepPx);
+      ref.forEach((c, i) => {
+        if (top.some(t => { let dx = Math.abs(t.x - c.x); dx = Math.min(dx, L.width - dx); return Math.hypot(dx, t.y - c.y) <= o.matchPx; })) keep[i]++;
+      });
+    }
+    return keep.map(k => k / runs);
+  }
+
+  function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, radDose, sensitivity, mulberry32 };
 })(typeof window !== 'undefined' ? window : module.exports);

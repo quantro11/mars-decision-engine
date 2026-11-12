@@ -7,13 +7,14 @@ Those two teams have argued about the same map since the 2015 Human Landing Site
 We built the tool that turns that argument into a number."
 
 **0:20 — What it is (20 s)**
-"Mars Base Decision Engine. Six real NASA/PSI/ASU data layers — MOLA elevation, MOLA slope, roughness, SWIM 2.0 ice, TES thermal inertia, latitude —
+"Mars Base Decision Engine. Real NASA/PSI/ASU data layers — MOLA elevation, MOLA slope, roughness, SWIM 2.0 ice, TES thermal inertia, latitude — plus a cosmic-ray dose model anchored on Curiosity's RAD instrument,
 scored by NASA's own landing-site rules, re-weighted live. No server, runs in a browser, every formula documented and unit-tested."
 
 **0:40 — Demo 1: the conflict, visualised (35 s)**
 *Click "Landing safety".* "Equatorial lowlands light up — Elysium, Isidis, Chryse."
 *Click "ISRU".* "Watch the optimum migrate north: Arcadia, Utopia, Deuteronilus — exactly the regions NASA's SWIM team flagged for crewed missions.
 The model was never told their names; it found them from data."
+*Click "Run Robustness Test".* "And this is not our opinion: we shake every weight ±20 % thirty times — the top sites stay in the top five. ROBUST percentage on each card."
 *Point at candidate card.* "Each candidate explains itself: −4 km elevation ✓, 0.9° slope ✓, ice consistency 0.72 ✓, 35° N ⚠."
 
 **1:15 — Demo 2: rover route (35 s)**
@@ -26,7 +27,7 @@ A* on the slope grid: +10 % distance, max slope 14°, hazardous kilometres 911 �
 
 **2:25 — Validity (20 s)**
 "Real data: MOLA via Mars Trek, SWIM 2.0 from PSI, thresholds from the 2015 HLS workshop, storm constant fitted to Opportunity's 2018 telemetry.
-Limitations are on the Method page: 10 km cells, no radiation model, no thermal inertia yet."
+Limitations are on the Method page: 10 km cells, 8-bit elevation, a one-anchor radiation model."
 
 **2:45 — Impact (15 s)**
 "Swap the layers and the same engine ranks lunar south-pole sites. Add a layer and it ranks for a different crew.
@@ -40,4 +41,6 @@ It's not a map of Mars — it's a way to decide on Mars."
 * **Why 90th-percentile slope?** Safety-conservative: a cell is only as good as its bad corners.
 * **How confident is the ice layer?** SWIM "consistency" is agreement across 5 datasets (neutron, radar, thermal, geomorphology, dielectric); we show the band (0–1 / 1–5 / > 5 m) the crew could actually excavate.
 * **Is the storm model physical?** Semi-empirical, one fitted constant, cited; good for comparing architectures, not for hardware sizing — and we say so.
-* **What would you add with one more week?** Seasonal insolation; radiation shielding by regolith depth; HiRISE-based local hazard maps for the top-5.
+* **Is the radiation layer just elevation again?** It is derived from elevation, and we say so. It answers a different question (crew dose vs. EDL margin) and is anchored on a measurement: 0.64 mSv/day at Gale (MSL/RAD).
+* **Does the season matter in the storm module?** Yes — set onset Ls and latitude; a southern-winter storm at 40° S is far worse than a perihelic-summer one.
+* **What would you add with one more week?** 16-bit MOLA PEDR/MEGDR elevation; regolith-shielding design; CRISM mineral resources; HiRISE-based local hazard maps for the top-5.

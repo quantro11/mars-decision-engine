@@ -1527,3 +1527,9 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+/* robustness badge + Mars Trek link on candidate cards */
+.robust { font-weight: 700; letter-spacing: .04em; }
+.robust.ok { color: #10b981; } .robust.warn { color: #f59e0b; } .robust.bad { color: #ef4444; }
+.card .trek { display: inline-block; margin-top: 6px; font-size: 10.5px; color: #38bdf8; text-decoration: none; letter-spacing: .03em; }
+.card .trek:hover { text-decoration: underline; }

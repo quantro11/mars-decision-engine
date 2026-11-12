@@ -19,6 +19,7 @@
     rough: 'ROUG',
     lat: 'LAT',
     ti: 'TES',
+    rad: 'RAD',
   };
 
   const OVERLAY_NAMES = {
@@ -28,6 +29,7 @@
     elev: 'MOLA MEGDR ELEVATION',
     ti: 'TES THERMAL INERTIA',
     dust: 'TES DUST ABUNDANCE',
+    rad: 'GCR DOSE (MSL/RAD-ANCHORED)',
     none: 'NASA VIKING MDIM 2.1 OPTICAL',
   };
 
@@ -62,7 +64,7 @@
   function cellValues(x, y) {
     const i = y * W + x;
     const iceRaw = L.ice[i];
-    return {
+    const out = {
       elev: META.elev.offset + L.elev[i] * META.elev.scale,
       slope: L.slope[i] * META.slope.scale,
       rough: L.rough[i] * META.rough.scale,
@@ -71,6 +73,7 @@
       dust: L.dust[i] === 0 ? null : META.dust.offset + L.dust[i] * META.dust.scale,
       lat: L.latOfRow(y), lon: L.lonOfCol(x),
     };
+    out.rad = SCORING.radDose(out.elev); return out;
   }
 
   // mean physical values over a square block (used for candidate cards)
@@ -81,7 +84,7 @@
       e += v.elev; sl += v.slope; r += v.rough; n++; if (v.ice !== null) { ic += v.ice; nIce++; }
       if (v.ti !== null) { t += v.ti; nT++; } if (v.dust !== null) { du += v.dust; nD++; }
     }
-    return { elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
+    return { rad: SCORING.radDose(e / n), elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
   }
 
   // ------------------------------------------------------------ state
@@ -90,8 +93,9 @@
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
+    sensSpread: 0.2,
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
-    crisis: { site: null, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
+    crisis: { site: null, Ls0: 190, seasonal: true, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0 },
     hover: null,
   };
 
@@ -176,10 +180,14 @@
     elev: [[0, 18, 38, 88], [0.3, 52, 118, 142], [0.5, 168, 148, 88], [0.7, 148, 78, 48], [1, 252, 252, 255]],
     ti: [[0, 115, 38, 22], [0.15, 195, 115, 38], [0.4, 75, 168, 95], [0.7, 56, 135, 215], [1, 238, 244, 255]],
     dust: [[0, 35, 55, 85], [0.5, 185, 145, 85], [1, 255, 228, 155]],
+    rad: [[0, 40, 120, 90], [0.5, 230, 200, 60], [1, 220, 40, 90]],
   };
   const LUT = {};
   for (const k in CMAP) { LUT[k] = new Uint8ClampedArray(256 * 3); for (let i = 0; i < 256; i++) { const c = lerpStops(CMAP[k], i / 255); LUT[k].set(c.map(Math.round), i * 3); } }
 
+  // elevation index -> colour index for the GCR dose overlay (190..340 mSv/yr)
+  const radLut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) radLut[i] = Math.max(0, Math.min(255, Math.round((SCORING.radDose(META.elev.offset + i * META.elev.scale) - 190) / 150 * 255)));
   function buildOverlay() {
     const d = ovImg.data, lut = LUT[S.overlay] || LUT.score;
     for (let i = 0, j = 0; i < W * H; i++, j += 4) {
@@ -194,6 +202,7 @@
       else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);
       else if (S.overlay === 'elev') v = L.elev[i];
       else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
+      else if (S.overlay === 'rad') { v = radLut[L.elev[i]]; }
       else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
       else { d[j + 3] = 0; continue; }
       d[j] = lut[v * 3]; d[j + 1] = lut[v * 3 + 1]; d[j + 2] = lut[v * 3 + 2]; d[j + 3] = a;
@@ -526,10 +535,26 @@
       SCORING.scoreMap(L, S.weights, S.hard, S.score);
       const blockPx = Math.round(2 / META.deg_per_px), sepPx = Math.round(800 / 59.3 / META.deg_per_px);
       S.candidates = SCORING.topCandidates(S.score, W, H, 5, blockPx, sepPx).map(c => ({ ...c, x: Math.round(c.x), y: Math.round(c.y), blockPx }));
+      $('#sens-result').innerHTML = '';
       ovDirty = true; renderCandidates(); if (S.selected) renderDetail(S.selected.x, S.selected.y, S.selected.cand);
       draw();
       $('#hud-coord').dataset.t = (performance.now() - t0).toFixed(0);
     });
+  }
+
+  function runSensitivity() {
+    if (!S.candidates.length) return;
+    const btn = $('#sens-run'), out = $('#sens-result');
+    btn.disabled = true; out.innerHTML = '<div class="help">Running 30 perturbed scorings…</div>';
+    setTimeout(() => {
+      const blockPx = S.candidates[0].blockPx, sepPx = Math.round(800 / 59.3 / META.deg_per_px);
+      const rob = SCORING.sensitivity(L, S.weights, S.hard, S.candidates,
+        { runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx: Math.round(400 / 59.3 / META.deg_per_px) }, SCORING.mulberry32(2026));
+      S.candidates.forEach((c, i) => { c.robust = rob[i]; });
+      const mean = rob.reduce((a, b) => a + b, 0) / rob.length;
+      out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">Weights ±${Math.round(S.sensSpread * 100)}% × 30 runs: top-5 candidates stay in the top-5 (within 400 km) in ${(mean * 100).toFixed(0)}% of runs on average. ${mean >= 0.8 ? 'Ranking is ROBUST to weight uncertainty.' : 'Ranking DEPENDS on the chosen weights — justify them.'}</div>`;
+      renderCandidates(); btn.disabled = false;
+    }, 30);
   }
 
   function critRows(v, w) {
@@ -541,9 +566,10 @@
       rough: `${v.rough.toFixed(0)} m`,
       lat: `${v.lat.toFixed(1)}°`,
       ti: v.ti === null ? 'NO DATA' : `${v.ti.toFixed(0)} tiu`,
+      rad: `${v.rad.toFixed(0)} mSv/yr`,
     };
     return SCORING.CRITERIA.map(c => {
-      const f = SCORING.F[c.key](v[c.key]);
+      const f = c.key === 'rad' ? SCORING.F.rad(v.elev) : SCORING.F[c.key](v[c.key]);
       const cls = f > 0.66 ? 'ok' : f > 0.33 ? 'warn' : 'bad';
       return `<div class="crit"><span>${c.label.split(' (')[0]}</span><div class="bar"><i style="width:${(f * 100).toFixed(0)}%;opacity:${0.35 + 0.65 * wn[c.key] / 0.5}"></i></div><span class="v ${cls}">${fmt[c.key]}</span></div>`;
     }).join('');
@@ -558,7 +584,9 @@
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
       li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">CAND-0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° REGIONAL MEAN</div>${critRows(v, S.weights)}`;
+        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · 2°×2° REGIONAL MEAN${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
+        <a class="trek" href="${trekUrl(v.lat, v.lon)}" target="_blank" rel="noopener">▸ Inspect in NASA Mars Trek (HiRISE / CTX)</a>`;
+      li.querySelector('.trek').onclick = (e) => e.stopPropagation();
       li.onclick = () => {
         select(c.x, c.y, i);
         if (S.viewMode === '3d' && globe) { globe.flyTo(v.lat, v.lon); schedule3D(); }
@@ -575,6 +603,7 @@
     const dir = (Math.abs(dlat) > Math.abs(ew) * 2 ? '' : (ew > 0 ? 'E' : 'W')); const ns = (Math.abs(ew) > Math.abs(dlat) * 2 ? '' : (dlat > 0 ? 'N' : 'S'));
     return `${ns}${dir} of ${r.name.replace(/ \(.*\)$/, '')} · ${(nr.distDeg * 59.3).toFixed(0)} km`;
   }
+  const trekUrl = (lat, lon) => `https://trek.nasa.gov/mars/#v=0.1&x=${lon.toFixed(3)}&y=${lat.toFixed(3)}&z=7&p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905&d=`;
   const fmtLat = (la) => `${Math.abs(la).toFixed(1)}°${la >= 0 ? 'N' : 'S'}`;
   const fmtLon = (lo) => `${Math.abs(lo).toFixed(1)}°${lo >= 0 ? 'E' : 'W'}`;
 
@@ -606,6 +635,7 @@
         <tr><td>SWIM Ice (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'OUTSIDE ±60°' : v.ice.toFixed(2)}</td></tr>
         <tr><td>Sub-cell Roughness (σ)</td><td>${v.rough.toFixed(0)} m</td></tr>
         <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'NO DATA' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
+        <tr><td>GCR Dose (model)</td><td>${v.rad.toFixed(0)} mSv/yr · 1 Sv in ${(1000 / v.rad).toFixed(1)} yr</td></tr>
         <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'NO DATA' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
       </table>
       <div class="row">
@@ -669,14 +699,16 @@
     if (!c.site) { $('#crisis-site').textContent = '— SELECT COORDINATE ON MAP —'; el.innerHTML = ''; return; }
     const v = cellValues(c.site.x, c.site.y), nr = nearestRegion(v.lat, v.lon);
     $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : 'NEAR ' + nr.region.name} (${fmtLat(v.lat)}, ${fmtLon(v.lon)})`;
-    const res = STORM.simulate({ lat: v.lat, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
+    const res = STORM.simulate({ lat: v.lat, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120, Ls0: c.seasonal ? c.Ls0 : null,
       storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
-    const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5), peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak);
+    const LsPeak = c.seasonal ? (c.Ls0 + 10 * STORM.LS_PER_SOL) % 360 : null;
+    const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, LsPeak), peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak, LsPeak);
     const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
     const verdict = res.blackoutSol !== null
       ? `<div class="summary-big bad">CRITICAL BLACKOUT // SOL ${res.blackoutSol}</div><div class="help">Battery reserve exhausted ${res.blackoutSol - 20} sols after storm onset. Peak-storm generation ${(peakSolar + nuc).toFixed(0)} kWh/sol vs load ${c.cons} kWh/sol.</div>`
       : `<div class="summary-big ok">NOMINAL // SURVIVES GLOBAL STORM</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
     el.innerHTML = `${verdict}
+      <div class="kv"><span>Season at storm peak</span><b>${c.seasonal ? `Ls ${LsPeak.toFixed(0)}° · ${(LsPeak < 180) === (v.lat >= 0) ? 'local spring/summer' : 'local autumn/winter'}` : 'annual mean (cos φ)'}</b></div>
       <div class="kv"><span>Clear-Sky Solar (τ = 0.5)</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
       <div class="kv"><span>Peak-Storm Solar (τ = ${c.tauPeak.toFixed(1)})</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
       <div class="kv"><span>Kilopower Fission Baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
@@ -803,6 +835,8 @@
   $('#show-regions').onchange = (e) => { S.showRegions = e.target.checked; draw(); };
   $('#show-ez').onchange = (e) => { S.showEZ = e.target.checked; draw(); };
   const bindRange = (id, fmt, cb) => { const el = $('#' + id); const upd = () => { $('#' + id + '-v').textContent = fmt(+el.value); cb(+el.value); }; el.oninput = upd; upd(); };
+  $('#sens-run').onclick = runSensitivity;
+  bindRange('sens', v => '±' + v + '%', v => { S.sensSpread = v / 100; });
   bindRange('maxslope', v => v + '°', v => { S.route.maxSlope = v; computeRoute(); });
   bindRange('kslope', v => (v / 100).toFixed(2), v => { S.route.k = v / 100; computeRoute(); });
   bindRange('speed', v => v + ' km/sol', v => { S.route.speed = v; renderRoute(); });
@@ -829,6 +863,8 @@
   bindRange('area', v => v + ' m²', v => { S.crisis.area = v; runCrisis(); });
   bindRange('cons', v => v + ' kWh/sol', v => { S.crisis.cons = v; runCrisis(); });
   bindRange('batt', v => v + ' kWh', v => { S.crisis.batt = v; runCrisis(); });
+  bindRange('ls0', v => 'Ls ' + v + '°', v => { S.crisis.Ls0 = v; runCrisis(); });
+  $('#seasonal').onchange = (e) => { S.crisis.seasonal = e.target.checked; runCrisis(); };
   bindRange('kp', v => String(v), v => { S.crisis.kp = v; runCrisis(); });
   $('#btn-about').onclick = () => $('#about').classList.remove('hidden');
   $('#about-close').onclick = () => $('#about').classList.add('hidden');
@@ -889,6 +925,7 @@
       elev: ['−8.2 KM', '+21.2 KM'],
       ti: ['0 FINE DUST', '≥700 BEDROCK'],
       dust: ['0% DUST', '100% DUST'],
+      rad: ['≤190 mSv/yr', '≥340 mSv/yr'],
     }[S.overlay];
     el.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
   }
@@ -949,7 +986,7 @@
     if (!g) { tip.classList.add('hidden'); return; }
     const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
     $('#hud-coord').textContent = `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
-    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'Near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · SCORE <b>${s.toFixed(2)}</b><br>ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}°<br>ICE ${v.ice === null ? '—' : v.ice.toFixed(2)} · ROUGH ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · DUST ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
+    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'Near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · SCORE <b>${s.toFixed(2)}</b><br>ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}°<br>RAD ${v.rad.toFixed(0)} mSv/yr<br>ICE ${v.ice === null ? '—' : v.ice.toFixed(2)} · ROUGH ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · DUST ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
     const r = canvas.getBoundingClientRect();
     const tx = Math.min(r.width - 210, e.clientX - r.left + 14);
     const ty = Math.min(r.height - 95, e.clientY - r.top + 14);

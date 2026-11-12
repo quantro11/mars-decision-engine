@@ -102,6 +102,19 @@
         <button data-band="ice15" class="active">1–5 m MID</button>
         <button data-band="ice5">&gt; 5 m DEEP</button>
       </div>
+
+      <div class="sec-head">
+        <h2>Weight Sensitivity <span class="hint">MONTE CARLO</span></h2>
+        <span class="sec-code">ROBUST</span>
+      </div>
+      <p class="help">Randomly perturbs every weight and re-ranks 30 times. Shows how often each top-5 candidate survives: is the answer a property of Mars, or of our slider choices?</p>
+      <div class="control-group">
+        <label>Weight Uncertainty <span id="sens-v">±20%</span>
+          <input type="range" id="sens" min="5" max="50" value="20">
+        </label>
+      </div>
+      <div class="row"><button id="sens-run" class="ghost">Run Robustness Test</button></div>
+      <div id="sens-result"></div>
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
@@ -143,6 +156,10 @@
       </div>
 
       <div class="control-group">
+        <label class="check"><input type="checkbox" id="seasonal" checked> <span>Seasonal insolation (obliquity + eccentricity)</span></label>
+        <label>Storm Onset Season (Ls) <span id="ls0-v">Ls 190°</span>
+          <input type="range" id="ls0" min="0" max="359" value="190">
+        </label>
         <label>Peak Optical Depth (τ) <span id="tau-v">8.0</span>
           <input type="range" id="tau" min="5" max="120" value="80">
         </label>
@@ -175,6 +192,7 @@
         <button data-ov="elev">ELEV</button>
         <button data-ov="ti">TI</button>
         <button data-ov="dust">DUST</button>
+        <button data-ov="rad">RAD</button>
         <button data-ov="none">BASE</button>
       </div>
       <label>Overlay Opacity <span id="opacity-v">45%</span>

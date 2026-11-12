@@ -67,4 +67,27 @@ assert.ok(res.blackoutSol !== null, 'solar-only base blacks out in a tau-8 storm
 const res2 = T.simulate({ lat: 20, panelArea: 1000, efficiency: 0.2, consumption: 300, capacity: 2000, kilopower: 2, sols: 120, storm: { tau0: 0.5, tauPeak: 8, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
 assert.strictEqual(res2.blackoutSol, null, 'two Kilopower units survive');
 
-console.log('All scoring / A* / storm tests passed.');
+// --- radiation: anchored on MSL/RAD at Gale (0.64 mSv/day = ~234 mSv per Earth year)
+const gale = S.radDose(-4400);
+assert.ok(Math.abs(gale / 365.25 - 0.64) < 0.02, 'Gale dose matches MSL/RAD 0.64 mSv/day');
+assert.ok(S.radDose(-7000) < gale && S.radDose(20000) > gale, 'dose falls with depth, rises with altitude');
+assert.ok(S.F.rad(-7000) > S.F.rad(1500), 'radiation criterion prefers low ground');
+
+// --- seasonal insolation
+const eqMean = (() => { let q = 0; for (let l = 0; l < 360; l++) q += T.insolationTOA(0, l); return q / 360; })();
+assert.ok(eqMean > 170 && eqMean < 195, 'equatorial Ls-mean TOA ~ 180 W/m2 (S0/pi x cos dec)');
+assert.strictEqual(T.insolationTOA(-80, 90), 0, 'southern polar night at Ls 90');
+assert.ok(T.insolationTOA(-30, 270) > T.insolationTOA(30, 270), 'perihelic southern summer is brighter');
+assert.ok(Math.abs(T.dailySolar(20, 0.5) - T.dailySolar(20, 0.5, null)) < 1e-12, 'no Ls = legacy model');
+const winter = T.simulate({ lat: -40, panelArea: 1000, efficiency: 0.2, consumption: 300, capacity: 2000, kilopower: 0, sols: 120, Ls0: 70, storm: { tau0: 0.5, tauPeak: 0.5, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
+const summer = T.simulate({ lat: -40, panelArea: 1000, efficiency: 0.2, consumption: 300, capacity: 2000, kilopower: 0, sols: 120, Ls0: 250, storm: { tau0: 0.5, tauPeak: 0.5, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } });
+assert.ok(summer.rows[60].solar > winter.rows[60].solar * 1.5, 'southern winter (Ls~92) vs perihelic summer (Ls~272) at 40S');
+
+// --- weight sensitivity
+const L2 = { ...L, slope: new Uint8Array(W * H).fill(8) };
+const out2 = S.scoreMap(L2, S.PRESETS.isru.w, true, new Float32Array(W * H));
+const ref = S.topCandidates(out2, W, H, 1, 4, 10);
+const rob = S.sensitivity(L2, S.PRESETS.isru.w, true, ref, { runs: 10, spread: 0.2, n: 1, blockPx: 4, minSepPx: 10, matchPx: 2 }, S.mulberry32(1));
+assert.strictEqual(rob[0], 1, 'strong icy patch survives every weight perturbation');
+
+console.log('All scoring / A* / storm / radiation / season / sensitivity tests passed.');
