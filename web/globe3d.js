@@ -73,15 +73,8 @@
       float dV = (hD - hU) * bumpStrength;
       vec3 pertN = normalize(N - dU * T + dV * B);
 
-      // Base MOLA/Viking shaded relief + subtle Martian regolith chromatic grading
-      vec3 baseRaw = texture2D(u_baseTex, v_uv).rgb;
-      float lum = dot(baseRaw, vec3(0.299, 0.587, 0.114));
-      vec3 marsTint = mix(
-        vec3(0.56, 0.33, 0.23) * (0.35 + 0.95 * lum),
-        vec3(0.84, 0.52, 0.36) * (0.45 + 0.75 * lum),
-        smoothstep(0.15, 0.75, v_elev)
-      );
-      vec3 baseCol = mix(baseRaw, marsTint, 0.52);
+      // Real NASA Viking Orbiter MDIM 2.1 Colorized Global Optical Mosaic
+      vec3 baseCol = texture2D(u_baseTex, v_uv).rgb;
 
       // Composite active decision/sensor overlay
       vec4 ov = texture2D(u_ovTex, v_uv);

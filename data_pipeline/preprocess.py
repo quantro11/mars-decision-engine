@@ -175,12 +175,19 @@ def main():
         r = int((90 - la) / 180 * OUT_H); c = int((lo + 180) / 360 * OUT_W)
         log(f"  check {n:8s} TI={ti[r, c]:5.0f}  dust={dust[r, c]:.2f}")
 
-    log("Basemap: shaded relief")
-    t = (elev_out - ELEV_MIN_M) / (ELEV_MAX_M - ELEV_MIN_M)
-    t = np.clip((t - 0.05) / 0.55, 0, 1) ** 0.9            # stretch so lowlands/highlands both show
-    rgb = colour_ramp(t)
-    hs = hillshade(elev_out)[..., None]
-    rgb = np.clip(rgb * (0.45 + 0.75 * hs), 0, 255).astype(np.uint8)
+    log("Basemap: real NASA Viking MDIM 2.1 optical mosaic + MOLA relief")
+    viking_path = os.path.join(RAW, "viking_mdim21_4k.jpg")
+    if os.path.exists(viking_path):
+        viking_im = Image.open(viking_path).convert("RGB").resize((OUT_W, OUT_H), Image.LANCZOS)
+        rgb = np.array(viking_im, dtype=np.float32)
+        hs = hillshade(elev_out)[..., None]
+        rgb = np.clip(rgb * (0.78 + 0.38 * hs), 0, 255).astype(np.uint8)
+    else:
+        t = (elev_out - ELEV_MIN_M) / (ELEV_MAX_M - ELEV_MIN_M)
+        t = np.clip((t - 0.05) / 0.55, 0, 1) ** 0.9
+        rgb = colour_ramp(t)
+        hs = hillshade(elev_out)[..., None]
+        rgb = np.clip(rgb * (0.45 + 0.75 * hs), 0, 255).astype(np.uint8)
 
     log("Writing PNG layers")
     data = {}

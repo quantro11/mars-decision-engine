@@ -28,7 +28,7 @@
     elev: 'MOLA MEGDR ELEVATION',
     ti: 'TES THERMAL INERTIA',
     dust: 'TES DUST ABUNDANCE',
-    none: 'MOLA SHADED RELIEF BASE',
+    none: 'NASA VIKING MDIM 2.1 OPTICAL',
   };
 
   // ------------------------------------------------------------ layer decoding
@@ -184,12 +184,17 @@
     const d = ovImg.data, lut = LUT[S.overlay] || LUT.score;
     for (let i = 0, j = 0; i < W * H; i++, j += 4) {
       let v, a = 255;
-      if (S.overlay === 'score') { const sc = S.score[i]; v = Math.round(Math.max(0, Math.min(1, (sc - 0.35) / 0.65)) * 255); a = sc <= 0 ? 175 : 255; }
-      else if (S.overlay === 'ice') { const r = L.ice[i]; if (r === 0) { v = 0; a = 60; } else v = Math.round(Math.max(0, Math.min(255, (r - 28) * 1.275))); }
+      if (S.overlay === 'score') {
+        const sc = S.score[i];
+        const norm = Math.max(0, Math.min(1, (sc - 0.35) / 0.65));
+        v = Math.round(norm * 255);
+        a = sc <= 0 ? 28 : Math.round(65 + 190 * Math.pow(norm, 0.75));
+      }
+      else if (S.overlay === 'ice') { const r = L.ice[i]; if (r === 0) { v = 0; a = 0; } else v = Math.round(Math.max(0, Math.min(255, (r - 28) * 1.275))); }
       else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);
       else if (S.overlay === 'elev') v = L.elev[i];
-      else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 60; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
-      else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 60; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
+      else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
+      else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
       else { d[j + 3] = 0; continue; }
       d[j] = lut[v * 3]; d[j + 1] = lut[v * 3 + 1]; d[j + 2] = lut[v * 3 + 2]; d[j + 3] = a;
     }
