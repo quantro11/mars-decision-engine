@@ -16,5 +16,6 @@ jobs:
       - run: node tests/scoring.test.js
       - run: node tests/ui.test.js
       - run: node tests/integrity.test.js
+      - run: pip install numpy pillow
       - run: python tests/test_pipeline.py
       - run: node tools/validate.js > /dev/null
