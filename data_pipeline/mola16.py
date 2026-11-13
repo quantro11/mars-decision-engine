@@ -105,6 +105,10 @@ def main():
     for k in ("elev", "slope", "rough", "generated_by"):
         full[k] = meta[k]
     json.dump(full, open(os.path.join(LAYERS, "meta.json"), "w", encoding="utf-8"), indent=2)
+    with open(os.path.join(LAYERS, "meta.js"), "w", encoding="utf-8") as f:
+        f.write("// Generated from layers/meta.json - layer scaling and provenance.
+window.LAYER_META = " + json.dumps(full) + ";
+")
     log("patched", os.path.abspath(js))
 
 

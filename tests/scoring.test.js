@@ -82,44 +82,57 @@ assert.ok(S.radDoseMsvYr(2000) > galeDose, 'higher elevation receives higher GCR
 assert.ok(T.dailySolar(-25, 0.5, 251) > T.dailySolar(-25, 0.5, 71), 'perihelion S. summer exceeds aphelion S. winter');
 assert.ok(T.dailySolar(35, 0.5, 90) > T.dailySolar(35, 0.5, 270), 'northern summer solstice exceeds northern winter solstice at +35N');
 
-// --- Interplanetary Survival Guide: ISRU Life-Support Water Yield & Mass Balance
-const dryIsru = S.calcISRU(-0.8, 'ice01');
-assert.strictEqual(dryIsru.yieldLitersSol, 0);
-assert.strictEqual(dryIsru.status, 'DRY');
-const richIsru = S.calcISRU(0.9, 'ice01');
-assert.ok(richIsru.yieldLitersSol >= 50, 'rich shallow ice yields >= 50 L/sol');
-assert.ok(richIsru.crewMargin > 0 && richIsru.loxKgSol > 30, 'sustains 4-crew and propellant oxygen');
-assert.strictEqual(richIsru.status, 'SURPLUS_PROPELLANT');
+// --- Ice access: SWIM consistency is classified, never turned into a litres-per-sol yield
+assert.strictEqual(S.calcIceAccess(null, 'ice15').status, 'NO_DATA');
+assert.strictEqual(S.calcIceAccess(-0.6, 'ice15').status, 'UNLIKELY');
+assert.strictEqual(S.calcIceAccess(0.2, 'ice15').status, 'POSSIBLE');
+const likely = S.calcIceAccess(0.8, 'ice01');
+assert.strictEqual(likely.status, 'LIKELY'); assert.ok(!('yieldLitersSol' in likely), 'no invented yield');
+assert.strictEqual(likely.regolithKgSol, 100, '10 L/sol at the stated 10 wt% assumption = 100 kg regolith');
 
-// --- Interplanetary Survival Guide: Thermal Life Support & Habitat Freeze-out Model
+// --- Thermal: electrical load is waste heat; heaters only cover the shortfall and are charged to the battery
 const tempEq = T.surfaceTempC(0, 251);
-assert.ok(tempEq.mean > -65 && tempEq.mean < -35, 'equatorial summer surface temp sensible');
-assert.ok(tempEq.night < -70, 'diurnal radiative drop below -70C');
-const pTherm = T.thermalDemandKw(0, 251);
-assert.ok(pTherm >= 5 && pTherm <= 15, 'habitat heating demand between 5 and 15 kW');
-// Solar-only storm base experiences habitat freeze-out when batteries die
-assert.ok(res.freezeSol !== null && res.freezeSol >= res.blackoutSol, 'habitat freezes out after blackout');
-assert.strictEqual(res2.freezeSol, null, 'Kilopower base maintains habitable thermal life support');
+assert.ok(tempEq.mean > -65 && tempEq.mean < -35, 'equatorial surface temp in the observed range');
+const lossEq = T.thermalDemandKw(0, 251);
+assert.ok(Math.abs(lossEq - 0.09 * (20 - tempEq.mean)) < 0.06, 'loss = UA x dT');
+const cold = { lat: 45, ls: 90, panelArea: 1000, efficiency: 0.2, capacity: 2000, kilopower: 0, sols: 60, storm: { tau0: 0.5, tauPeak: 0.5, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 } };
+const lowLoad = T.simulate({ ...cold, lat: -45, consumption: 50 });
+assert.ok(lowLoad.rows[30].heater > 0, 'small load in southern winter needs extra heaters');
+const highLoad = T.simulate({ ...cold, lat: -45, consumption: 400 });
+assert.strictEqual(highLoad.rows[30].heater, 0, 'a large electrical load already heats the habitat');
+assert.ok(res.freezeSol !== null && res.freezeSol >= res.blackoutSol, 'interior freezes only after power runs out');
+assert.strictEqual(res2.freezeSol, null, 'fission-powered base stays warm');
+const sim = T.simulate({ ...cold, consumption: 100, sols: 120 });
+assert.ok(sim.rows[100].dustLoss < sim.rows[10].dustLoss, 'dust accumulates even without a storm');
 
 // --- Interplanetary Survival Guide: Emergency Safe Havens on traverse
 assert.ok(Array.isArray(safe.stats.safeHavens), 'safe havens list returned');
 
-// --- Interplanetary Survival Guide: SPE Acute Radiation & Regolith Shielding
-const speUnshielded = S.calcSPE(-2000, 0);
-assert.ok(speUnshielded.unshieldedDoseMsv > 1200, 'severe unshielded SPE dose > 1200 mSv');
-assert.strictEqual(speUnshielded.survivalStatus, 'LETHAL_ACUTE');
-const speShielded = S.calcSPE(-2000, 2.0);
-assert.ok(speShielded.shieldedDoseMsv <= 100, '2.0m regolith attenuates SPE to nominal safe <= 100 mSv');
-assert.strictEqual(speShielded.survivalStatus, 'NOMINAL_SAFE');
-assert.ok(speShielded.lavaTubeMsv < 1, 'lava tube provides >99.9% radiation attenuation');
+// --- SPE: one attenuation law for atmosphere, regolith and basalt (design-basis event, labelled as assumption)
+const speLow = S.calcSPE(-6000, 0), speHigh = S.calcSPE(1500, 0);
+assert.ok(speLow.unshieldedDoseMsv < speHigh.unshieldedDoseMsv, 'thicker atmosphere shields more');
+assert.ok(speHigh.unshieldedDoseMsv < 1000, 'surface dose below the 5 g/cm2 reference');
+const spe0 = S.calcSPE(-2000, 0), spe1 = S.calcSPE(-2000, 0.1);
+assert.ok(Math.abs(spe1.shieldedDoseMsv - S.speDose(S.atmoColumnGcm2(-2000) + 15)) < 1, '0.1 m regolith = 15 g/cm2 under the same law');
+assert.ok(S.calcSPE(-2000, spe0.requiredRegolithM).shieldedDoseMsv <= 100, 'required depth actually reaches 100 mSv');
+assert.ok(spe0.lavaTubeMsv < 1e-3, '3.5 m basalt under the same law');
+assert.strictEqual(spe0.designBasis, true);
 
-// --- Interplanetary Survival Guide: Tactical Micro-Hazard Prediction (HiRISE 0.25 m/px proxy)
-const smoothMicro = S.calcMicroHazard(1.5, 12);
-assert.strictEqual(smoothMicro.tacticalGrade, 'NOMINAL_SMOOTH');
-assert.ok(smoothMicro.boulderRiskPct < 20 && !smoothMicro.trnRequired);
-const roughMicro = S.calcMicroHazard(18.0, 180);
-assert.strictEqual(roughMicro.tacticalGrade, 'HIGH_HAZARD');
-assert.ok(roughMicro.boulderRiskPct >= 50 && roughMicro.trnRequired);
+// --- Terrain class: regional only, no boulder percentages
+const smooth = S.calcTerrainClass(1.5, 12), rugged = S.calcTerrainClass(18, 180);
+assert.strictEqual(smooth.terrainClass, 'SMOOTH'); assert.strictEqual(rugged.terrainClass, 'RUGGED');
+assert.ok(!('boulderRiskPct' in smooth) && /HiRISE/.test(smooth.recommendation));
+
+// --- Aggregation: geometric mean removes compensation; candidate blocks cannot hide vetoed ground
+const steepIcy = { elev: -3000, slope: 14.5, ice: 1, rough: 10, lat: 10, ti: 250 };
+const wIsru = S.normalize(S.PRESETS.isru.w);
+const Lone = { width: 1, height: 1, meta, latOfRow: () => 10, lonOfCol: () => 0,
+  elev: Uint8Array.of(Math.round((-3000 + 8200) / 115.4)), slope: Uint8Array.of(Math.round(14.5 / 0.125)), rough: Uint8Array.of(3), ice: Uint8Array.of(228), ti: Uint8Array.of(62) };
+const sumScore = S.scoreMap(Lone, S.PRESETS.isru.w, false, new Float32Array(1))[0];
+const geoScore = S.scoreMap(Lone, S.PRESETS.isru.w, false, new Float32Array(1), 'geo')[0];
+assert.ok(geoScore < sumScore - 0.1, 'unsafe slope is not bought back by ice under geometric mean');
+const blk = new Float32Array(16 * 16).fill(0.9); for (let i = 0; i < 16 * 8; i++) blk[i] = 0;   // half vetoed
+assert.strictEqual(S.topCandidates(blk, 16, 16, 1, 16, 4).length, 0, 'half-vetoed block is not a candidate');
 
 // --- Live Planetary APIs & Earth vs Mars Habitability Baseline
 const Live = require('../web/live_api.js').LIVE_API;
@@ -147,5 +160,5 @@ assert.ok(CH.crisisSVG([{ batt: 100, tau: 1 }, { batt: 50, tau: 8 }], 100).inclu
   assert.strictEqual(arch.mode, 'archive'); assert.strictEqual(arch.data.sol, 675); assert.strictEqual(arch.data.pressure_pa, 750);
   const live = await Live.fetchSpaceWeather('k', ok([{ activityID: 'A', startTime: '2026-11-01T00:00Z' }, { activityID: 'B', startTime: '2026-11-05T00:00Z' }]));
   assert.strictEqual(live.mode, 'live'); assert.strictEqual(live.events[0].id, 'B', 'newest CME first');
-  console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal / SPE / micro-hazard / live-API / data-honesty tests passed.');
+  console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation / live-API / data-honesty tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

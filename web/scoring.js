@@ -26,70 +26,53 @@
   }
   const radDoseMsvYr = radDose;
 
-  // NASA ECLSS & ISRU Mass Balance Model (Interplanetary Survival Guide)
-  // Human metabolic life-support consumption (4-crew baseline):
-  // ~10.0 L/sol potable water (drinking + food rehydration + hygiene with 85% urine processor recovery).
-  // Stoichiometric water electrolysis produces 0.888 kg O2 per liter of H2O.
-  // Sabatier propellant production (CH4 / LOX return fuel) requires >= 25 L/sol water extraction.
-  function calcISRU(c, depthBand) {
-    if (c === null || c < -0.2) {
-      return { yieldLitersSol: 0, crewMargin: -10, loxKgSol: 0, status: 'DRY', label: 'Arid / No Extractable Ice' };
-    }
-    const cNorm = Math.max(0, Math.min(1, (c + 1) / 2));
-    const depthFactor = depthBand === 'ice01' ? 1.0 : depthBand === 'ice15' ? 0.65 : 0.35;
-    // Standard 5 kWe thermal-drill / sublimator ISRU pilot unit:
-    const yieldLitersSol = Math.round(cNorm * depthFactor * 68.0 * 10) / 10;
-    const crewDemand = 10.0;
-    const crewMargin = Math.round((yieldLitersSol - crewDemand) * 10) / 10;
-    const loxKgSol = Math.round(yieldLitersSol * 0.888 * 10) / 10;
-    let status = 'DEFICIT', label = 'Sub-critical Yield';
-    if (crewMargin >= 25) {
-      status = 'SURPLUS_PROPELLANT';
-      label = 'Full Crew & Propellant ISRU';
-    } else if (crewMargin >= 0) {
-      status = 'CREW_SUSTAINED';
-      label = 'Sustains 4-Crew Life Support';
-    }
-    return { yieldLitersSol, crewMargin, loxKgSol, status, label };
+  // ---------------------------------------------------------------- Ice access (replaces the old "ISRU yield")
+  // SWIM 2.0 "consistency" (-1..1) measures how strongly five independent datasets AGREE that ice is present
+  // (Morgan et al. 2021, Nat. Astron. 5). It does NOT measure ice concentration, purity or extraction yield,
+  // so no litres-per-sol number is derived from it. Classes use our thresholds: >= 0.5 likely, >= 0 possible.
+  // The excavation figure is an explicit ASSUMPTION the user can see: ice-cemented regolith at ICE_WT_ASSUMED.
+  const ICE_WT_ASSUMED = 0.10;          // 10 wt% water ice in regolith (assumption, not data)
+  const CREW_WATER_L_SOL = 10;          // 4 crew, recycled ECLSS make-up water per sol (assumption)
+  function calcIceAccess(c, depthBand) {
+    const depth = depthBand === 'ice01' ? '0-1 m' : depthBand === 'ice15' ? '1-5 m' : '> 5 m';
+    if (c === null || c === undefined) return { status: 'NO_DATA', label: 'Outside SWIM coverage', depth, consistency: null, regolithKgSol: null };
+    const status = c >= 0.5 ? 'LIKELY' : c >= 0 ? 'POSSIBLE' : 'UNLIKELY';
+    const label = { LIKELY: 'Ice likely (datasets agree)', POSSIBLE: 'Ice possible (mixed evidence)', UNLIKELY: 'Ice unlikely' }[status];
+    // kg of regolith to excavate per sol for the crew make-up water IF the assumed concentration holds
+    const regolithKgSol = status === 'UNLIKELY' ? null : Math.round(CREW_WATER_L_SOL / ICE_WT_ASSUMED);
+    return { status, label, depth, consistency: c, regolithKgSol, assumption: `${ICE_WT_ASSUMED * 100}% ice by mass, ${CREW_WATER_L_SOL} L/sol crew make-up water` };
   }
 
-  // NASA Solar Particle Event (SPE) Acute Radiation Crisis & Regolith Trench Shielding
-  // A major Coronal Mass Ejection (CME) / SPE event delivers 1200-2000 mSv acute unshielded surface dose over 48 hours.
-  // NASA 30-day career/acute astronaut limit is 250 mSv; the ALARA target to prevent acute radiation sickness is <= 100 mSv.
-  // Regolith density rho ~ 1.5 g/cm3, effective nuclear attenuation length lambda ~ 36.0 g/cm2 (mean free path ~ 0.24 m).
+  // ---------------------------------------------------------------- Solar particle event (SPE) shielding
+  // One attenuation law for every shield (atmosphere, regolith, basalt): D = D_REF * exp(-(sigma - SIGMA_REF) / LAMBDA_SPE).
+  // D_REF is a DESIGN-BASIS ASSUMPTION (an August-1972-class event, ~1 Sv behind 5 g/cm2), not a forecast.
+  // LAMBDA_SPE = 15 g/cm2 reflects the soft proton spectrum of SPEs (much shorter than for GCR).
+  // For scale: the largest SPE measured on the Martian surface so far (Sept 2017, MSL/RAD) added ~0.4 mGy (Guo et al. 2018, GRL 45).
+  const SPE_D_REF = 1000, SPE_SIGMA_REF = 5, LAMBDA_SPE = 15;
+  const RHO_REGOLITH = 1.5, RHO_BASALT = 2.9;    // g/cm3
+  function speDose(sigma) { return SPE_D_REF * Math.exp(-(sigma - SPE_SIGMA_REF) / LAMBDA_SPE); }
   function calcSPE(elev_m, regolithCoverMeters) {
-    const sigma = atmoColumnGcm2(elev_m); // g/cm2
-    // Partial atmospheric column shielding for primary protons & secondary neutrons:
-    const unshieldedDoseMsv = Math.round(1850 * Math.exp(-sigma / 85.0));
-    const cover = Math.max(0, regolithCoverMeters || 0);
-    // Exponential attenuation through Martian regolith trench / sandbags:
-    const shieldedDoseMsv = Math.round(unshieldedDoseMsv * Math.exp(-cover / 0.24));
-    // Safe depth required to bring acute dose below 100 mSv target:
-    const requiredRegolithM = Math.max(0.4, Math.round(0.24 * Math.log(unshieldedDoseMsv / 100) * 10) / 10);
-    const lavaTubeMsv = Math.round(unshieldedDoseMsv * Math.exp(-3.5 / 0.15)); // >=3.5m basalt cave ceiling -> <0.5 mSv
-    let survivalStatus = 'LETHAL_ACUTE';
-    if (shieldedDoseMsv <= 100) survivalStatus = 'NOMINAL_SAFE';
-    else if (shieldedDoseMsv <= 250) survivalStatus = 'MARGINAL_EXPOSURE';
-    return { unshieldedDoseMsv, shieldedDoseMsv, requiredRegolithM, survivalStatus, lavaTubeMsv };
+    const atm = atmoColumnGcm2(elev_m), cover = Math.max(0, regolithCoverMeters || 0);
+    const unshieldedDoseMsv = Math.round(speDose(atm));
+    const shieldedDoseMsv = Math.round(speDose(atm + cover * 100 * RHO_REGOLITH));
+    const need = LAMBDA_SPE * Math.log(Math.max(1, unshieldedDoseMsv / 100)) / (100 * RHO_REGOLITH);   // metres for <= 100 mSv
+    const requiredRegolithM = Math.ceil(need * 20) / 20;
+    const lavaTubeMsv = +speDose(atm + 3.5 * 100 * RHO_BASALT).toExponential(1);
+    const survivalStatus = shieldedDoseMsv <= 100 ? 'WITHIN_100_MSV' : shieldedDoseMsv <= 250 ? 'ABOVE_100_MSV' : 'ABOVE_250_MSV';
+    return { unshieldedDoseMsv, shieldedDoseMsv, requiredRegolithM, survivalStatus, lavaTubeMsv, designBasis: true };
   }
 
-  // Tactical Sub-Meter Landing Hazard Prediction (HiRISE 0.25 m/px Bounding Box Proxy)
-  // Bridges 10.4 km regional MOLA grid to 100 m tactical landing ellipse certification
-  function calcMicroHazard(slope_deg, rough_m) {
+  // ---------------------------------------------------------------- Regional terrain class (replaces "boulder risk %")
+  // MOLA at ~2.3 km cannot see boulders. This only classifies regional relief using the same thresholds as the
+  // slope / roughness criteria; certifying a landing ellipse always needs HiRISE imagery and rock-abundance data.
+  function calcTerrainClass(slope_deg, rough_m) {
     const s = Math.max(0, slope_deg), r = Math.max(0, rough_m);
-    // Sub-cell boulder (>1 m) & localized scarp frequency model:
-    const boulderRiskPct = Math.min(95, Math.max(4, Math.round((r / 250 * 55 + s / 15 * 45))));
-    const trnRequired = boulderRiskPct >= 20; // Requires active Terrain Relative Navigation & hazard avoidance
-    let tacticalGrade = 'NOMINAL_SMOOTH';
-    let recommendation = 'Low boulder probability; nominal for direct unguided touchdown.';
-    if (boulderRiskPct >= 50) {
-      tacticalGrade = 'HIGH_HAZARD';
-      recommendation = 'Heavy rock concentration / escarpments; requires 0.25 m/px HiRISE validation & active TRN divert.';
-    } else if (boulderRiskPct >= 20) {
-      tacticalGrade = 'CAUTION_ROUGH';
-      recommendation = 'Moderate relief; requires HiRISE DTM slopes and automated hazard avoidance.';
-    }
-    return { boulderRiskPct, trnRequired, tacticalGrade, recommendation };
+    const terrainClass = s <= 5 && r <= 30 ? 'SMOOTH' : s <= 10 && r <= 100 ? 'MODERATE' : 'RUGGED';
+    return {
+      terrainClass,
+      label: { SMOOTH: 'Smooth regional relief', MODERATE: 'Moderate regional relief', RUGGED: 'Rugged regional relief' }[terrainClass],
+      recommendation: 'Regional class from MOLA only. Boulders and small craters are not resolved: check HiRISE / CTX before selecting an ellipse.',
+    };
   }
 
   const F = {
@@ -145,29 +128,33 @@
 
   // Full-map scoring. layers: {elev, slope, rough, ice: Float32Array|null-coded, lat: Float32Array (per row)}
   // Writes into out (Float32Array of width*height). Returns out.
-  function scoreMap(L, weights, hard, out) {
-    const w = normalize(weights);
+  // mode 'sum' (default): S = sum w_i f_i  - criteria can compensate each other.
+  // mode 'geo': S = prod f_i^w_i (weighted geometric mean, f floored at 0.01) - a near-zero criterion drags the
+  //             whole score down, so excellent ice cannot buy back unsafe slopes.
+  function scoreMap(L, weights, hard, out, mode) {
+    const w = normalize(weights), geo = mode === 'geo';
+    const ln = (f) => Math.log(Math.max(0.01, f));
     const { width, height } = L;
     const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256), ft = new Float32Array(256);
     for (let i = 0; i < 256; i++) {
       const h = L.meta.elev.offset + i * L.meta.elev.scale;
-      fe[i] = w.elev * F.elev(h) + w.rad * F.rad(h);
-      fs[i] = F.slope(i * L.meta.slope.scale);
-      fr[i] = F.rough(i * L.meta.rough.scale);
-      fi[i] = i === 0 ? 0 : F.ice(L.meta.ice.offset + i * L.meta.ice.scale);
-      ft[i] = i === 0 ? F.ti(null) : F.ti(i * L.meta.ti.scale);
+      const fsv = F.slope(i * L.meta.slope.scale), frv = F.rough(i * L.meta.rough.scale);
+      const fiv = i === 0 ? 0 : F.ice(L.meta.ice.offset + i * L.meta.ice.scale), ftv = i === 0 ? F.ti(null) : F.ti(i * L.meta.ti.scale);
+      if (geo) { fe[i] = w.elev * ln(F.elev(h)) + w.rad * ln(F.rad(h)); fs[i] = w.slope * ln(fsv); fr[i] = w.rough * ln(frv); fi[i] = w.ice * ln(fiv); ft[i] = w.ti * ln(ftv); }
+      else { fe[i] = w.elev * F.elev(h) + w.rad * F.rad(h); fs[i] = w.slope * fsv; fr[i] = w.rough * frv; fi[i] = w.ice * fiv; ft[i] = w.ti * ftv; }
     }
     const elevHardIdx = (HARD.elevMax - L.meta.elev.offset) / L.meta.elev.scale;
     const slopeHardIdx = HARD.slopeMax / L.meta.slope.scale;
     for (let y = 0; y < height; y++) {
       const lat = L.latOfRow(y), row = y * width;
       if (hard && Math.abs(lat) > HARD.latMax) { out.fill(0, row, row + width); continue; }
-      const fl = F.lat(lat) * w.lat;
+      const fl = geo ? w.lat * ln(F.lat(lat)) : F.lat(lat) * w.lat;
       for (let x = 0; x < width; x++) {
         const i = row + x;
         const e = L.elev[i], s = L.slope[i];
         if (hard && (e > elevHardIdx || s > slopeHardIdx)) { out[i] = 0; continue; }
-        out[i] = fe[e] + w.slope * fs[s] + w.ice * fi[L.ice[i]] + w.rough * fr[L.rough[i]] + w.ti * ft[L.ti[i]] + fl;
+        const t = fe[e] + fs[s] + fi[L.ice[i]] + fr[L.rough[i]] + ft[L.ti[i]] + fl;
+        out[i] = geo ? Math.exp(t) : t;
       }
     }
     return out;
@@ -179,12 +166,14 @@
     const bw = Math.floor(width / blockPx), bh = Math.floor(height / blockPx);
     const blocks = [];
     for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
-      let sum = 0;
+      let sum = 0, valid = 0;
       for (let y = 0; y < blockPx; y++) {
         const row = (by * blockPx + y) * width + bx * blockPx;
-        for (let x = 0; x < blockPx; x++) sum += score[row + x];
+        for (let x = 0; x < blockPx; x++) { const v = score[row + x]; sum += v; if (v > 0) valid++; }
       }
-      blocks.push({ bx, by, s: sum / (blockPx * blockPx) });
+      const validFrac = valid / (blockPx * blockPx);
+      // a block is a candidate only if >= 75 % of its cells pass the hard constraints (a mean must not hide vetoed ground)
+      if (validFrac >= 0.75) blocks.push({ bx, by, s: sum / (blockPx * blockPx), validFrac });
     }
     blocks.sort((a, b) => b.s - a.s);
     const picked = [];
@@ -200,7 +189,7 @@
       if (picked.length >= n) break;
     }
     return picked.map(b => ({
-      x: b.bx * blockPx + blockPx / 2, y: b.by * blockPx + blockPx / 2, score: b.s,
+      x: b.bx * blockPx + blockPx / 2, y: b.by * blockPx + blockPx / 2, score: b.s, validFrac: b.validFrac,
     }));
   }
 
@@ -212,7 +201,7 @@
     for (let r = 0; r < runs; r++) {
       const w = {};
       for (const k in weights) w[k] = weights[k] * (1 - spread + 2 * spread * rng());
-      scoreMap(L, w, hard, buf);
+      scoreMap(L, w, hard, buf, o.mode);
       const top = topCandidates(buf, L.width, L.height, o.n || 5, o.blockPx, o.minSepPx);
       ref.forEach((c, i) => {
         if (top.some(t => { let dx = Math.abs(t.x - c.x); dx = Math.min(dx, L.width - dx); return Math.hypot(dx, t.y - c.y) <= o.matchPx; })) keep[i]++;
@@ -223,5 +212,5 @@
 
   function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcISRU, calcSPE, calcMicroHazard, sensitivity, mulberry32 };
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcIceAccess, calcSPE, speDose, calcTerrainClass, sensitivity, mulberry32 };
 })(typeof window !== 'undefined' ? window : module.exports);

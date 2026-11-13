@@ -60,7 +60,8 @@
     return 'N. Winter / S. Summer Solstice';
   }
 
-  // Empirical Martian surface temperature model (Viking / MSL Curiosity / InSight calibrated):
+  // Rough empirical surface-temperature approximation (order-of-magnitude, NOT a calibrated climate model):
+  // equatorial diurnal mean ~ -50 C (Viking / REMS / InSight range), colder with latitude, +-seasonal terms.
   // Returns { mean, night, day } surface temperatures in Celsius as a function of latitude and season (Ls).
   function surfaceTempC(lat, ls) {
     const phi = Math.abs(lat) * DEG;
@@ -77,12 +78,13 @@
     return { mean: Math.round(mean * 10) / 10, night: Math.round(night * 10) / 10, day: Math.round(day * 10) / 10 };
   }
 
-  // Habitat Thermal Life Support Model (NASA Human Exploration Architecture baseline):
-  // Envelope area ~220 m2, aerogel MLI insulation UA ~ 90 W/K, plus 2.2 kWe battery/avionics thermal heaters.
+  // Habitat heat loss: UA = 90 W/K (~220 m2 envelope, U ~ 0.4 W/m2K; assumption) to reach +20 C inside.
+  // All electrical power used inside the habitat ends up as heat, so heaters only cover the shortfall
+  // (see simulate: heater energy = max(0, loss - electrical load)).
+  const UA_KW_PER_K = 0.090;
   function thermalDemandKw(lat, ls) {
     const t = surfaceTempC(lat, ls);
-    const deltaT = Math.max(0, 20.0 - t.mean); // Target interior comfort: +20 C
-    return Math.round((2.2 + 0.090 * deltaT) * 10) / 10;
+    return Math.round(UA_KW_PER_K * Math.max(0, 20.0 - t.mean) * 10) / 10;
   }
 
   function tauAt(sol, s) {
@@ -109,35 +111,35 @@
       const tau = tauAt(sol, cfg.storm);
       const lsSol = (ls0 === undefined || ls0 === null) ? null : (ls0 + sol * LS_PER_SOL + 360) % 360;
       const sTemp = surfaceTempC(cfg.lat, lsSol);
-      const pThermKw = thermalDemandKw(cfg.lat, lsSol);
-      const eThermKwh = pThermKw * SOL_H;
+      const lossKwh = thermalDemandKw(cfg.lat, lsSol) * SOL_H;
+      // Electrical load is dissipated inside the habitat; heaters only make up the remainder.
+      const heaterKwh = Math.max(0, lossKwh - cfg.consumption);
 
-      // Dust accumulation penalty (0.2% per sol during active storm unless cleaned)
-      if (!dustCleaning && sol >= cfg.storm.startSol && tau > cfg.storm.tau0) {
-        dustLoss = Math.max(0.35, dustLoss - 0.002);
-      }
+      // Dust deposition on panels: ~0.28 %/sol (MER Opportunity average), 3x during a storm; no cleaning
+      // events are modelled unless dustCleaning (then panels are kept clean). Floor at 35 % of clean output.
+      if (!dustCleaning) dustLoss = Math.max(0.35, dustLoss - (tau > cfg.storm.tau0 ? 0.0084 : 0.0028));
 
       const solar = cfg.panelArea * cfg.efficiency * dailySolar(cfg.lat, tau, lsSol) * dustLoss;
       const nuclear = cfg.kilopower * KILOPOWER_KW * SOL_H;
       const totalGen = solar + nuclear;
-      const net = totalGen - cfg.consumption;
+      const load = cfg.consumption + heaterKwh;
+      const net = totalGen - load;
 
       batt = Math.max(0, Math.min(cfg.capacity, batt + net));
       if (batt <= 0 && blackoutSol === null) blackoutSol = sol;
       minBatt = Math.min(minBatt, batt);
 
-      // Thermal Life-Support interior dynamics:
-      // If power is blacked out, hab cools toward ambient with ~1.5 sol thermal inertia
-      if (batt <= 0 && totalGen < eThermKwh) {
-        habTemp = sTemp.mean + (habTemp - sTemp.mean) * Math.exp(-1.0 / 1.5);
-      } else {
-        habTemp = Math.min(20.0, habTemp + 5.0); // Heating restores comfort
-      }
+      // Heat actually delivered this sol: everything generated (or drawn from battery) up to the loss.
+      const delivered = batt > 0 ? lossKwh : Math.min(lossKwh, totalGen);
+      const deficitFrac = lossKwh > 0 ? 1 - delivered / lossKwh : 0;
+      // Interior relaxes toward ambient in proportion to the heat deficit (1.5-sol time constant), recovers likewise.
+      const target = 20.0 - deficitFrac * (20.0 - sTemp.mean);
+      habTemp = target + (habTemp - target) * Math.exp(-1.0 / 1.5);
       minHabTemp = Math.min(minHabTemp, habTemp);
       if (habTemp <= 0.0 && freezeSol === null) freezeSol = sol;
 
       rows.push({
-        sol, tau, solar, nuclear, net, batt, habTemp: Math.round(habTemp * 10) / 10,
+        sol, tau, solar, nuclear, heater: heaterKwh, net, batt, habTemp: Math.round(habTemp * 10) / 10,
         tempMean: sTemp.mean, tempNight: sTemp.night, dustLoss, ls: lsSol, Ls: lsSol
       });
     }

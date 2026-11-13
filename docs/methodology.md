@@ -36,18 +36,28 @@ Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m v
 
 ## 4. Aggregation
 
-`S = Σ wᵢ fᵢ`, weights normalised to Σ w = 1.
-Hard constraints (toggle): `h > +2000 m`, `s > 15°`, `|φ| > 50°` ⇒ `S = 0`.
+Two modes (UI toggle "No compensation"):
 
-Presets (elev / slope / ice / rough / lat / thermal inertia / rad):
+* **Weighted sum** (default): `S = Σ wᵢ fᵢ`, weights normalised to Σ w = 1. Criteria compensate each other.
+* **Weighted geometric mean**: `S = Π fᵢ^wᵢ` (each `fᵢ` floored at 0.01). One near-zero criterion pulls the whole score down,
+  so for example abundant ice cannot buy back an unsafe slope. Recommended when checking whether a candidate is acceptable on *every* axis.
+
+Hard constraints (toggle): `h > +2000 m`, `s > 15°`, `|φ| > 50°` ⇒ `S = 0`.
+The 15° veto is the traverse limit; the 5° landing limit is reported per candidate (share of cells ≤ 5°, §5).
+
+Presets (elev / slope / ice / rough / lat / thermal inertia / radiation):
 
 * Landing safety 0.25 / 0.25 / 0.05 / 0.15 / 0.10 / 0.15 / 0.05
 * ISRU / sustainability 0.10 / 0.15 / 0.40 / 0.10 / 0.10 / 0.10 / 0.05
 * Balanced crewed mission 0.15 / 0.20 / 0.25 / 0.10 / 0.10 / 0.15 / 0.05
 
+Radiation is derived from elevation (§9), so "low ground" is rewarded twice for different reasons (EDL margin and crew dose); its weight is kept at 5 %.
+
 ## 5. Candidate extraction & Monte Carlo sensitivity
 
-Mean score per 2° × 2° block (11 × 11 px); greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer (within 6°; otherwise compass-sector offset from nearest region). Cards show block means, Mars Trek HiRISE/CTX inspection links, and `ROBUST %` confidence scores.
+Mean score per 2° × 2° block (11 × 11 px). A block is only eligible if **≥ 75 % of its cells pass the hard constraints**, so a high mean cannot hide vetoed ground.
+Greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer.
+Each card shows the block mean, the **share of cells whose 90th-percentile slope is ≤ 5°** (the landing limit), and the ice-access class (§8).
 
 For robustness testing (`sensitivity`), every weight is perturbed independently by a uniform factor in `[1 − spread, 1 + spread]` (default ±20%) across 30 deterministic PRNG runs (`mulberry32`), reporting the fraction of runs where each Top-5 candidate remains in the Top-5 (within 400 km).
 
@@ -67,32 +77,31 @@ Reported: distance, max / mean slope, km on > 10° terrain, km across low-TI dus
 **Emergency Safe Havens along Traverse:**
 For crew survival during multi-sol traverses, the pathfinder identifies natural encampment shelters where slope $\le 4.0^\circ$, sub-cell roughness $\le 35\text{ m}$, and firm bearing capacity ($I \ge 160\text{ tiu}$) provide safe parking and topography protection against localized dust winds.
 
-## 7. Dust-storm, Thermal Life Support & ECLSS Energy Model
+## 7. Dust-storm, habitat heating & energy model
 
 ```
-E_solar(kWh/sol) = A · η · 3.0 · S_season(φ, Ls) · exp(−0.35 (τ − 0.5)) · (1 − f_dust)
-E_nuclear        = n_Kilopower · 10 kW · 24.66 h
-battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption, 0, capacity)
+E_solar(kWh/sol) = A · η · 3.0 · S_season(φ, Ls) · exp(−0.35 (τ − 0.5)) · dust(t)
+E_nuclear        = n · 10 kW · 24.66 h
+loss(kWh/sol)    = UA · max(0, 20 °C − T_mean(φ, Ls)) · 24.66 h        UA = 0.09 kW/K (assumption)
+heater           = max(0, loss − consumption)                         electrical load is dissipated as heat inside
+battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption − heater, 0, capacity)
 ```
 
-* 3.0 kWh/m²/sol: clear-sky equatorial daily insolation (Appelbaum & Flood, *Solar radiation on Mars*, NASA TM-102299, 1989).
-* `S_season(φ, Ls)` models Mars's axial obliquity ($\varepsilon = 25.19^\circ$, solar declination $\sin\delta = \sin\varepsilon\sin L_s$) and orbital eccentricity ($e = 0.0934$, perihelion at $L_s = 251^\circ$) via the diurnal insolation integral. When $L_s$ is omitted, it reduces to $\cos\phi$.
-* `exp(−0.35 (τ − 0.5))` is an **empirical** attenuation normalised to a typical clear sky (τ = 0.5) and fitted so that τ ≈ 10.8 yields ≈ 3 % of clear-sky output, matching Opportunity's drop from ≈ 650 to ≈ 22 Wh/sol in June 2018.
-* **Post-Storm Permanent Dust Fallout:** During active storms, atmospheric dust settles on horizontal arrays at $\approx 0.2\%\text{ per sol}$ (MER Opportunity and InSight radiometer calibrated), causing permanent degradation unless active cleaning mechanisms (electrostatic or mechanical wipers) are deployed.
-* **Thermal Life-Support & Habitat Freeze-out:** Mars nocturnal temperatures plummet to $-70^\circ\text{C}$ to $-125^\circ\text{C}$. Pressurized habitat insulation ($UA \approx 90\text{ W/K}$) and battery warmers require continuous thermal baseline heating:
-  $$P_{\text{thermal}}(\text{kWe}) = 2.2 + 0.090 \cdot \max(0, 20^\circ\text{C} - T_{\text{mean}})$$
-  When base power blacks out, habitat interior cools toward ambient ($\tau_{\text{thermal}} \approx 1.5\text{ sols}$). The engine detects and reports the exact `Freeze-out Sol` when interior temperatures drop below $0^\circ\text{C}$.
-* Kilopower: 10 kWe fission unit (NASA KRUSTY test 2018).
+* 3.0 kWh/m²/sol: clear-sky equatorial daily insolation (Appelbaum & Flood, NASA TM-102299, 1989).
+* `S_season(φ, Ls)`: daily-mean top-of-atmosphere insolation with obliquity 25.19° and eccentricity 0.0934 (perihelion Ls 251°), normalised to the equatorial annual mean; reduces to `cos φ` when Ls is omitted.
+* `exp(−0.35 (τ − 0.5))`: empirical, fitted so τ ≈ 10.8 gives ≈ 3 % of clear-sky output (Opportunity, June 2018: ≈ 650 → ≈ 22 Wh/sol).
+* **Panel dust:** output decreases by 0.28 %/sol (order of the MER Opportunity average) and 3× that while τ is elevated, floor 35 %. Wind cleaning events are **not** modelled (conservative); a "dust cleaning" option keeps panels clean.
+* **Heating:** the heat loss is charged to the energy budget only beyond what the electrical load already dissipates. When generation plus battery cannot cover the loss, the interior relaxes toward the ambient mean in proportion to the heat deficit (1.5-sol time constant) and recovers the same way. "Below 0 °C" is reported.
+* `T_mean(φ, Ls)` is a rough empirical approximation (equatorial diurnal mean ≈ −50 °C, colder with latitude, seasonal terms), not a climate model.
+* **Fission power:** 10 kWe is the *design target* of NASA's Kilopower / Fission Surface Power concept. The 2018 KRUSTY ground test demonstrated a ~1 kWe prototype; 10 kWe units have not flown.
 
-## 8. ISRU Life-Support Water Yield & Mass Balance
+## 8. Ice access (replaces an earlier "ISRU yield" estimate)
 
-```
-Yield(H₂O L/sol) = c_norm · DepthFactor · 68.0 L/sol   (5 kWe thermal-drill baseline)
-O₂ Production     = Yield · 0.888 kg O₂/L              (stoichiometric electrolysis)
-Crew Margin       = Yield − 10.0 L/sol                (4-crew metabolic demand with 85% ECLSS recovery)
-```
+SWIM 2.0 *consistency* (−1…1) expresses how strongly five independent datasets agree that ice is present (Morgan et al. 2021, *Nature Astronomy* 5).
+It does **not** measure ice concentration, purity or extractable yield, so the engine does not convert it into litres per sol.
 
-* Evaluates viability for human survival and Mars Ascent Vehicle (MAV) Sabatier propellant production (requiring $\ge 25\text{ L/sol}$ net surplus).
+* Classes (our thresholds): consistency ≥ 0.5 → *likely*, ≥ 0 → *possible*, < 0 → *unlikely*, outside ±60° → *no data*; reported for the selected depth band.
+* Excavation figure, shown with its assumption: **if** the ground were ice-cemented regolith at 10 wt % water, 10 L/sol of crew make-up water needs ≈ 100 kg of regolith per sol. Both numbers are assumptions, not data.
 
 ## 9. Atmospheric column & GCR surface radiation model
 
@@ -104,42 +113,49 @@ D_GCR(h)   = 0.64 · exp(−(Σ(h) − 24.6) / 60) · 365.25   [mSv/yr]
 * Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4400\text{ m}$, $\Sigma \approx 24.4\text{ g/cm}^2 \Rightarrow 0.64\text{ mSv/day} \approx 234\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $0.64 \pm 0.12\text{ mSv/day}$).
 * Because surface cosmic-ray protection answers a distinct crew life-support question beyond atmospheric EDL braking, `rad` is exposed both as a suitability criterion slider (0.05 preset weight), a dedicated global map layer (`Radiation`), and explicit column/dose telemetry in the site inspector and Mission Brief.
 
-## 10. Solar Particle Event (SPE) Acute Radiation & Regolith Shielding
+## 10. Solar particle event (SPE) shielding — design-basis assumption
+
+One attenuation law is used for every shield (atmosphere, regolith, basalt):
 
 ```
-D_unshielded(mSv) = 1850 · exp(−Σ(h) / 85.0)
-D_shielded(mSv)   = D_unshielded · exp(−d_regolith / 0.24)
-d_safe(m)         = 0.24 · ln(D_unshielded / 100)
+D(σ) = D_ref · exp(−(σ − σ_ref) / λ)      D_ref = 1000 mSv at σ_ref = 5 g/cm²,  λ = 15 g/cm²
+σ = atmospheric column (§9) + regolith depth · 1.5 g/cm³ (+ basalt 2.9 g/cm³ for a lava-tube ceiling)
 ```
 
-* Severe Coronal Mass Ejection (CME) / SPE events deliver $1200\text{--}1850\text{ mSv}$ acute unshielded surface dose over 48 hours, causing acute radiation sickness.
-* With Martian regolith density $\rho \approx 1.5\text{ g/cm}^3$ and nuclear attenuation length $\lambda \approx 36.0\text{ g/cm}^2$ (mean free path $\approx 0.24\text{ m}$), safe human survival below the NASA $100\text{ mSv}$ threshold requires **$2.0\text{ to } 2.4\text{ meters}$ of regolith sandbag/trench cover**, or deep volcanic lava tube shelter ($>3.5\text{ m}$ basalt ceiling yields $<0.5\text{ mSv}$).
+* `D_ref` represents an **assumed** August-1972-class event behind thin spacecraft shielding; it is a planning scenario, not a forecast.
+  For scale, the largest SPE measured on the Martian surface so far (September 2017, MSL/RAD) added only ≈ 0.4 mGy (Guo et al. 2018, *GRL* 45).
+* `λ = 15 g/cm²` reflects the soft proton spectrum of SPEs (GCR, by contrast, needs ≈ 60 g/cm², §9).
+* Outputs: surface dose with the local atmosphere, dose under the selected regolith cover, and the depth that brings it to ≤ 100 mSv.
 
-## 11. Tactical Micro-Hazard Prediction (HiRISE 0.25 m/px Proxy)
+## 11. Regional terrain class (replaces an earlier "boulder risk %")
 
-```
-P_boulder(%) = clamp(round(r / 250 · 55 + s / 15 · 45), 4, 95)
-```
+MOLA at 2.3 km cannot resolve boulders or small craters, and no rock-abundance data is used, so the engine gives only a regional relief class
+from the same slope / roughness values used in scoring: *smooth* (90th-pct slope ≤ 5° and σ ≤ 30 m), *moderate* (≤ 10°, ≤ 100 m), otherwise *rugged*.
+Certifying a landing ellipse always requires HiRISE / CTX imagery; every candidate links to NASA Mars Trek for that.
 
-* Bridges the gap between regional 10.4 km MOLA reconnaissance and 100 m landing ellipse safety by predicting sub-cell boulder frequency ($>1\text{ m}$ block distribution) and terrain relief.
-* Flags when active **Terrain Relative Navigation (TRN)** and hazard detection divert maneuvers are mandatory ($P_{\text{boulder}} \ge 20\%$) and provides direct 0.25 m/px deep-links into NASA HiRISE PDS orbital tiles.
+## 12. Layer loading
 
-## 12. Dual-Mode Hybrid Storage Architecture
-
-* **Zero-CORS Client-Side Portability:** Bundles lightweight compressed base64 layer streams for instant offline `file:///` double-click execution without cross-origin security blocks.
-* **On-Demand Raster Streaming:** Automatically falls back to direct streaming from plain `/layers/*.png` assets when hosted on Vercel, GitHub Pages, or local web servers (`npm start`), avoiding memory inflation.
+* Over http(s) (GitHub Pages, Vercel, `npm start`) the app fetches the PNG layers in `web/layers/` directly: parallel, cacheable, and about 4× smaller than base64.
+* Opened from `file://`, browsers taint canvases drawn from local files, so the app loads the inline base64 bundle `layers_data.js` instead.
 
 ## 12a. Validation
 
-See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.js`): the nine successful Mars landers rank in the **89th percentile** of their latitude band under the Landing-safety preset (random = 50, p < 0.005), without the model knowing where they are. HLS-2015 Exploration Zones score only modestly above random under the Balanced preset (54 vs 48, not significant), which is expected because many were chosen for science next to rough terrain.
+See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.js`).
+
+* The nine successful Mars landers rank in the **89th percentile** of their latitude band under the Landing-safety preset (random = 50, p < 0.005).
+  **Caveat:** this is partly circular — those sites were themselves selected using MOLA slope and elevation, so agreement shows the score
+  reproduces engineering practice, not that it predicts anything new.
+* The more independent test — NASA HLS-2015 Exploration Zones under the Balanced preset — is **not significant** (54 vs 48), which is expected
+  because many zones were proposed for science next to rough terrain. There is no ground truth for "best human base site".
 
 ## 13. Known limitations & Operational Mitigations
 
-1. 10 km/px cells cannot see individual boulders directly; mitigated by the integrated sub-cell micro-hazard proxy and automated HiRISE DTM links.
+1. 10 km/px cells cannot see boulders or small craters; the engine only reports a regional terrain class and links each candidate to HiRISE/CTX in NASA Mars Trek.
 2. Slopes are computed at 2.3 km baselines (16-bit MOLA); slopes over shorter baselines (a lander footprint) are higher. Use the HiRISE/CTX link for ellipse-scale checks.
 3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
 4. SWIM coverage ends at ±60°.
-5. The storm model has empirical optical-depth and dust-deposition constants; it is designed for comparing mission architectures, not for flight avionics sizing.
+5. The storm model has empirical optical-depth and dust-deposition constants; habitat heat loss (UA) and surface temperature are rough approximations. It compares architectures; it does not size hardware.
+6. Ice access, SPE dose and excavation mass rest on stated assumptions (10 wt % ice, design-basis SPE); change the assumption and the number changes.
 
 ## Data honesty (Module IV)
 

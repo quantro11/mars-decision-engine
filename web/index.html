@@ -64,6 +64,10 @@
           <input type="checkbox" id="hard" checked>
           <span><b>NASA landing-site constraints</b><br>Cells above +2 km, steeper than 15°, or beyond ±50° latitude are excluded.</span>
         </label>
+        <label class="check">
+          <input type="checkbox" id="agg-geo">
+          <span><b>No compensation</b><br>Weighted geometric mean: a near-zero criterion cannot be bought back by others.</span>
+        </label>
       </div>
 
       <div class="sec-head"><h2>Ice depth</h2><span class="hint">SWIM 2.0</span></div>
@@ -322,7 +326,7 @@
   </div>
 </div>
 
-<script src="layers_data.js"></script>
+<script src="layers/meta.js"></script>
 <script src="scoring.js"></script>
 <script src="regions.js"></script>
 <script src="astar.js"></script>

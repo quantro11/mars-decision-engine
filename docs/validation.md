@@ -43,7 +43,8 @@ A random cell has an expected percentile of 50. p-values come from 200 random-lo
 
 ## How to read this
 
-* Test 1 is the stronger check: lander sites were chosen by EDL engineers for exactly the properties the landing preset scores.
-* Test 2 is weaker by design: Exploration Zones were proposed for science *and* resources, often next to rough terrain
+* Test 1 shows the score **reproduces engineering practice**: lander sites were chosen by EDL engineers using the same kind of MOLA slope and
+  elevation data the landing preset scores. That makes it partly circular — it is a sanity check, not an independent prediction.
+* Test 2 is the more independent check and it is **not significant**: Exploration Zones were proposed for science *and* resources, often next to rough terrain
   (mensae, valles), so a moderate result is expected and honest. Zones scoring low show where science value outweighed safety.
 * Limitations: 9 landers and 14 zones are small samples; site coordinates are point locations evaluated on a 10 km grid.

@@ -105,7 +105,7 @@
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
-    sensSpread: 0.2,
+    sensSpread: 0.2, agg: 'sum',
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20 },
     crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0, regolith: 1.5 },
     hover: null,
@@ -449,7 +449,7 @@
     rafScore = requestAnimationFrame(() => {
       L.ice = L[S.iceBand];
       const t0 = performance.now();
-      SCORING.scoreMap(L, S.weights, S.hard, S.score);
+      SCORING.scoreMap(L, S.weights, S.hard, S.score, S.agg);
       const blockPx = Math.round(2 / META.deg_per_px), sepPx = Math.round(800 / 59.3 / META.deg_per_px);
       S.candidates = SCORING.topCandidates(S.score, W, H, 5, blockPx, sepPx).map(c => ({ ...c, x: Math.round(c.x), y: Math.round(c.y), blockPx }));
       if ($('#sens-result')) $('#sens-result').innerHTML = '';
@@ -467,7 +467,7 @@
     setTimeout(() => {
       const blockPx = S.candidates[0].blockPx, sepPx = Math.round(800 / 59.3 / META.deg_per_px);
       const rob = SCORING.sensitivity(L, S.weights, S.hard, S.candidates,
-        { runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx: Math.round(400 / 59.3 / META.deg_per_px) }, SCORING.mulberry32(2026));
+        { mode: S.agg, runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx: Math.round(400 / 59.3 / META.deg_per_px) }, SCORING.mulberry32(2026));
       S.candidates.forEach((c, i) => { c.robust = rob[i]; });
       const mean = rob.reduce((a, b) => a + b, 0) / rob.length;
       out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">Weights ±${Math.round(S.sensSpread * 100)}% × 30 runs: top-5 candidates stay in the top-5 (within 400 km) in ${(mean * 100).toFixed(0)}% of runs on average. ${mean >= 0.8 ? 'Ranking is ROBUST to weight uncertainty.' : 'Ranking DEPENDS on the chosen weights.'}</div>`;
@@ -493,17 +493,26 @@
     }).join('');
   }
 
+  // share of cells in a candidate block whose 90th-pct slope is within the 5 deg landing limit
+  function flatShare(cx, cy, size) {
+    const h = size >> 1, lim = 5 / META.slope.scale; let n = 0, ok = 0;
+    for (let y = cy - h; y < cy + h; y++) for (let x = cx - h; x < cx + h; x++) {
+      if (y < 0 || y >= H) continue; n++; if (L.slope[y * W + (((x % W) + W) % W)] <= lim) ok++;
+    }
+    return n ? ok / n : 0;
+  }
+
   function renderCandidates() {
     const ol = $('#candidates'); ol.innerHTML = '';
     if (!S.candidates.length) { ol.innerHTML = '<li class="help">No surface block satisfies active constraints.</li>'; return; }
     S.candidates.forEach((c, i) => {
       const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
       const name = candidateName(v.lat, v.lon, nr);
-      const isru = SCORING.calcISRU(v.ice, S.iceBand);
+      const ice = SCORING.calcIceAccess(v.ice, S.iceBand), flat = flatShare(c.x, c.y, c.blockPx);
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
       li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ISRU: <b>${isru.yieldLitersSol} L/sol</b> (${isru.status === 'SURPLUS_PROPELLANT' ? '🚀 fuel' : isru.status === 'CREW_SUSTAINED' ? '💧 crew' : 'arid'})${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
+        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ice: <b>${ice.status.toLowerCase().replace('_', ' ')}</b> · ≤5° cells: <b>${(flat * 100).toFixed(0)}%</b>${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
         <a class="trek" href="${trekUrl(v.lat, v.lon)}" target="_blank" rel="noopener">▸ Inspect in NASA Mars Trek (HiRISE / CTX)</a>`;
       const trekLink = li.querySelector('.trek');
       if (trekLink) trekLink.onclick = (e) => e.stopPropagation();
@@ -521,10 +530,10 @@
     const passSlope = v.slope <= SCORING.HARD.slopeMax;
     const passLat = Math.abs(v.lat) <= SCORING.HARD.latMax;
     const vetoed = S.hard && (!passElev || !passSlope || !passLat);
-    const isru = SCORING.calcISRU(v.ice, S.iceBand);
+    const ice = SCORING.calcIceAccess(v.ice, S.iceBand);
     const sTemp = STORM.surfaceTempC(v.lat, S.crisis.ls);
     const pTherm = STORM.thermalDemandKw(v.lat, S.crisis.ls);
-    const micro = SCORING.calcMicroHazard(v.slope, v.rough);
+    const terrain = SCORING.calcTerrainClass(v.slope, v.rough);
     const spe = SCORING.calcSPE(v.elev, 1.5);
 
     $('#detail').innerHTML = `
@@ -546,18 +555,18 @@
         <tr><td>MOLA Elevation</td><td>${v.elev.toFixed(0)} m</td></tr>
         <tr><td>MOLA 90th-pct Slope</td><td>${v.slope.toFixed(1)}°</td></tr>
         <tr><td>SWIM Ice (${$('#iceband .active').textContent})</td><td>${v.ice === null ? 'outside ±60°' : v.ice.toFixed(2)}</td></tr>
-        <tr><td>ISRU Water Yield</td><td><b>${isru.yieldLitersSol} L/sol</b> (${isru.label})</td></tr>
-        <tr><td>ECLSS O₂ Equivalent</td><td>${isru.loxKgSol} kg O₂/sol</td></tr>
+        <tr><td>Ice access (${ice.depth})</td><td><b>${ice.label}</b></td></tr>
+        <tr><td>Excavation for crew water</td><td>${ice.regolithKgSol === null ? '—' : `~${ice.regolithKgSol} kg regolith/sol <small>(assumes ${ice.assumption}; SWIM does not measure concentration)</small>`}</td></tr>
         <tr><td>Sub-cell Roughness (σ)</td><td>${v.rough.toFixed(0)} m</td></tr>
-        <tr><td>Tactical Micro-Hazard</td><td><b class="${micro.boulderRiskPct >= 40 ? 'bad' : micro.boulderRiskPct >= 20 ? 'warn' : 'ok'}">${micro.tacticalGrade} (${micro.boulderRiskPct}% boulder risk)</b></td></tr>
-        <tr><td>HiRISE Verification</td><td><small>${micro.recommendation}</small></td></tr>
+        <tr><td>Regional terrain class</td><td><b class="${terrain.terrainClass === 'RUGGED' ? 'bad' : terrain.terrainClass === 'MODERATE' ? 'warn' : 'ok'}">${terrain.label}</b></td></tr>
+        <tr><td>Ellipse-scale hazards</td><td><small>${terrain.recommendation}</small></td></tr>
         <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
         <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
         <tr><td>Atmospheric Column</td><td>${SCORING.atmoColumnGcm2(v.elev).toFixed(1)} g/cm²</td></tr>
         <tr><td>GCR Dose (MSL-RAD)</td><td>${SCORING.radDoseMsvYr(v.elev).toFixed(0)} mSv/yr</td></tr>
-        <tr><td>Acute SPE Solar Storm</td><td>${spe.unshieldedDoseMsv} mSv unshielded · needs ${spe.requiredRegolithM}m regolith</td></tr>
-        <tr><td>Nocturnal Surface Temp</td><td>${sTemp.night.toFixed(0)} °C (diurnal mean ${sTemp.mean.toFixed(0)} °C)</td></tr>
-        <tr><td>Hab Thermal Demand</td><td>${pTherm} kWe heating required</td></tr>
+        <tr><td>Design-basis SPE (assumption)</td><td>${spe.unshieldedDoseMsv} mSv on the surface · ${spe.requiredRegolithM} m regolith for ≤ 100 mSv</td></tr>
+        <tr><td>Surface temp. (approx.)</td><td>night ${sTemp.night.toFixed(0)} °C · mean ${sTemp.mean.toFixed(0)} °C</td></tr>
+        <tr><td>Habitat heat loss</td><td>${pTherm} kW (covered by waste heat of the electrical load first)</td></tr>
       </table>
       <div class="row">
         <button id="use-route" class="ghost">Start a route here</button>
@@ -592,10 +601,10 @@
       <tr><td>Mean Slope</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
       <tr><td>Distance &gt;10° Slope</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
       <tr><td>Low-TI Dust (&lt;100 tiu)</td><td>${(a.dustKm || 0).toFixed(0)} km</td><td>${(b.dustKm || 0).toFixed(0)} km</td></tr>
-      <tr><td>Emergency Safe Havens</td><td>0 sites</td><td><b>${havens.length} sheltered sites</b></td></tr>
+      <tr><td>Candidate rest stops</td><td>—</td><td><b>${havens.length}</b> (flat, smooth, firm)</td></tr>
       <tr><td>Traverse Duration</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
       <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (limit ${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
-      ${havens.length ? `<div class="help" style="margin-top:6px;color:#a3e635">🛡️ <b>Safe Camps / Encampments:</b> ${havenStr}</div>` : ''}
+      ${havens.length ? `<div class="help" style="margin-top:6px;color:#a3e635"><b>Rest stops (terrain only, no shelter implied):</b> ${havenStr}</div>` : ''}
       <div class="hint" style="margin-top:10px">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
   }
   // ------------------------------------------------------------ crisis
@@ -618,23 +627,24 @@
       : `<div class="summary-big ok">Survives the storm</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
 
     const thermVerdict = res.freezeSol !== null
-      ? `<div class="summary-big bad" style="margin-top:8px">Habitat Freezes on Sol ${res.freezeSol}</div><div class="help">Thermal life-support fails post-blackout; interior drops below 0°C (reaches minimum ${res.minHabTemp}°C).</div>`
+      ? `<div class="summary-big bad" style="margin-top:8px">Habitat interior below 0 °C on sol ${res.freezeSol}</div><div class="help">Not enough heat once power is short; interior falls toward ambient (minimum ${res.minHabTemp}°C).</div>`
       : `<div class="summary-big ok" style="margin-top:8px">Thermal Life Support Maintained</div><div class="help">Internal habitat comfort (+20°C) sustained throughout storm (night ambient drops to ${sTemp.night}°C).</div>`;
 
     el.innerHTML = `${verdict}
       ${thermVerdict}
       <div class="kv"><span>Season (L<sub>s</sub> = ${c.ls}°)</span><b>${STORM.seasonName(c.ls)}</b></div>
-      <div class="kv"><span>Nocturnal Surface Cold</span><b>${sTemp.night}°C (mean ${sTemp.mean}°C)</b></div>
-      <div class="kv"><span>Hab Heating Baseline</span><b>${pTherm} kWe continuous</b></div>
+      <div class="kv"><span>Surface temp. (approx.)</span><b>night ${sTemp.night}°C · mean ${sTemp.mean}°C</b></div>
+      <div class="kv"><span>Habitat heat loss</span><b>${pTherm} kW · extra heaters ${Math.max(...res.rows.map(r => r.heater)).toFixed(0)} kWh/sol max</b></div>
       <div class="kv"><span>Clear-sky solar, τ 0.5</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
       <div class="kv"><span>Peak-storm solar, τ ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
-      <div class="kv"><span>Post-Storm Dust Fallout</span><b>−${res.postStormSolarLossPct}% permanent array loss</b></div>
+      <div class="kv"><span>Panel dust after ${res.rows.length} sols</span><b>−${res.postStormSolarLossPct}% (no cleaning events assumed)</b></div>
       <div class="kv"><span>Kilopower baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
-      <div class="kv" style="border-top:1px dashed rgba(236,231,223,.12);padding-top:4px"><span>Acute SPE Unshielded</span><b>${spe.unshieldedDoseMsv} mSv (Lethal)</b></div>
+      <div class="kv" style="border-top:1px dashed rgba(236,231,223,.12);padding-top:4px"><span>Design-basis SPE on surface</span><b>${spe.unshieldedDoseMsv} mSv</b></div>
       <div class="kv"><span>Shielded (${(c.regolith || 1.5).toFixed(1)}m regolith)</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${spe.survivalStatus})</b></div>
-      <div class="kv"><span>Required Safe Trench Depth</span><b>${spe.requiredRegolithM} m (or >3.5m lava tube)</b></div>
+      <div class="kv"><span>Regolith for ≤ 100 mSv</span><b>${spe.requiredRegolithM} m</b></div>
+      <div class="help" style="font-size:10px">SPE figures use an assumed August-1972-class event (~1 Sv behind 5 g/cm²), not a forecast. Largest SPE measured on the surface so far (Sept 2017, MSL/RAD): ~0.4 mGy.</div>
       ${crisisSVG(res.rows, c.batt)}
-      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add a Kilopower reactor to prevent habitat freeze-out and keep ECLSS running.' : ''}</div>`;
+      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add fission power (Kilopower-class, 10 kWe design target) to keep the load and heating running.' : ''}</div>`;
   }
   // ------------------------------------------------------------ UI wiring
   function updateHudLayer() {
@@ -738,6 +748,7 @@
     }
   }
   $('#hard').onchange = (e) => { S.hard = e.target.checked; rescore(); };
+  if ($('#agg-geo')) $('#agg-geo').onchange = (e) => { S.agg = e.target.checked ? 'geo' : 'sum'; rescore(); };
   document.querySelectorAll('#iceband button').forEach(b => b.onclick = () => { document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b)); S.iceBand = b.dataset.band; rescore(); });
   document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; updateHudLayer(); ovDirty = true; renderLegend(); draw(); });
   $('#opacity').oninput = (e) => { S.opacity = +e.target.value / 100; const vEl = $('#opacity-v'); if (vEl) vEl.textContent = e.target.value + '%'; draw(); };
@@ -794,8 +805,6 @@
     const wn = SCORING.normalize(S.weights);
     const cands = S.candidates.map((c, i) => {
       const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
-      const isru = SCORING.calcISRU(v.ice, S.iceBand);
-      const micro = SCORING.calcMicroHazard(v.slope, v.rough);
       return {
         rank: i + 1,
         designation: candidateName(v.lat, v.lon, nr),
@@ -807,12 +816,10 @@
         elev_m: Math.round(v.elev),
         slope_p90_deg: +v.slope.toFixed(1),
         swim_ice_consistency: v.ice === null ? null : +v.ice.toFixed(2),
-        isru_water_yield_l_sol: isru.yieldLitersSol,
-        isru_eclss_status: isru.status,
+        ice_access: SCORING.calcIceAccess(v.ice, S.iceBand).status,
+        landing_slope_share_le5deg: +flatShare(c.x, c.y, c.blockPx).toFixed(2),
         roughness_m: Math.round(v.rough),
-        tactical_micro_hazard: micro.tacticalGrade,
-        boulder_risk_pct: micro.boulderRiskPct,
-        hirise_recommendation: micro.recommendation,
+        regional_terrain_class: SCORING.calcTerrainClass(v.slope, v.rough).terrainClass,
         tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
         atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
         gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
@@ -860,7 +867,7 @@
         astar_max_slope_deg: +S.route.safe.stats.maxSlope.toFixed(1),
         astar_dust_trap_km: +(S.route.safe.stats.dustKm || 0).toFixed(1),
         astar_mean_roughness_m: Math.round(S.route.safe.stats.meanRough || 0),
-        emergency_safe_havens: S.route.safe.stats.safeHavens || [],
+        candidate_rest_stops: S.route.safe.stats.safeHavens || [],
         speed_km_per_sol: S.route.speed,
       } : null,
       dust_storm_simulation: {
@@ -871,12 +878,12 @@
         tau_peak: S.crisis.tauPeak,
         nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls).night,
         hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls),
-        spe_acute_radiation: {
-          unshielded_dose_msv: spe.unshieldedDoseMsv,
-          regolith_cover_m: +(S.crisis.regolith ?? 1.5).toFixed(1),
-          shielded_dose_msv: spe.shieldedDoseMsv,
-          required_trench_depth_m: spe.requiredRegolithM,
-          survival_status: spe.survivalStatus,
+        spe_design_basis_assumption: {
+          unshielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).unshieldedDoseMsv,
+          regolith_cover_m: +(S.crisis.regolith || 1.5).toFixed(1),
+          shielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).shieldedDoseMsv,
+          required_trench_depth_m: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).requiredRegolithM,
+          survival_status: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).survivalStatus,
         },
         panel_area_m2: S.crisis.area,
         kilopower_units: S.crisis.kp,
@@ -1173,7 +1180,12 @@
 
   // ------------------------------------------------------------ boot
   buildPresets(); buildSliders(); renderLegend(); renderRoute(); initHabitabilityAPI();
-  Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode)).then(() => {
+  // Over http(s) the PNGs in layers/ are fetched directly (parallel, cacheable, ~4x smaller than base64).
+  // Opened from file:// the browser would taint the canvas, so the inline base64 bundle is loaded instead.
+  const layersReady = location.protocol === 'file:' && !window.LAYER_DATA
+    ? new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'layers_data.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); })
+    : Promise.resolve();
+  layersReady.then(() => Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode))).then(() => {
     L.ice = L[S.iceBand];
     if (globe) globe.setLayers(baseImg, L.elev, W, H);
     loadHiResBase();
