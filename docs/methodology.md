@@ -5,15 +5,15 @@ All numbers shown in the app can be traced to this document.
 ## 1. Grid
 
 Simple cylindrical, 2048 × 1024 px, lon −180…180 °E, lat 90…−90 (IAU-2000 volumetric mean radius $R = 3389.5\text{ km}$). One pixel = 0.1758° ≈ 10.4 km at the equator.
-Slope and roughness are computed on the 8192 × 4096 source grid (≈ 2.6 km/px) and then aggregated 4 × 4 into the output grid.
+Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m vertical resolution), sampled to 9216 × 4608 (≈ 2.3 km/px) and aggregated into the output grid (each output cell = 4.5 × 4.5 source px, evaluated as 81 equally weighted samples).
 
 ## 2. Layers
 
 | Layer | Source | Processing |
 |---|---|---|
-| Elevation `h` (m) | MOLA MEGDR via NASA Mars Trek, 8-bit product, zoom 4 tiles | `h = −8200 + v/255 · 29430` (linear stretch of the MOLA range; checked: Jezero −2660 m vs published −2600 m, InSight −2660 vs −2600, Olympus Mons 20 076 vs 21 229) |
-| Slope `s` (°) | derived | `atan(|∇h|)` with metre-per-pixel scaled by `cos(lat)`; output = 90th percentile of the 16 source pixels in each cell (a pessimistic, safety-oriented statistic) |
-| Roughness `r` (m) | derived | standard deviation of the 16 source elevations in each cell |
+| Elevation `h` (m) | USGS `Mars_MGS_MOLA_DEM_mosaic_global_463m` (int16 metres), every 5th row/column read by HTTP range requests (`download_mola16.py`) | cell mean; checked against published landing-site elevations: Curiosity −4500 vs −4501 m, Opportunity −1384 vs −1385, Spirit −1943 vs −1935, Viking 1 −3637 vs −3627. Stored in the browser as 8-bit (≈ 115 m/level) for scoring, which only needs ±2 km resolution |
+| Slope `s` (°) | derived | `atan(|∇h|)` with metre-per-pixel scaled by `cos(lat)`; computed on the 16-bit 2.3 km grid; output = 90th percentile of the 81 samples in each cell (a pessimistic, safety-oriented statistic) |
+| Roughness `r` (m) | derived | standard deviation of the 81 16-bit elevation samples in each cell |
 | Ice `c` (−1…1) | SWIM 2.0 composite ice consistency (0–1 m, 1–5 m, > 5 m) | box-resampled from 7200 × 2400 (3 km/px); rows outside ±60° = no data |
 | Thermal inertia `I` (tiu) | MGS TES (Christensen et al.; Putzig/Mellon) via ASU JMARS WMS | 2048 × 1024 numeric VICAR (`J m⁻² K⁻¹ s⁻½`) |
 | Dust abundance `d` (0…1) | MGS TES surface dust fraction (Bandfield 2002) via ASU JMARS WMS | 2048 × 1024 numeric VICAR |
@@ -126,10 +126,14 @@ P_boulder(%) = clamp(round(r / 250 · 55 + s / 15 · 45), 4, 95)
 * **Zero-CORS Client-Side Portability:** Bundles lightweight compressed base64 layer streams for instant offline `file:///` double-click execution without cross-origin security blocks.
 * **On-Demand Raster Streaming:** Automatically falls back to direct streaming from plain `/layers/*.png` assets when hosted on Vercel, GitHub Pages, or local web servers (`npm start`), avoiding memory inflation.
 
+## 12a. Validation
+
+See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.js`): the nine successful Mars landers rank in the **89th percentile** of their latitude band under the Landing-safety preset (random = 50, p < 0.005), without the model knowing where they are. HLS-2015 Exploration Zones score only modestly above random under the Balanced preset (54 vs 48, not significant), which is expected because many were chosen for science next to rough terrain.
+
 ## 13. Known limitations & Operational Mitigations
 
 1. 10 km/px cells cannot see individual boulders directly; mitigated by the integrated sub-cell micro-hazard proxy and automated HiRISE DTM links.
-2. 8-bit elevation (≈ 115 m steps) makes slopes regional; local slopes are higher.
+2. Slopes are computed at 2.3 km baselines (16-bit MOLA); slopes over shorter baselines (a lander footprint) are higher. Use the HiRISE/CTX link for ellipse-scale checks.
 3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
 4. SWIM coverage ends at ±60°.
 5. The storm model has empirical optical-depth and dust-deposition constants; it is designed for comparing mission architectures, not for flight avionics sizing.

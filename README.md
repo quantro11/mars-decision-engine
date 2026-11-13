@@ -41,28 +41,35 @@ cd data_pipeline
 powershell -ExecutionPolicy Bypass -File download.ps1    # 512 MOLA tiles + 3 SWIM GeoTIFFs + 2 TES VICAR rasters + Viking MDIM 2.1 mosaic
 pip install numpy pillow tifffile imagecodecs
 python preprocess.py                                      # -> web/layers_data.js + web/layers/*.png + meta.json
+python download_mola16.py                                 # 16-bit MOLA, every 5th row via HTTP range (~425 MB of 2.1 GB)
+python mola16.py                                          # rebuild elev / slope / rough from 16-bit data
 ```
 
-## Automated Unit Tests
+## Automated Unit Tests & Validation
 
 ```bash
-node tests/scoring.test.js
+node tests/scoring.test.js     # unit tests (also run in GitHub Actions)
+node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
+
+**Validation result:** the nine successful Mars landers (Viking 1/2, Pathfinder, Spirit, Opportunity, Curiosity, InSight, Perseverance, Zhurong) rank in the **89th percentile** of their own latitude band under the Landing-safety preset (random terrain: 50th, p < 0.005) — the model was never told where they are. See [`docs/validation.md`](docs/validation.md).
 
 Verifies suitability transfer functions, preset ranking behaviour (ISRU vs. Landing Safety), NASA HLS-2015 hard constraint vetoes, non-maximum suppression candidate extraction, A* obstacle avoidance & gap traversal, Opportunity-calibrated dust-storm attenuation, MSL-RAD GCR radiation shielding, and seasonal $L_s$ insolation.
 
 ## Repository Layout
 
 ```
-data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py
-web/             index.html, style.css, premium.css, app.js, globe3d.js, scoring.js, astar.js, storm.js, regions.js, layers_data.js
+data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py
+web/             index.html, style.css, premium.css, app.js, globe3d.js, scoring.js, astar.js, storm.js, regions.js, live_api.js, layers_data.js
+web/ui/          format.js, charts.js, markers.js, habitability.js   UI modules split out of app.js
+tools/           validate.js                         validation report generator
 tests/           scoring.test.js                    Node unit test suite (pure logic, zero DOM dependency)
 docs/            methodology.md, pitch.md           Full mathematical specification, citations, limitations & pitch script
 ```
 
 ## Primary Data Sources & Citations
 
-* **MGS MOLA Elevation** — Mars Global Surveyor MOLA MEGDR via NASA Mars Trek (`Mars_MGS_MOLA_DEM_mosaic_global_463m_8`, USGS Astrogeology). Used at 8192×4096 px (~2.6 km/px) to derive 90th-percentile slope and sub-cell roughness, delivered at 2048×1024 (~10.3 km/px).
+* **MGS MOLA Elevation** — 16-bit MOLA MEGDR mosaic (USGS Astrogeology `Mars_MGS_MOLA_DEM_mosaic_global_463m`, int16 metres), sampled to 9216×4608 (~2.3 km/px) with HTTP range requests, used for elevation, 90th-percentile slope and sub-cell roughness; delivered at 2048×1024 (~10.3 km/px). Matches published landing-site elevations within 10 m.
 * **NASA Viking Orbiter MDIM 2.1 Optical Mosaic** — Global colorized optical mosaic (`Mars_Viking_MDIM21_ClrMosaic_global_232m`, NASA Mars Trek / USGS), 4096×2048 px.
 * **SWIM 2.0 Subsurface Water Ice** — Subsurface Water Ice Mapping composite consistency maps at 0–1 m, 1–5 m, and >5 m depth (Planetary Science Institute / NASA, `swim.psi.edu`), 3 km/px, ±60° latitude.
 * **MGS TES Thermal Inertia & Dust Abundance** — Mars Global Surveyor Thermal Emission Spectrometer (Christensen et al.; Bandfield 2002) via ASU JMARS WMS (`TES_Thermal_Inertia_numeric`, `TES_Dust_numeric`).

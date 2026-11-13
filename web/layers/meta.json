@@ -8,19 +8,19 @@
     "unit": "m",
     "scale": 115.41176470588235,
     "offset": -8200.0,
-    "source": "MOLA MEGDR via NASA Mars Trek (Mars_MGS_MOLA_DEM_mosaic_global_463m_8), 8-bit linear stretch -8200..21230 m, ~115 m/level"
+    "source": "MOLA MEGDR 16-bit mosaic (USGS Astrogeology Mars_MGS_MOLA_DEM_mosaic_global_463m), sampled to 9216x4608 (~2.3 km/px); browser storage 8-bit -8200..21230 m (~115 m/level, cell mean)"
   },
   "slope": {
     "unit": "deg",
     "scale": 0.125,
     "offset": 0,
-    "source": "derived: 90th percentile of slope computed on 8192x4096 MOLA grid (~2.6 km/px) inside each 4x4 block"
+    "source": "derived: 90th percentile of slope computed on the 16-bit 9216x4608 MOLA grid inside each output cell (81 samples)"
   },
   "rough": {
     "unit": "m",
     "scale": 4,
     "offset": 0,
-    "source": "derived: std-dev of MOLA elevation inside each output cell (terrain roughness proxy)"
+    "source": "derived: std-dev of 16-bit MOLA elevation inside each output cell (81 samples)"
   },
   "ice": {
     "unit": "consistency -1..1",
@@ -45,5 +45,5 @@
     "nodata": 0,
     "source": "TES surface dust abundance (Bandfield 2002) via ASU JMARS WMS layer TES_Dust_numeric, 8 ppd"
   },
-  "generated_by": "data_pipeline/preprocess.py"
+  "generated_by": "data_pipeline/preprocess.py + data_pipeline/mola16.py (elev/slope/rough)"
 }

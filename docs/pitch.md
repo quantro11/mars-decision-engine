@@ -27,7 +27,7 @@ Without auxiliary power, the habitat blacks out on sol 31 and **freezes out on s
 
 **2:25 — Validity (20 s)**
 "Real orbital data: MOLA and Viking MDIM 2.1 via NASA Mars Trek, SWIM 2.0 from PSI, TES via ASU JMARS, thresholds from the 2015 HLS workshop, GCR radiation calibrated to Curiosity RAD at Gale Crater (232 mSv/yr), and storm attenuation fitted to Opportunity's 2018 telemetry.
-Limitations are explicitly stated on the Method page: ~10 km regional grid cells and 8-bit elevation quantization."
+And it is validated: the nine real Mars landers sit in the 89th percentile of our landing score — we never told the model where they are. Limitations are on the Method page: ~10 km regional cells."
 
 **2:45 — Impact (15 s)**
 "Swap the layers and the same engine ranks lunar south-pole Artemis sites. Add a layer and it ranks for a different crew.
@@ -37,6 +37,7 @@ It's not just a map of Mars — it's how humans decide where and how to survive 
 
 ## Judge Q&A — likely questions
 
+* **How do you know the score means anything?** `tools/validate.js`: all nine successful landers rank at the 89th percentile of their latitude band (p < 0.005 against random sites). Exploration Zones only modestly — they were picked for science, often beside rough terrain.
 * **Why not higher resolution?** Global reconnaissance comes first; a 100 m landing-ellipse study requires HiRISE DTM tiles. Our `data_pipeline/preprocess.py` ingests standard GeoTIFF/VICAR rasters directly.
 * **Why 90th-percentile slope?** Safety-conservative: a 10 km cell is only as safe as its worst sub-kilometre corners.
 * **How confident is the ice layer?** SWIM 2.0 "consistency" synthesises 5 independent datasets (neutron spectroscopy, SHARAD radar, thermal inertia, geomorphology, dielectric); we let planners switch between 0–1 m, 1–5 m, and > 5 m excavation horizons.

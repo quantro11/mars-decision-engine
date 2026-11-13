@@ -2,6 +2,9 @@
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
+  const { candidateName, trekUrl, fmtLat, fmtLon } = window.MDE_FMT;
+  const { profileSVG, crisisSVG } = window.MDE_CHARTS;
+  const { initHabitabilityAPI, renderHabitability } = window.MDE_HAB;
   const META = window.LAYER_META;
   const W = META.width, H = META.height;
   const MARS_R = 3389.5; // km
@@ -145,6 +148,7 @@
   const toGrid = (sx, sy) => [(sx - S.view.tx) / S.view.scale, (sy - S.view.ty) / S.view.scale];
 
   // Unified grid-to-screen projection for both 2D and 3D modes
+  const { drawCandidateReticle, drawSelectionReticle, drawWaypoint, drawStationBeacon } = window.MDE_MARKERS.createMarkers(ctx, projectGrid);
   function projectGrid(gx, gy) {
     if (S.viewMode === '3d' && globe) {
       return globe.project(L.latOfRow(gy), L.lonOfCol(gx), true);
@@ -438,102 +442,6 @@
     ctx.setLineDash([]);
   }
 
-  function drawCandidateReticle(gx, gy, rank, score, active) {
-    const [x, y, vis] = projectGrid(gx, gy);
-    if (!vis) return;
-    const dpr = window.devicePixelRatio || 1;
-    const r = (active ? 11 : 9) * dpr;
-    const primary = active ? '#7f9bb3' : '#c8743c';
-
-    ctx.strokeStyle = primary;
-    ctx.lineWidth = (active ? 2 : 1.5) * dpr;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
-
-    const tIn = r + 2 * dpr, tOut = r + 6 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(x - tOut, y); ctx.lineTo(x - tIn, y);
-    ctx.moveTo(x + tIn, y); ctx.lineTo(x + tOut, y);
-    ctx.moveTo(x, y - tOut); ctx.lineTo(x, y - tIn);
-    ctx.moveTo(x, y + tIn); ctx.lineTo(x, y + tOut);
-    ctx.stroke();
-
-    ctx.fillStyle = primary;
-    ctx.beginPath();
-    ctx.arc(x, y, 2 * dpr, 0, Math.PI * 2);
-    ctx.fill();
-
-    const tag = `0${rank}`;
-    ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
-    const bx = x + r + 5 * dpr, by = y - r - 2 * dpr;
-    const bw = 20 * dpr, bh = 13 * dpr;
-    ctx.fillStyle = active ? '#7f9bb3' : 'rgba(8, 12, 18, 0.92)';
-    ctx.strokeStyle = primary;
-    ctx.lineWidth = 1 * dpr;
-    ctx.fillRect(bx, by - bh / 2, bw, bh);
-    ctx.strokeRect(bx, by - bh / 2, bw, bh);
-    ctx.fillStyle = active ? '#04070b' : '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tag, bx + bw / 2, by + 0.5 * dpr);
-    ctx.textAlign = 'left';
-  }
-
-  function drawSelectionReticle(gx, gy) {
-    const [x, y, vis] = projectGrid(gx, gy);
-    if (!vis) return;
-    const dpr = window.devicePixelRatio || 1;
-    const s = 9 * dpr, c = 4 * dpr;
-    ctx.strokeStyle = '#7f9bb3';
-    ctx.lineWidth = 1.6 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(x - s, y - s + c); ctx.lineTo(x - s, y - s); ctx.lineTo(x - s + c, y - s);
-    ctx.moveTo(x + s - c, y - s); ctx.lineTo(x + s, y - s); ctx.lineTo(x + s, y - s + c);
-    ctx.moveTo(x + s, y + s - c); ctx.lineTo(x + s, y + s); ctx.lineTo(x + s - c, y + s);
-    ctx.moveTo(x - s + c, y + s); ctx.lineTo(x - s, y + s); ctx.lineTo(x - s, y + s - c);
-    ctx.stroke();
-  }
-
-  function drawWaypoint(gx, gy, color, label) {
-    const [x, y, vis] = projectGrid(gx, gy);
-    if (!vis) return;
-    const dpr = window.devicePixelRatio || 1;
-    const r = 6.5 * dpr;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillStyle = 'rgba(6, 9, 15, 0.9)';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2 * dpr;
-    ctx.fillRect(-r, -r, r * 2, r * 2);
-    ctx.strokeRect(-r, -r, r * 2, r * 2);
-    ctx.restore();
-
-    ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
-    ctx.fillStyle = color;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, x + 10 * dpr, y);
-  }
-
-  function drawStationBeacon(gx, gy) {
-    const [x, y, vis] = projectGrid(gx, gy);
-    if (!vis) return;
-    const dpr = window.devicePixelRatio || 1;
-    ctx.strokeStyle = '#7f9bb3';
-    ctx.lineWidth = 1.6 * dpr;
-    ctx.beginPath();
-    ctx.arc(x, y, 11 * dpr, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = '#7f9bb3';
-    ctx.beginPath();
-    ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.font = `700 ${Math.round(9 * dpr)}px "JetBrains Mono", monospace`;
-    ctx.fillText('STA-PWR', x + 14 * dpr, y);
-  }
-
   // ------------------------------------------------------------ scoring pipeline
   let rafScore = 0;
   function rescore() {
@@ -607,18 +515,6 @@
       ol.appendChild(li);
     });
   }
-  // Distinct, readable candidate names: exact region if within 2 deg, otherwise a compass sector of the nearest region.
-  function candidateName(lat, lon, nr) {
-    if (nr.distDeg < 2) return nr.region.name;
-    const r = nr.region; let dlon = lon - r.lon; if (dlon > 180) dlon -= 360; if (dlon < -180) dlon += 360;
-    const dlat = lat - r.lat, ew = dlon * Math.cos(lat * Math.PI / 180);
-    const dir = (Math.abs(dlat) > Math.abs(ew) * 2 ? '' : (ew > 0 ? 'E' : 'W')); const ns = (Math.abs(ew) > Math.abs(dlat) * 2 ? '' : (dlat > 0 ? 'N' : 'S'));
-    return `${ns}${dir} of ${r.name.replace(/ \(.*\)$/, '')} · ${(nr.distDeg * 59.3).toFixed(0)} km`;
-  }
-  const trekUrl = (lat, lon) => `https://trek.nasa.gov/mars/#v=0.1&x=${lon.toFixed(3)}&y=${lat.toFixed(3)}&z=7&p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905&d=`;
-  const fmtLat = (la) => `${Math.abs(la).toFixed(1)}°${la >= 0 ? 'N' : 'S'}`;
-  const fmtLon = (lo) => `${Math.abs(lo).toFixed(1)}°${lo >= 0 ? 'E' : 'W'}`;
-
   function renderDetail(x, y, cand) {
     const v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
     const passElev = v.elev <= SCORING.HARD.elevMax;
@@ -702,27 +598,6 @@
       ${havens.length ? `<div class="help" style="margin-top:6px;color:#a3e635">🛡️ <b>Safe Camps / Encampments:</b> ${havenStr}</div>` : ''}
       <div class="hint" style="margin-top:10px">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
   }
-  function profileSVG(p) {
-    const w = 276, h = 118, pad = 32;
-    const kmMax = p[p.length - 1].km || 1, eMin = Math.min(...p.map(q => q.elev)), eMax = Math.max(...p.map(q => q.elev)) + 1;
-    const X = (km) => pad + (km / kmMax) * (w - pad - 8), Y = (e) => h - 18 - ((e - eMin) / (eMax - eMin)) * (h - 30);
-    let d = '', segs = '';
-    p.forEach((q, i) => { d += (i ? 'L' : 'M') + X(q.km).toFixed(1) + ',' + Y(q.elev).toFixed(1); });
-    const areaD = `${d}L${X(kmMax).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
-    p.forEach((q, i) => { if (i && q.slope > 10) segs += `<line x1="${X(p[i - 1].km).toFixed(1)}" y1="${Y(p[i - 1].elev).toFixed(1)}" x2="${X(q.km).toFixed(1)}" y2="${Y(q.elev).toFixed(1)}" stroke="#f59e0b" stroke-width="2.8"/>`; });
-    return `<svg class="chart" viewBox="0 0 ${w} ${h}">
-      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
-      <line x1="${pad}" y1="${(h - 6) / 2}" x2="${w - 8}" y2="${(h - 6) / 2}" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
-      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
-      <path d="${areaD}" fill="rgba(16, 185, 129, 0.12)"/>
-      <path d="${d}" fill="none" stroke="#10b981" stroke-width="1.6"/>${segs}
-      <text x="4" y="15" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMax / 1000).toFixed(1)}km</text>
-      <text x="4" y="${h - 18}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace">${(eMin / 1000).toFixed(1)}km</text>
-      <text x="${pad}" y="${h - 5}" fill="#5e5950" font-size="8.5" font-family="JetBrains Mono, monospace">0 km</text>
-      <text x="${w - 8}" y="${h - 5}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">${kmMax.toFixed(0)} km</text>
-    </svg>`;
-  }
-
   // ------------------------------------------------------------ crisis
   function setCrisisSite(x, y) { S.crisis.site = { x, y }; runCrisis(); draw(); }
   function runCrisis() {
@@ -761,25 +636,6 @@
       ${crisisSVG(res.rows, c.batt)}
       <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add a Kilopower reactor to prevent habitat freeze-out and keep ECLSS running.' : ''}</div>`;
   }
-  function crisisSVG(rows, cap) {
-    const w = 276, h = 118, pad = 26, n = rows.length;
-    const X = (i) => pad + (i / (n - 1)) * (w - pad - 8), Yb = (b) => h - 18 - (b / cap) * (h - 30), Yt = (t) => h - 18 - (t / 12) * (h - 30);
-    let db = '', dt = '';
-    rows.forEach((r, i) => { db += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yb(r.batt).toFixed(1); dt += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yt(r.tau).toFixed(1); });
-    const areaB = `${db}L${X(n - 1).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
-    return `<svg class="chart" viewBox="0 0 ${w} ${h}">
-      <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
-      <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
-      <path d="${areaB}" fill="rgba(127,155,179,.14)"/>
-      <path d="${dt}" fill="none" stroke="#c8743c" stroke-width="1.2" stroke-dasharray="3 3"/>
-      <path d="${db}" fill="none" stroke="#7f9bb3" stroke-width="1.8"/>
-      <text x="${pad}" y="10" fill="#7f9bb3" font-size="8.5" font-family="JetBrains Mono, monospace">battery</text>
-      <text x="${w - 8}" y="10" fill="#c8743c" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">τ, 0–12</text>
-      <text x="${pad}" y="${h - 5}" fill="#5e5950" font-size="8.5" font-family="JetBrains Mono, monospace">sol 0</text>
-      <text x="${w - 8}" y="${h - 5}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">sol ${n}</text>
-    </svg>`;
-  }
-
   // ------------------------------------------------------------ UI wiring
   function updateHudLayer() {
     const el = $('#hud-layer');
@@ -957,97 +813,6 @@
       if ($('#brief-modal')) $('#brief-modal').classList.add('hidden');
     }
   });
-
-  // ------------------------------------------------------------ live habitability & space weather APIs
-  function initHabitabilityAPI() {
-    const keyInput = $('#nasa-api-key');
-    if (!keyInput) return;
-    const savedKey = localStorage.getItem('nasa_api_key') || 'DEMO_KEY';
-    keyInput.value = savedKey;
-
-    const btnSave = $('#btn-save-key');
-    if (btnSave) {
-      btnSave.onclick = () => {
-        const val = keyInput.value.trim() || 'DEMO_KEY';
-        localStorage.setItem('nasa_api_key', val);
-        const st = $('#live-api-status');
-        if (st) st.textContent = '✓ Saved NASA API Key: ' + (val === 'DEMO_KEY' ? 'DEMO_KEY' : 'Custom Key (***' + val.slice(-4) + ')');
-      };
-    }
-
-    const btnFetch = $('#btn-fetch-live');
-    if (btnFetch) {
-      btnFetch.onclick = () => renderHabitability(true);
-    }
-  }
-
-  async function renderHabitability(forceRefresh) {
-    const el = $('#live-api-results'), st = $('#live-api-status');
-    if (!el || !window.LIVE_API) return;
-    const apiKey = localStorage.getItem('nasa_api_key') || 'DEMO_KEY';
-    if (st) st.innerHTML = '⏳ Querying NASA Open APIs (api.nasa.gov)...';
-
-    const [weatherRes, spaceRes] = await Promise.all([
-      LIVE_API.fetchNASAWeather(apiKey),
-      LIVE_API.fetchSpaceWeather(apiKey)
-    ]);
-
-    const BADGE = { live: ['#10b981', 'LIVE'], archive: ['#38bdf8', 'ARCHIVE'], reference: ['#f59e0b', 'REFERENCE · NOT LIVE'], offline: ['#ef4444', 'OFFLINE'] };
-    const badge = (m) => `<span style="color:${BADGE[m][0]};font-weight:700">● ${BADGE[m][1]}</span>`;
-    if (st) st.innerHTML = `Weather: ${badge(weatherRes.mode)} · Space weather: ${badge(spaceRes.mode)} · Key: ${apiKey === 'DEMO_KEY' ? 'DEMO_KEY' : 'Custom'}`;
-
-    const w = weatherRes.data, ref = weatherRes.reference;
-    const esc = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-    const weatherBlock = w
-      ? `<div class="kv"><span>Last archived sol</span><b>Sol ${w.sol}${w.first_utc ? ' · ' + esc(w.first_utc.slice(0, 10)) : ''}</b></div>
-         <div class="kv"><span>Air temperature (min / mean / max)</span><b>${w.air_temp_c ? `${w.air_temp_c.min.toFixed(0)} / ${w.air_temp_c.mean.toFixed(0)} / ${w.air_temp_c.max.toFixed(0)} °C` : 'not reported'}</b></div>
-         <div class="kv"><span>Pressure</span><b>${w.pressure_pa ? w.pressure_pa.toFixed(0) + ' Pa' : 'not reported'}</b></div>
-         <div class="kv"><span>Wind</span><b>${w.wind_mps ? w.wind_mps.toFixed(1) + ' m/s' : 'not reported'}</b></div>`
-      : `<div class="kv"><span>Site</span><b>${ref.site}</b></div>
-         <div class="kv"><span>Air temperature range</span><b>${ref.air_temp_c.min} … ${ref.air_temp_c.max} °C</b></div>
-         <div class="kv"><span>Seasonal pressure range</span><b>${ref.pressure_pa.min} … ${ref.pressure_pa.max} Pa</b></div>
-         <div class="help" style="font-size:10px">Published climatology (${ref.citation}), not a current measurement.</div>`;
-    const cme = spaceRes.events[0];
-    const spaceBlock = spaceRes.mode === 'offline'
-      ? `<div class="help">No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.</div>`
-      : `<div class="kv"><span>CMEs catalogued (30 days)</span><b>${spaceRes.events.length}</b></div>
-         ${cme ? `<div class="kv"><span>Most recent</span><b>${esc(cme.startTime)}${cme.speed_kms ? ' · ' + Math.round(cme.speed_kms) + ' km/s' : ''}</b></div>` : ''}
-         <div class="help" style="font-size:10px">DONKI catalogues heliospheric CMEs; whether one reaches Mars depends on its direction and is not assessed here.</div>`;
-
-    const critRows = LIVE_API.MARS_HABITABILITY_CRITERIA.map(c => `
-      <div style="background:rgba(255,255,255,.02);border:1px solid rgba(236,231,223,.08);border-radius:5px;padding:8px 10px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-          <b style="color:#ece7df;font-size:12px">${c.marker}</b>
-          <span style="font-size:10px;color:#f87171">${c.deficit}</span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;font-family:JetBrains Mono, monospace;margin-bottom:4px">
-          <div><span style="color:#60a5fa">🌍 Earth:</span> ${c.earth}</div>
-          <div><span style="color:#f97316">🔴 Mars:</span> ${c.mars}</div>
-        </div>
-        <div style="font-size:10.5px;color:#a3e635;border-top:1px dashed rgba(236,231,223,.08);padding-top:4px">
-          🛡️ <b>ECLSS Countermeasure:</b> ${c.eclss}
-        </div>
-      </div>
-    `).join('');
-
-    el.innerHTML = `
-      <div class="sec-head" style="margin-top:10px"><h2>Mars Surface Weather</h2></div>
-      <div style="background:rgba(0,0,0,.25);border:1px solid rgba(236,231,223,.1);border-radius:6px;padding:10px;margin-bottom:12px">
-        <div class="help" style="font-size:10px;margin-bottom:6px">${badge(weatherRes.mode)} ${esc(weatherRes.source)}</div>
-        ${weatherBlock}
-      </div>
-
-      <div class="sec-head"><h2>Space Weather (NASA DONKI)</h2></div>
-      <div style="background:rgba(0,0,0,.25);border:1px solid rgba(236,231,223,.1);border-radius:6px;padding:10px;margin-bottom:12px">
-        <div class="help" style="font-size:10px;margin-bottom:6px">${badge(spaceRes.mode)} ${esc(spaceRes.source)}</div>
-        ${spaceBlock}
-      </div>
-
-      <div class="sec-head"><h2>Earth vs. Mars Biosphere Habitability Index</h2></div>
-      <p class="help">Comparing fundamental planetary life parameters against Earth baseline standards (1.00 Index):</p>
-      ${critRows}
-    `;
-  }
 
   // ------------------------------------------------------------ Mission Brief Exporter
   function buildBriefPayload() {

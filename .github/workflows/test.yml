@@ -11,3 +11,4 @@ jobs:
         with:
           node-version: 20
       - run: node tests/scoring.test.js
+      - run: node tools/validate.js > /dev/null

@@ -1,0 +1,120 @@
+// Independent validation of the scoring model against real-world decisions.
+//
+//   node tools/validate.js            -> prints a report and writes docs/validation.md
+//
+// Test 1: every successful Mars lander was placed by an engineering team optimising landing safety.
+//         If our "Landing safety" score is meaningful, those sites should rank high among all cells
+//         of the same latitude band - even though the model was never told where they are.
+// Test 2: NASA's 2015 Human Landing Site workshop proposed ~47 Exploration Zones (we carry 17 of them).
+//         Under the "Balanced crewed mission" preset, do those zones score above random terrain?
+// Baseline for both: a random cell has an expected percentile of 50.
+const fs = require('fs');
+const path = require('path');
+const zlib = require('zlib');
+const vm = require('vm');
+
+const ROOT = path.join(__dirname, '..');
+const S = require(path.join(ROOT, 'web/scoring.js')).SCORING;
+
+// ---- minimal PNG decoder: 8-bit greyscale, non-interlaced (what preprocess.py writes)
+function decodePNG(file) {
+  const b = fs.readFileSync(file);
+  let p = 8, W = 0, H = 0, idat = [];
+  while (p < b.length) {
+    const len = b.readUInt32BE(p), type = b.toString('ascii', p + 4, p + 8), d = b.subarray(p + 8, p + 8 + len);
+    if (type === 'IHDR') { W = d.readUInt32BE(0); H = d.readUInt32BE(4); if (d[8] !== 8 || d[9] !== 0 || d[12] !== 0) throw new Error(file + ': expected 8-bit grey'); }
+    if (type === 'IDAT') idat.push(d);
+    p += 12 + len;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat)), out = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const f = raw[y * (W + 1)], row = raw.subarray(y * (W + 1) + 1, (y + 1) * (W + 1)), o = y * W;
+    for (let x = 0; x < W; x++) {
+      const a = x ? out[o + x - 1] : 0, up = y ? out[o - W + x] : 0, c = x && y ? out[o - W + x - 1] : 0;
+      let v = row[x];
+      if (f === 1) v += a; else if (f === 2) v += up; else if (f === 3) v += (a + up) >> 1;
+      else if (f === 4) { const pp = a + up - c, pa = Math.abs(pp - a), pb = Math.abs(pp - up), pc = Math.abs(pp - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? up : c; }
+      out[o + x] = v & 255;
+    }
+  }
+  return { W, H, data: out };
+}
+
+const meta = JSON.parse(fs.readFileSync(path.join(ROOT, 'web/layers/meta.json'), 'utf8'));
+const lyr = (k) => decodePNG(path.join(ROOT, 'web/layers', k + '.png')).data;
+const W = meta.width, H = meta.height;
+const L = { width: W, height: H, meta, elev: lyr('elev'), slope: lyr('slope'), rough: lyr('rough'), ice: lyr('ice15'), ti: lyr('ti'),
+  latOfRow: (y) => 90 - (y + 0.5) * 180 / H, lonOfCol: (x) => -180 + (x + 0.5) * 360 / W };
+const row = (lat) => Math.min(H - 1, Math.max(0, Math.floor((90 - lat) / 180 * H)));
+const col = (lon) => ((Math.floor((lon + 180) / 360 * W) % W) + W) % W;
+
+const sandbox = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'web/regions.js'), 'utf8'), sandbox);
+const REGIONS = sandbox.window.REGIONS;
+
+// percentile of a cell's score among all cells within +-band deg of its latitude (removes the latitude prior)
+function bandPercentile(score, lat, lon, band) {
+  const v = score[row(lat) * W + col(lon)];
+  let below = 0, n = 0;
+  for (let y = row(lat + band); y <= row(lat - band); y++) for (let x = 0; x < W; x++) { n++; if (score[y * W + x] < v) below++; }
+  return 100 * below / n;
+}
+const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+
+const LANDERS = [
+  ['Viking 1', 22.27, -47.95], ['Viking 2', 47.64, 134.29], ['Pathfinder', 19.13, -33.22], ['Spirit', -14.57, 175.47],
+  ['Opportunity', -1.95, -5.53], ['Curiosity', -4.59, 137.44], ['InSight', 4.50, 135.62], ['Perseverance', 18.44, 77.45],
+  ['Zhurong', 25.07, 109.93],
+];
+
+const scoreLand = S.scoreMap(L, S.PRESETS.landing.w, false, new Float32Array(W * H));
+const t1 = LANDERS.map(([n, la, lo]) => ({ n, la, lo, p: bandPercentile(scoreLand, la, lo, 5) }));
+
+const scoreBal = S.scoreMap(L, S.PRESETS.balanced.w, true, new Float32Array(W * H));
+const EZ = REGIONS.filter((r) => r.ez && Math.abs(r.lat) <= 50);
+const t2 = EZ.map((r) => ({ n: r.name, p: bandPercentile(scoreBal, r.lat, r.lon, 5) }));
+
+// Monte Carlo null model: mean percentile of the same number of random cells (same latitudes)
+function nullMean(points, score, runs) {
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const ms = [];
+  for (let r = 0; r < runs; r++) ms.push(mean(points.map((pt) => bandPercentile(score, pt.la, -180 + 360 * rnd(), 5))));
+  ms.sort((a, b) => a - b);
+  return ms;
+}
+const nullLand = nullMean(t1, scoreLand, 200);
+const pLand = nullLand.filter((m) => m >= mean(t1.map((t) => t.p))).length / nullLand.length;
+const nullEZ = nullMean(EZ.map((r) => ({ la: r.lat })), scoreBal, 200);
+const pEZ = nullEZ.filter((m) => m >= mean(t2.map((t) => t.p))).length / nullEZ.length;
+
+const fmtP = (p) => (p === 0 ? '< 0.005' : p.toFixed(3));
+const md = `# Validation
+
+Generated by \`node tools/validate.js\` from the shipped layers (${meta.generated_by || 'preprocess.py'}).
+Percentiles are computed **within a ±5° latitude band** around each site, so the latitude criterion alone cannot explain the result.
+A random cell has an expected percentile of 50. p-values come from 200 random-longitude draws at the same latitudes.
+
+## Test 1 — Do real landers rank high under "Landing safety"? (hard veto off)
+
+| Lander | Lat | Lon | Percentile in band |
+|---|---|---|---|
+${t1.map((t) => `| ${t.n} | ${t.la.toFixed(2)} | ${t.lo.toFixed(2)} | ${t.p.toFixed(0)} |`).join('\n')}
+
+**Mean ${mean(t1.map((t) => t.p)).toFixed(0)}** (random: ${mean(nullLand).toFixed(0)}, 95 % of random draws ≤ ${nullLand[Math.floor(0.95 * nullLand.length)].toFixed(0)}), one-sided p = ${fmtP(pLand)}.
+
+## Test 2 — Do NASA HLS-2015 Exploration Zones rank high under "Balanced crewed mission"? (hard veto on)
+
+| Exploration Zone | Percentile in band |
+|---|---|
+${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
+
+**Mean ${mean(t2.map((t) => t.p)).toFixed(0)}** (random: ${mean(nullEZ).toFixed(0)}, 95 % ≤ ${nullEZ[Math.floor(0.95 * nullEZ.length)].toFixed(0)}), one-sided p = ${fmtP(pEZ)}.
+
+## How to read this
+
+* Test 1 is the stronger check: lander sites were chosen by EDL engineers for exactly the properties the landing preset scores.
+* Test 2 is weaker by design: Exploration Zones were proposed for science *and* resources, often next to rough terrain
+  (mensae, valles), so a moderate result is expected and honest. Zones scoring low show where science value outweighed safety.
+* Limitations: 9 landers and ${EZ.length} zones are small samples; site coordinates are point locations evaluated on a 10 km grid.
+`;
+fs.writeFileSync(path.join(ROOT, 'docs/validation.md'), md);
+console.log(md);

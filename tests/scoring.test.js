@@ -126,6 +126,15 @@ const Live = require('../web/live_api.js').LIVE_API;
 assert.ok(Live.EARTH_BASELINE.pressure_kpa === 101.3);
 assert.ok(Live.MARS_HABITABILITY_CRITERIA.length === 6, '6 vital biosphere habitability markers defined');
 
+// --- UI helper modules (pure, extracted from app.js)
+const FMT = require('../web/ui/format.js').MDE_FMT, CH = require('../web/ui/charts.js').MDE_CHARTS;
+assert.strictEqual(FMT.fmtLat(-5.44), '5.4°S'); assert.strictEqual(FMT.fmtLon(137.8), '137.8°E');
+assert.ok(FMT.trekUrl(18.4, 77.6).includes('x=77.600&y=18.400'));
+assert.strictEqual(FMT.candidateName(18.5, 77.5, { distDeg: 0.5, region: { name: 'Jezero', lat: 18.4, lon: 77.6 } }), 'Jezero');
+assert.ok(FMT.candidateName(25, 77.6, { distDeg: 6.6, region: { name: 'Jezero Crater (Perseverance)', lat: 18.4, lon: 77.6 } }).startsWith('N of Jezero Crater'));
+assert.ok(CH.profileSVG([{ km: 0, elev: -2000, slope: 2 }, { km: 50, elev: -1500, slope: 12 }]).includes('<svg'));
+assert.ok(CH.crisisSVG([{ batt: 100, tau: 1 }, { batt: 50, tau: 8 }], 100).includes('<svg'));
+
 // --- data honesty: failed requests never produce fake telemetry
 (async () => {
   const fail = async () => { throw new Error('net down'); };
