@@ -260,21 +260,29 @@
 
   function createShader(gl, type, src) {
     const s = gl.createShader(type);
+    if (!s) return null;
     gl.shaderSource(s, src);
     gl.compileShader(s);
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
       console.error('Shader compile error:', gl.getShaderInfoLog(s));
+      gl.deleteShader(s);
+      return null;
     }
     return s;
   }
 
   function createProg(gl, vs, fs) {
+    const sv = createShader(gl, gl.VERTEX_SHADER, vs);
+    const sf = createShader(gl, gl.FRAGMENT_SHADER, fs);
+    if (!sv || !sf) return null;
     const p = gl.createProgram();
-    gl.attachShader(p, createShader(gl, gl.VERTEX_SHADER, vs));
-    gl.attachShader(p, createShader(gl, gl.FRAGMENT_SHADER, fs));
+    gl.attachShader(p, sv);
+    gl.attachShader(p, sf);
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
       console.error('Program link error:', gl.getProgramInfoLog(p));
+      gl.deleteProgram(p);
+      return null;
     }
     return p;
   }
@@ -282,9 +290,6 @@
   function createGlobe(canvas) {
     const gl = canvas.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: false });
     if (!gl) return null;
-
-    const progGlobe = createProg(gl, VS_GLOBE, FS_GLOBE);
-    const progHalo = createProg(gl, VS_HALO, FS_HALO);
 
     // Build 240 x 120 UV sphere mesh (29,241 vertices, fits in Uint16Array)
     const LON_SEGS = 240, LAT_SEGS = 120;
@@ -311,19 +316,6 @@
       }
     }
 
-    const vboGlobe = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vboGlobe);
-    gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
-
-    const iboGlobe = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboGlobe);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-
-    const vboQuad = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-
-    // Textures
     function makeTex(wrapX) {
       const t = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, t);
@@ -334,13 +326,58 @@
       return t;
     }
 
-    const texBase = makeTex(true);
-    const texElev = makeTex(true);
-    const texOv = makeTex(true);
+    let res = null, lastBaseImg = null;
+
+    function initGL() {
+      const progGlobe = createProg(gl, VS_GLOBE, FS_GLOBE);
+      const progHalo = createProg(gl, VS_HALO, FS_HALO);
+      if (!progGlobe || !progHalo) { res = null; return false; }
+
+      const vboGlobe = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vboGlobe);
+      gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+
+      const iboGlobe = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboGlobe);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+      const vboQuad = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+      res = {
+        progGlobe, progHalo, vboGlobe, iboGlobe, vboQuad,
+        texBase: makeTex(true), texElev: makeTex(true), texOv: makeTex(true),
+        aPos: gl.getAttribLocation(progHalo, 'a_pos'),
+        aUv: gl.getAttribLocation(progGlobe, 'a_uv'),
+        uHalo: {
+          res: gl.getUniformLocation(progHalo, 'u_res'),
+          sphereR: gl.getUniformLocation(progHalo, 'u_sphereScreenR'),
+          camAngles: gl.getUniformLocation(progHalo, 'u_camAngles'),
+          fov: gl.getUniformLocation(progHalo, 'u_fov'),
+        },
+        uGlobe: {
+          baseTex: gl.getUniformLocation(progGlobe, 'u_baseTex'),
+          elevTex: gl.getUniformLocation(progGlobe, 'u_elevTex'),
+          ovTex: gl.getUniformLocation(progGlobe, 'u_ovTex'),
+          mvp: gl.getUniformLocation(progGlobe, 'u_mvp'),
+          relief: gl.getUniformLocation(progGlobe, 'u_relief'),
+          opacity: gl.getUniformLocation(progGlobe, 'u_opacity'),
+          showOv: gl.getUniformLocation(progGlobe, 'u_showOv'),
+          lighting: gl.getUniformLocation(progGlobe, 'u_lighting'),
+          camPos: gl.getUniformLocation(progGlobe, 'u_camPos'),
+          sunDir: gl.getUniformLocation(progGlobe, 'u_sunDir'),
+        },
+      };
+      return true;
+    }
+
+    if (!initGL()) return null;
 
     // State
     const state = {
       active: false,
+      contextLost: false,
       rotLat: 16,      // degrees
       rotLon: 65,      // degrees (starts facing Syrtis / Jezero / Hellas hemisphere)
       targetLat: 16,
@@ -355,7 +392,22 @@
       elevData: null,
       W: 2048,
       H: 1024,
+      onContextLost: null,
+      onContextRestored: null,
     };
+
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      state.contextLost = true;
+      if (state.onContextLost) state.onContextLost();
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      state.contextLost = false;
+      if (!initGL()) return;
+      if (lastBaseImg && state.elevData) setLayers(lastBaseImg, state.elevData, state.W, state.H);
+      else if (lastBaseImg) setBaseTexture(lastBaseImg);
+      if (state.onContextRestored) state.onContextRestored();
+    });
 
     function getReliefScale() {
       // Physical Mars relief is ~29.5 km / 3389.5 km = 0.0087 of radius.
@@ -365,8 +417,10 @@
     // Upload (or replace) the colour texture. Power-of-two images get mipmaps + anisotropic
     // filtering so the 4096x2048 Viking mosaic stays sharp at every zoom. Throws on a tainted image.
     function setBaseTexture(img) {
+      lastBaseImg = img;
+      if (!res || state.contextLost || gl.isContextLost()) return;
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      gl.bindTexture(gl.TEXTURE_2D, texBase);
+      gl.bindTexture(gl.TEXTURE_2D, res.texBase);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
       const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
       const pot = (w & (w - 1)) === 0 && (h & (h - 1)) === 0;
@@ -385,16 +439,18 @@
       state.W = width;
       state.H = height;
       state.elevData = elevUint8;
+      if (!res || state.contextLost || gl.isContextLost()) return;
 
       setBaseTexture(baseImg);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
-      gl.bindTexture(gl.TEXTURE_2D, texElev);
+      gl.bindTexture(gl.TEXTURE_2D, res.texElev);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, width, height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, elevUint8);
     }
 
     function updateOverlay(ovCanvas) {
-      gl.bindTexture(gl.TEXTURE_2D, texOv);
+      if (!res || state.contextLost || gl.isContextLost()) return;
+      gl.bindTexture(gl.TEXTURE_2D, res.texOv);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ovCanvas);
     }
 
@@ -568,6 +624,7 @@
     }
 
     function render(opts) {
+      if (!res || state.contextLost || gl.isContextLost()) return;
       const w = canvas.width, h = canvas.height;
       gl.viewport(0, 0, w, h);
       gl.clearColor(0.012, 0.018, 0.03, 1.0);
@@ -575,18 +632,17 @@
 
       // 1. Background starfield + atmospheric corona
       gl.disable(gl.DEPTH_TEST);
-      gl.useProgram(progHalo);
-      gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
-      const aPos = gl.getAttribLocation(progHalo, 'a_pos');
-      gl.enableVertexAttribArray(aPos);
-      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.useProgram(res.progHalo);
+      gl.bindBuffer(gl.ARRAY_BUFFER, res.vboQuad);
+      gl.enableVertexAttribArray(res.aPos);
+      gl.vertexAttribPointer(res.aPos, 2, gl.FLOAT, false, 0, 0);
 
       const f = 1.0 / Math.tan(state.fov * 0.5);
       const sphereScreenR = f / Math.sqrt(Math.max(1.05, state.camDist * state.camDist - 1.0));
-      gl.uniform2f(gl.getUniformLocation(progHalo, 'u_res'), w, h);
-      gl.uniform1f(gl.getUniformLocation(progHalo, 'u_sphereScreenR'), sphereScreenR);
-      gl.uniform2f(gl.getUniformLocation(progHalo, 'u_camAngles'), state.lon * DEG, state.lat * DEG);
-      gl.uniform1f(gl.getUniformLocation(progHalo, 'u_fov'), state.fov);
+      gl.uniform2f(res.uHalo.res, w, h);
+      gl.uniform1f(res.uHalo.sphereR, sphereScreenR);
+      gl.uniform2f(res.uHalo.camAngles, state.rotLon * DEG, state.rotLat * DEG);
+      gl.uniform1f(res.uHalo.fov, state.fov);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
       // 2. 3D displaced MOLA Mars globe
@@ -594,37 +650,36 @@
       gl.enable(gl.CULL_FACE);
       gl.cullFace(gl.BACK);
 
-      gl.useProgram(progGlobe);
-      gl.bindBuffer(gl.ARRAY_BUFFER, vboGlobe);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboGlobe);
-      const aUv = gl.getAttribLocation(progGlobe, 'a_uv');
-      gl.enableVertexAttribArray(aUv);
-      gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 0, 0);
+      gl.useProgram(res.progGlobe);
+      gl.bindBuffer(gl.ARRAY_BUFFER, res.vboGlobe);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, res.iboGlobe);
+      gl.enableVertexAttribArray(res.aUv);
+      gl.vertexAttribPointer(res.aUv, 2, gl.FLOAT, false, 0, 0);
 
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, texBase);
-      gl.uniform1i(gl.getUniformLocation(progGlobe, 'u_baseTex'), 0);
+      gl.bindTexture(gl.TEXTURE_2D, res.texBase);
+      gl.uniform1i(res.uGlobe.baseTex, 0);
 
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, texElev);
-      gl.uniform1i(gl.getUniformLocation(progGlobe, 'u_elevTex'), 1);
+      gl.bindTexture(gl.TEXTURE_2D, res.texElev);
+      gl.uniform1i(res.uGlobe.elevTex, 1);
 
       gl.activeTexture(gl.TEXTURE2);
-      gl.bindTexture(gl.TEXTURE_2D, texOv);
-      gl.uniform1i(gl.getUniformLocation(progGlobe, 'u_ovTex'), 2);
+      gl.bindTexture(gl.TEXTURE_2D, res.texOv);
+      gl.uniform1i(res.uGlobe.ovTex, 2);
 
       const mvp = buildMVP();
-      gl.uniformMatrix4fv(gl.getUniformLocation(progGlobe, 'u_mvp'), false, mvp);
-      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_relief'), getReliefScale());
-      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_opacity'), opts.opacity ?? 0.7);
-      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_showOv'), opts.showOverlay ? 1.0 : 0.0);
-      gl.uniform1f(gl.getUniformLocation(progGlobe, 'u_lighting'), state.sunLight ? 1.0 : 0.0);
+      gl.uniformMatrix4fv(res.uGlobe.mvp, false, mvp);
+      gl.uniform1f(res.uGlobe.relief, getReliefScale());
+      gl.uniform1f(res.uGlobe.opacity, opts.opacity ?? 0.7);
+      gl.uniform1f(res.uGlobe.showOv, opts.showOverlay ? 1.0 : 0.0);
+      gl.uniform1f(res.uGlobe.lighting, state.sunLight ? 1.0 : 0.0);
 
       // Camera & Sun direction in world space (headlight-offset solar vector for optimal inspection)
       const [camWx, camWy, camWz] = rotToWorld(0, 0, state.camDist);
       const [sunWx, sunWy, sunWz] = rotToWorld(1.15, 0.75, state.camDist + 1.5);
-      gl.uniform3f(gl.getUniformLocation(progGlobe, 'u_camPos'), camWx, camWy, camWz);
-      gl.uniform3f(gl.getUniformLocation(progGlobe, 'u_sunDir'), sunWx, sunWy, sunWz);
+      gl.uniform3f(res.uGlobe.camPos, camWx, camWy, camWz);
+      gl.uniform3f(res.uGlobe.sunDir, sunWx, sunWy, sunWz);
 
       gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
     }

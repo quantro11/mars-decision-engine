@@ -2,9 +2,10 @@
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
-  const { candidateName, trekUrl, fmtLat, fmtLon } = window.MDE_FMT;
+  const { candidateName, trekUrl, fmtLat, fmtLon, escHtml } = window.MDE_FMT;
   const { profileSVG, crisisSVG } = window.MDE_CHARTS;
   const { initHabitabilityAPI, renderHabitability } = window.MDE_HAB;
+  const { buildBriefPayload, renderBriefHTML, downloadBriefJSON } = window.MDE_BRIEF;
   const META = window.LAYER_META;
   const W = META.width, H = META.height;
   const MARS_R = 3389.5; // km
@@ -46,8 +47,12 @@
   };
   let baseImg = null;
 
+  const decodeInflight = {};
   function decode(key) {
-    return new Promise((res, rej) => {
+    if (key === 'base' && baseImg) return Promise.resolve();
+    if (key !== 'base' && L[key]) return Promise.resolve();
+    if (decodeInflight[key]) return decodeInflight[key];
+    decodeInflight[key] = new Promise((res, rej) => {
       const im = new Image();
       im.onload = () => {
         if (key === 'base') { baseImg = im; return res(); }
@@ -60,7 +65,6 @@
         L[key] = out; res();
       };
       im.onerror = () => {
-        // Fallback: if data URI fails or not bundled, stream directly from web/layers/*.png
         if (!im.src.includes('layers/')) {
           im.src = 'layers/' + key + '.png';
         } else {
@@ -69,6 +73,7 @@
       };
       im.src = (window.LAYER_DATA && window.LAYER_DATA[key]) ? window.LAYER_DATA[key] : ('layers/' + key + '.png');
     });
+    return decodeInflight[key];
   }
 
   // physical values of a cell
@@ -177,49 +182,12 @@
     elBar.style.width = `${barPx}px`;
   }
 
-  // ------------------------------------------------------------ colour maps
-  function lerpStops(stops, t) {
-    t = Math.max(0, Math.min(1, t));
-    for (let i = 1; i < stops.length; i++) if (t <= stops[i][0]) {
-      const [t0, ...a] = stops[i - 1], [t1, ...b] = stops[i], u = (t - t0) / (t1 - t0 || 1);
-      return a.map((v, k) => v + (b[k] - v) * u);
-    }
-    return stops[stops.length - 1].slice(1);
-  }
-  const CMAP = {
-    score: [[0, 14, 19, 34], [0.3, 30, 64, 130], [0.55, 16, 155, 165], [0.78, 245, 158, 11], [1, 254, 249, 195]],
-    ice: [[0, 32, 26, 22], [0.5, 45, 95, 135], [1, 145, 228, 255]],
-    slope: [[0, 22, 55, 38], [0.33, 65, 175, 95], [0.66, 245, 180, 35], [1, 239, 55, 55]],
-    elev: [[0, 18, 38, 88], [0.3, 52, 118, 142], [0.5, 168, 148, 88], [0.7, 148, 78, 48], [1, 252, 252, 255]],
-    ti: [[0, 115, 38, 22], [0.15, 195, 115, 38], [0.4, 75, 168, 95], [0.7, 56, 135, 215], [1, 238, 244, 255]],
-    dust: [[0, 35, 55, 85], [0.5, 185, 145, 85], [1, 255, 228, 155]],
-    rad: [[0, 40, 120, 90], [0.5, 230, 200, 60], [1, 220, 40, 90]],
-  };
-  const LUT = {};
-  for (const k in CMAP) { LUT[k] = new Uint8ClampedArray(256 * 3); for (let i = 0; i < 256; i++) { const c = lerpStops(CMAP[k], i / 255); LUT[k].set(c.map(Math.round), i * 3); } }
-
-  const radLut = new Uint8Array(256);
-  for (let i = 0; i < 256; i++) radLut[i] = Math.max(0, Math.min(255, Math.round((SCORING.radDose(META.elev.offset + i * META.elev.scale) - 190) / 150 * 255)));
+  // ------------------------------------------------------------ colour maps (delegated to ui/overlays.js)
+  const { buildRadLut, fillOverlayBuffer, renderLegendHTML } = window.MDE_OVERLAYS;
+  const radLut = buildRadLut(META.elev, SCORING);
 
   function buildOverlay() {
-    const d = ovImg.data, lut = LUT[S.overlay] || LUT.score;
-    for (let i = 0, j = 0; i < W * H; i++, j += 4) {
-      let v, a = 255;
-      if (S.overlay === 'score') {
-        const sc = S.score[i];
-        const norm = Math.max(0, Math.min(1, (sc - 0.35) / 0.65));
-        v = Math.round(norm * 255);
-        a = sc <= 0 ? 28 : Math.round(65 + 190 * Math.pow(norm, 0.75));
-      }
-      else if (S.overlay === 'ice') { const r = L.ice[i]; if (r === 0) { v = 0; a = 0; } else v = Math.round(Math.max(0, Math.min(255, (r - 28) * 1.275))); }
-      else if (S.overlay === 'slope') v = Math.min(255, L.slope[i] * 2);
-      else if (S.overlay === 'elev') v = L.elev[i];
-      else if (S.overlay === 'ti') { const r = L.ti[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round(r * 4 / 700 * 255)); }
-      else if (S.overlay === 'rad') { v = radLut[L.elev[i]]; }
-      else if (S.overlay === 'dust') { const r = L.dust[i]; if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round((r - 1) * 1.275)); }
-      else { d[j + 3] = 0; continue; }
-      d[j] = lut[v * 3]; d[j + 1] = lut[v * 3 + 1]; d[j + 2] = lut[v * 3 + 2]; d[j + 3] = a;
-    }
+    fillOverlayBuffer(ovImg.data, S.overlay, L, S.score, radLut);
     ovCtx.putImageData(ovImg, 0, 0);
     if (globe) globe.updateOverlay(ovCanvas);
     ovDirty = false;
@@ -511,9 +479,9 @@
       const ice = SCORING.calcIceAccess(v.ice, S.iceBand), flat = flatShare(c.x, c.y, c.blockPx);
       const li = document.createElement('li');
       li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
-      li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${name}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-        <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ice: <b>${ice.status.toLowerCase().replace('_', ' ')}</b> · ≤5° cells: <b>${(flat * 100).toFixed(0)}%</b>${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
-        <a class="trek" href="${trekUrl(v.lat, v.lon)}" target="_blank" rel="noopener">▸ Inspect in NASA Mars Trek (HiRISE / CTX)</a>`;
+      li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${escHtml(name)}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
+        <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ice: <b>${escHtml(ice.status.toLowerCase().replace('_', ' '))}</b> · ≤5° cells: <b>${(flat * 100).toFixed(0)}%</b>${c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">ROBUST ${(c.robust * 100).toFixed(0)}%</span>` : ''}</div>${critRows(v, S.weights)}
+        <a class="trek" href="${escHtml(trekUrl(v.lat, v.lon))}" target="_blank" rel="noopener">Inspect in NASA Mars Trek (HiRISE / CTX) →</a>`;
       const trekLink = li.querySelector('.trek');
       if (trekLink) trekLink.onclick = (e) => e.stopPropagation();
       li.onclick = () => {
@@ -544,7 +512,7 @@
         </div>
         <span class="status-pill ${vetoed ? 'bad' : 'ok'}">${vetoed ? 'Vetoed' : 'Within constraints'}</span>
       </div>
-      <div class="coord">${fmtLat(v.lat)}, ${fmtLon(v.lon)} · ${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name} · ${(nr.distDeg * 59.3).toFixed(0)} km</div>
+      <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${nr.distDeg < 6 ? escHtml(nr.region.name) : 'near ' + escHtml(nr.region.name)} · ${(nr.distDeg * 59.3).toFixed(0)} km</div>
       <div class="hls-checks">
         <div class="hls-check"><span class="hint">Elevation ≤ +2 km</span><b class="${passElev ? 'ok' : 'bad'}">${passElev ? 'pass' : 'veto'}</b></div>
         <div class="hls-check"><span class="hint">Slope ≤ 15°</span><b class="${passSlope ? 'ok' : 'bad'}">${passSlope ? 'pass' : 'veto'}</b></div>
@@ -604,8 +572,8 @@
       <tr><td>Candidate rest stops</td><td>—</td><td><b>${havens.length}</b> (flat, smooth, firm)</td></tr>
       <tr><td>Traverse Duration</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
       <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (limit ${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.` : 'NOMINAL // Direct path satisfies maximum slope constraint.'}</div>
-      ${havens.length ? `<div class="help" style="margin-top:6px;color:#a3e635"><b>Rest stops (terrain only, no shelter implied):</b> ${havenStr}</div>` : ''}
-      <div class="hint" style="margin-top:10px">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
+      ${havens.length ? `<div class="help haven-note"><b>REST STOPS (TERRAIN ONLY, NO SHELTER IMPLIED)</b>${escHtml(havenStr)}</div>` : ''}
+      <div class="hint mt-sm">Elevation profile along the safe route · solved in ${r.ms.toFixed(0)} ms, ${r.safe.path.length} cells</div>${profileSVG(b.profile)}`;
   }
   // ------------------------------------------------------------ crisis
   function setCrisisSite(x, y) { S.crisis.site = { x, y }; runCrisis(); draw(); }
@@ -627,24 +595,30 @@
       : `<div class="summary-big ok">Survives the storm</div><div class="help">Minimum battery reserve ${res.minBatt.toFixed(0)} kWh (${(100 * res.minBatt / c.batt).toFixed(0)}%). Net balance at peak attenuation: ${(peakSolar + nuc - c.cons).toFixed(0)} kWh/sol.</div>`;
 
     const thermVerdict = res.freezeSol !== null
-      ? `<div class="summary-big bad" style="margin-top:8px">Habitat interior below 0 °C on sol ${res.freezeSol}</div><div class="help">Not enough heat once power is short; interior falls toward ambient (minimum ${res.minHabTemp}°C).</div>`
-      : `<div class="summary-big ok" style="margin-top:8px">Thermal Life Support Maintained</div><div class="help">Internal habitat comfort (+20°C) sustained throughout storm (night ambient drops to ${sTemp.night}°C).</div>`;
+      ? `<div class="summary-big bad mt-sm">Habitat interior below 0 °C on sol ${res.freezeSol}</div><div class="help">Not enough heat once power is short; interior falls toward ambient (minimum ${res.minHabTemp}°C).</div>`
+      : `<div class="summary-big ok mt-sm">Thermal Life Support Maintained</div><div class="help">Internal habitat comfort (+20°C) sustained throughout storm (night ambient drops to ${sTemp.night}°C).</div>`;
+
+    const liveSpace = window.MDE_LIVE_STATE && window.MDE_LIVE_STATE.space;
+    const liveCmeRow = liveSpace && liveSpace.mode === 'live'
+      ? `<div class="kv"><span>DONKI CMEs (30d · live)</span><b>${liveSpace.events.length} catalogued</b></div>`
+      : '';
 
     el.innerHTML = `${verdict}
       ${thermVerdict}
-      <div class="kv"><span>Season (L<sub>s</sub> = ${c.ls}°)</span><b>${STORM.seasonName(c.ls)}</b></div>
+      <div class="kv"><span>Season (L<sub>s</sub> = ${c.ls}°)</span><b>${escHtml(STORM.seasonName(c.ls))}</b></div>
       <div class="kv"><span>Surface temp. (approx.)</span><b>night ${sTemp.night}°C · mean ${sTemp.mean}°C</b></div>
       <div class="kv"><span>Habitat heat loss</span><b>${pTherm} kW · extra heaters ${Math.max(...res.rows.map(r => r.heater)).toFixed(0)} kWh/sol max</b></div>
       <div class="kv"><span>Clear-sky solar, τ 0.5</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
       <div class="kv"><span>Peak-storm solar, τ ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
       <div class="kv"><span>Panel dust after ${res.rows.length} sols</span><b>−${res.postStormSolarLossPct}% (no cleaning events assumed)</b></div>
       <div class="kv"><span>Kilopower baseload</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
-      <div class="kv" style="border-top:1px dashed rgba(236,231,223,.12);padding-top:4px"><span>Design-basis SPE on surface</span><b>${spe.unshieldedDoseMsv} mSv</b></div>
-      <div class="kv"><span>Shielded (${(c.regolith || 1.5).toFixed(1)}m regolith)</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${spe.survivalStatus})</b></div>
+      <div class="kv kv-top"><span>Design-basis SPE on surface</span><b>${spe.unshieldedDoseMsv} mSv</b></div>
+      <div class="kv"><span>Shielded (${(c.regolith || 1.5).toFixed(1)}m regolith)</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${escHtml(spe.survivalStatus)})</b></div>
       <div class="kv"><span>Regolith for ≤ 100 mSv</span><b>${spe.requiredRegolithM} m</b></div>
-      <div class="help" style="font-size:10px">SPE figures use an assumed August-1972-class event (~1 Sv behind 5 g/cm²), not a forecast. Largest SPE measured on the surface so far (Sept 2017, MSL/RAD): ~0.4 mGy.</div>
+      <div class="help note-sm">SPE figures use an assumed August-1972-class event (~1 Sv behind 5 g/cm²), not a forecast. Largest SPE measured on the surface so far (Sept 2017, MSL/RAD): ~0.4 mGy.</div>
+      ${liveCmeRow}
       ${crisisSVG(res.rows, c.batt)}
-      <div class="help" style="margin-top:6px">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add fission power (Kilopower-class, 10 kWe design target) to keep the load and heating running.' : ''}</div>`;
+      <div class="help mt-sm">Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay. ${c.kp === 0 && res.blackoutSol !== null ? 'Add fission power (Kilopower-class, 10 kWe design target) to keep the load and heating running.' : ''}</div>`;
   }
   // ------------------------------------------------------------ UI wiring
   function updateHudLayer() {
@@ -652,14 +626,37 @@
     if (el) el.textContent = `Overlay · ${(OVERLAY_NAMES[S.overlay] || S.overlay).toLowerCase()}`;
   }
 
+  function setHudHint(text, isWarn) {
+    const el = $('#hud-hint');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle('warn', !!isWarn);
+  }
+  if (!globe && $('#btn-3d')) {
+    $('#btn-3d').setAttribute('aria-disabled', 'true');
+    $('#btn-3d').title = '3D Globe unavailable (WebGL disabled or unsupported)';
+  }
+  if (globe) {
+    globe.state.onContextLost = () => setHudHint('WebGL context lost — restoring 3D globe…', true);
+    globe.state.onContextRestored = () => {
+      ovDirty = true;
+      buildOverlay();
+      setHudHint(S.viewMode === '3d' ? 'Drag to orbit · scroll to zoom · click to inspect' : 'Drag to pan · scroll to zoom · click to inspect', false);
+      schedule3D();
+    };
+  }
+
   function setViewMode(vm) {
-    if (vm === '3d' && !globe) return;
+    if (vm === '3d' && !globe) {
+      setHudHint('3D globe unavailable (WebGL disabled) — staying in 2D map view', true);
+      return;
+    }
     S.viewMode = vm;
     document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === vm));
     if (globeCanvas) globeCanvas.classList.toggle('hidden', vm !== '3d');
     if ($('#globe-tools')) $('#globe-tools').classList.toggle('hidden', vm !== '3d');
     if ($('#hud-proj')) $('#hud-proj').textContent = vm === '3d' ? 'Globe · MOLA relief' : 'Map · equirectangular';
-    if ($('#hud-hint')) $('#hud-hint').textContent = vm === '3d' ? 'Drag to orbit · scroll to zoom · click to inspect' : 'Drag to pan · scroll to zoom · click to inspect';
+    setHudHint(vm === '3d' ? 'Drag to orbit · scroll to zoom · click to inspect' : 'Drag to pan · scroll to zoom · click to inspect', false);
     if (vm === '3d' && globe) {
       if (S.selected) {
         globe.flyTo(L.latOfRow(S.selected.y), L.lonOfCol(S.selected.x));
@@ -749,7 +746,12 @@
   }
   $('#hard').onchange = (e) => { S.hard = e.target.checked; rescore(); };
   if ($('#agg-geo')) $('#agg-geo').onchange = (e) => { S.agg = e.target.checked ? 'geo' : 'sum'; rescore(); };
-  document.querySelectorAll('#iceband button').forEach(b => b.onclick = () => { document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b)); S.iceBand = b.dataset.band; rescore(); });
+  document.querySelectorAll('#iceband button').forEach(b => b.onclick = async () => {
+    document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b));
+    S.iceBand = b.dataset.band;
+    if (!L[S.iceBand]) await decode(S.iceBand);
+    rescore();
+  });
   document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; updateHudLayer(); ovDirty = true; renderLegend(); draw(); });
   $('#opacity').oninput = (e) => { S.opacity = +e.target.value / 100; const vEl = $('#opacity-v'); if (vEl) vEl.textContent = e.target.value + '%'; draw(); };
   $('#show-regions').onchange = (e) => { S.showRegions = e.target.checked; draw(); };
@@ -790,171 +792,54 @@
   if ($('#rego')) {
     bindRange('rego', v => (v / 10).toFixed(1) + ' m', v => { S.crisis.regolith = v / 10; runCrisis(); });
   }
-  $('#btn-about').onclick = () => $('#about').classList.remove('hidden');
-  $('#about-close').onclick = () => $('#about').classList.add('hidden');
-  $('#about').onclick = (e) => { if (e.target.id === 'about') $('#about').classList.add('hidden'); };
+  let activeModal = null, lastFocusedEl = null;
+  function openModal(modal, focusSel) {
+    if (!modal) return;
+    lastFocusedEl = document.activeElement;
+    activeModal = modal;
+    modal.classList.remove('hidden');
+    const target = focusSel ? modal.querySelector(focusSel) : modal.querySelector('.modal-close');
+    if (target) target.focus();
+  }
+  function closeModal(modal) {
+    if (!modal || modal.classList.contains('hidden')) return;
+    modal.classList.add('hidden');
+    if (activeModal === modal) activeModal = null;
+    if (lastFocusedEl && typeof lastFocusedEl.focus === 'function') lastFocusedEl.focus();
+    lastFocusedEl = null;
+  }
+
+  $('#btn-about').onclick = () => openModal($('#about'), '#about-close');
+  $('#about-close').onclick = () => closeModal($('#about'));
+  $('#about').onclick = (e) => { if (e.target.id === 'about') closeModal($('#about')); };
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      $('#about').classList.add('hidden');
-      if ($('#brief-modal')) $('#brief-modal').classList.add('hidden');
+      closeModal($('#about'));
+      closeModal($('#brief-modal'));
+      return;
+    }
+    if (e.key === 'Tab' && activeModal && !activeModal.classList.contains('hidden')) {
+      const focusables = [...activeModal.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
   });
 
-  // ------------------------------------------------------------ Mission Brief Exporter
-  function buildBriefPayload() {
-    const wn = SCORING.normalize(S.weights);
-    const cands = S.candidates.map((c, i) => {
-      const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
-      return {
-        rank: i + 1,
-        designation: candidateName(v.lat, v.lon, nr),
-        hls2015_ez: !!(nr.region.ez && nr.distDeg < 6),
-        lat_deg: +v.lat.toFixed(2),
-        lon_deg: +v.lon.toFixed(2),
-        suitability_score: +c.score.toFixed(3),
-        robust_pct: c.robust != null ? Math.round(c.robust * 100) : null,
-        elev_m: Math.round(v.elev),
-        slope_p90_deg: +v.slope.toFixed(1),
-        swim_ice_consistency: v.ice === null ? null : +v.ice.toFixed(2),
-        ice_access: SCORING.calcIceAccess(v.ice, S.iceBand).status,
-        landing_slope_share_le5deg: +flatShare(c.x, c.y, c.blockPx).toFixed(2),
-        roughness_m: Math.round(v.rough),
-        regional_terrain_class: SCORING.calcTerrainClass(v.slope, v.rough).terrainClass,
-        tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
-        atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
-        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
-        nocturnal_temp_c: STORM.surfaceTempC(v.lat, S.crisis.ls).night,
-        thermal_heating_kw: STORM.thermalDemandKw(v.lat, S.crisis.ls),
-        mars_trek_url: trekUrl(v.lat, v.lon),
-      };
-    });
-    const selCell = S.selected ? (() => {
-      const v = cellValues(S.selected.x, S.selected.y);
-      const nr = nearestRegion(v.lat, v.lon);
-      return {
-        region: nr.region.name,
-        lat_deg: +v.lat.toFixed(2),
-        lon_deg: +v.lon.toFixed(2),
-        score: +S.score[S.selected.y * W + S.selected.x].toFixed(3),
-        elev_m: Math.round(v.elev),
-        slope_deg: +v.slope.toFixed(1),
-        ice: v.ice === null ? null : +v.ice.toFixed(2),
-        ti: v.ti === null ? null : Math.round(v.ti),
-        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
-      };
-    })() : null;
-    const crisisSite = S.crisis.site || (S.candidates[0] ? { x: S.candidates[0].x, y: S.candidates[0].y } : { x: 1024, y: 512 });
-    const cv = cellValues(crisisSite.x, crisisSite.y), cnr = nearestRegion(cv.lat, cv.lon);
-    const spe = SCORING.calcSPE(cv.elev, S.crisis.regolith ?? 1.5);
-    const sim = STORM.simulate({
-      lat: cv.lat, ls: S.crisis.ls, panelArea: S.crisis.area, efficiency: 0.2,
-      consumption: S.crisis.cons, capacity: S.crisis.batt, kilopower: S.crisis.kp, sols: 120,
-      storm: { tau0: 0.5, tauPeak: S.crisis.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
-    });
-    return {
-      generated_at: new Date().toISOString(),
-      system: 'Mars Base Decision Engine (MDE-2.4)',
-      architecture_preset: S.preset || 'custom',
-      hard_constraints_hls2015: S.hard,
-      swim_ice_horizon: S.iceBand,
-      normalized_weights: Object.fromEntries(Object.entries(wn).map(([k, v]) => [k, +v.toFixed(3)])),
-      top_candidates: cands,
-      selected_site: selCell,
-      traverse_plan: S.route.safe && S.route.safe.ok ? {
-        direct_km: +S.route.straight.stats.km.toFixed(1),
-        direct_max_slope_deg: +S.route.straight.stats.maxSlope.toFixed(1),
-        astar_safe_km: +S.route.safe.stats.km.toFixed(1),
-        astar_max_slope_deg: +S.route.safe.stats.maxSlope.toFixed(1),
-        astar_dust_trap_km: +(S.route.safe.stats.dustKm || 0).toFixed(1),
-        astar_mean_roughness_m: Math.round(S.route.safe.stats.meanRough || 0),
-        candidate_rest_stops: S.route.safe.stats.safeHavens || [],
-        speed_km_per_sol: S.route.speed,
-      } : null,
-      dust_storm_simulation: {
-        station_region: cnr.region.name,
-        lat_deg: +cv.lat.toFixed(2),
-        season_ls_deg: S.crisis.ls,
-        season_name: STORM.seasonName(S.crisis.ls),
-        tau_peak: S.crisis.tauPeak,
-        nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls).night,
-        hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls),
-        spe_design_basis_assumption: {
-          unshielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).unshieldedDoseMsv,
-          regolith_cover_m: +(S.crisis.regolith || 1.5).toFixed(1),
-          shielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).shieldedDoseMsv,
-          required_trench_depth_m: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).requiredRegolithM,
-          survival_status: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).survivalStatus,
-        },
-        panel_area_m2: S.crisis.area,
-        kilopower_units: S.crisis.kp,
-        survives_blackout: sim.blackoutSol === null,
-        blackout_sol: sim.blackoutSol,
-        thermal_freeze_sol: sim.freezeSol,
-        min_hab_interior_c: sim.minHabTemp,
-        post_storm_dust_loss_pct: sim.postStormSolarLossPct,
-        min_battery_kwh: Math.round(sim.minBatt),
-      },
-    };
-  }
-
+  // ------------------------------------------------------------ Mission Brief Exporter (delegated to ui/brief.js)
+  const getBriefPayload = () => buildBriefPayload({ S, W, L, META, flatShare, cellValues, blockValues, nearestRegion });
   function openBriefModal() {
     const modal = $('#brief-modal'), body = $('#brief-body');
     if (!modal || !body) return;
-    const p = buildBriefPayload();
-    const top = p.top_candidates[0], ds = p.dust_storm_simulation;
-    body.innerHTML = `
-      <div class="brief-meta">
-        <div class="brief-kpi"><span>Mission Profile</span><b>${(p.architecture_preset).toUpperCase()}</b></div>
-        <div class="brief-kpi"><span>Primary Candidate</span><b>${top ? top.designation.split(' ·')[0] : 'N/A'}</b></div>
-        <div class="brief-kpi"><span>GCR Dose / ISRU Yield</span><b>${top ? `${top.gcr_dose_msv_yr} mSv/yr · ${top.isru_water_yield_l_sol} L/sol` : '—'}</b></div>
-        <div class="brief-kpi"><span>Storm Survival (τ=${ds.tau_peak})</span><b class="${ds.survives_blackout ? 'ok' : 'bad'}">${ds.survives_blackout ? 'NOMINAL' : 'BLACKOUT SOL ' + ds.blackout_sol}</b></div>
-      </div>
-      <h3>01 // Top-5 Reconnaissance Candidates (2°×2° Regional Means, ≥800 km Sep)</h3>
-      <table class="tbl">
-        <thead>
-          <tr><th>Rank</th><th>Region Designation</th><th>Coordinates</th><th>Score</th><th>Elev</th><th>Slope</th><th>ISRU H₂O</th><th>TES TI</th><th>GCR Dose</th><th>Robust</th></tr>
-        </thead>
-        <tbody>
-          ${p.top_candidates.map(c => `<tr>
-            <td><b>#0${c.rank}</b></td>
-            <td><a href="${c.mars_trek_url}" target="_blank" rel="noopener">${c.designation}</a> ${c.hls2015_ez ? '<span class="flag ez">HLS-EZ</span>' : ''}</td>
-            <td><code>${fmtLat(c.lat_deg)}, ${fmtLon(c.lon_deg)}</code></td>
-            <td><b>${c.suitability_score.toFixed(2)}</b></td>
-            <td>${c.elev_m} m</td>
-            <td>${c.slope_p90_deg}°</td>
-            <td>${c.isru_water_yield_l_sol.toFixed(1)} L/sol</td>
-            <td>${c.tes_thermal_inertia === null ? '—' : c.tes_thermal_inertia + ' tiu'}</td>
-            <td>${c.gcr_dose_msv_yr} mSv/yr</td>
-            <td>${c.robust_pct === null ? '—' : c.robust_pct + '%'}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-      <div class="modal-grid" style="margin-top:10px">
-        <div>
-          <h3>02 // Surface Traverse Analysis (A*)</h3>
-          ${p.traverse_plan ? `<p>A* multi-hazard corridor requires <b>${p.traverse_plan.astar_safe_km} km</b> (max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>, low-TI dust <code>${p.traverse_plan.astar_dust_trap_km} km</code>, ${p.traverse_plan.emergency_safe_havens.length} emergency safe havens) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>` : '<p class="help">No active traverse waypoints designated. Switch to Module II (Rover Route) to include path telemetry.</p>'}
-        </div>
-        <div>
-          <h3>03 // Global Dust-Storm, Thermal &amp; SPE Shielding</h3>
-          <p>Simulated at <b>${ds.station_region}</b> (<code>${fmtLat(ds.lat_deg)}</code>) during <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${ds.season_name}), peak <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² array + ${ds.kilopower_units} Kilopower unit(s): <b>${ds.survives_blackout ? 'Base survives (min reserve ' + ds.min_battery_kwh + ' kWh, min habitat temp ' + ds.min_hab_interior_c + '°C)' : 'Blackout on Sol ' + ds.blackout_sol + (ds.thermal_freeze_sol !== null ? ' · freezes Sol ' + ds.thermal_freeze_sol : '')}</b>. Acute SPE dose behind ${ds.spe_acute_radiation.regolith_cover_m} m regolith: <code>${ds.spe_acute_radiation.shielded_dose_msv} mSv</code> (${ds.spe_acute_radiation.survival_status}).</p>
-        </div>
-      </div>`;
-    modal.classList.remove('hidden');
+    body.innerHTML = renderBriefHTML(getBriefPayload());
+    openModal(modal, '#brief-close');
   }
 
   if ($('#btn-export')) $('#btn-export').onclick = openBriefModal;
-  if ($('#brief-close')) $('#brief-close').onclick = () => $('#brief-modal').classList.add('hidden');
-  if ($('#brief-modal')) $('#brief-modal').onclick = (e) => { if (e.target.id === 'brief-modal') $('#brief-modal').classList.add('hidden'); };
-  if ($('#btn-dl-json')) {
-    $('#btn-dl-json').onclick = () => {
-      const blob = new Blob([JSON.stringify(buildBriefPayload(), null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'mars-mission-brief.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    };
-  }
+  if ($('#brief-close')) $('#brief-close').onclick = () => closeModal($('#brief-modal'));
+  if ($('#brief-modal')) $('#brief-modal').onclick = (e) => { if (e.target.id === 'brief-modal') closeModal($('#brief-modal')); };
+  if ($('#btn-dl-json')) $('#btn-dl-json').onclick = () => downloadBriefJSON(getBriefPayload());
   if ($('#btn-print-brief')) $('#btn-print-brief').onclick = () => window.print();
 
   // Map zoom buttons
@@ -1001,19 +886,8 @@
   };
 
   function renderLegend() {
-    const el = $('#legend'), lut = LUT[S.overlay];
-    if (!lut) { el.innerHTML = ''; return; }
-    const stops = []; for (let i = 0; i <= 10; i++) { const v = Math.round(i * 25.5); stops.push(`rgb(${lut[v * 3]},${lut[v * 3 + 1]},${lut[v * 3 + 2]})`); }
-    const ends = {
-      score: ['≤0.35 VETO/POOR', '1.00 OPTIMAL'],
-      ice: ['−1.0 NO ICE', '+1.0 HIGH ICE'],
-      slope: ['0.0° FLAT', '≥16.0° STEEP'],
-      elev: ['−8.2 KM', '+21.2 KM'],
-      ti: ['0 FINE DUST', '≥700 BEDROCK'],
-      dust: ['0% DUST', '100% DUST'],
-      rad: ['190 mSv/YR LOW', '340 mSv/YR HIGH'],
-    }[S.overlay];
-    el.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
+    const el = $('#legend');
+    if (el) el.innerHTML = renderLegendHTML(S.overlay);
   }
 
   // ------------------------------------------------------------ map interaction (2D & 3D)
@@ -1081,7 +955,7 @@
     if (!g) { tip.classList.add('hidden'); return; }
     const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
     $('#hud-coord').textContent = `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
-    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · score <b>${s.toFixed(2)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>rad ${v.rad.toFixed(0)} mSv/yr · ice ${v.ice === null ? '—' : v.ice.toFixed(2)}<br>rough ${v.rough.toFixed(0)} m · TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
+    tip.innerHTML = `<span class="tt-region">${escHtml(nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name)}</span><b>${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))}</b> · score <b>${s.toFixed(2)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>rad ${v.rad.toFixed(0)} mSv/yr · ice ${v.ice === null ? '—' : v.ice.toFixed(2)}<br>rough ${v.rough.toFixed(0)} m · TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
     const r = canvas.getBoundingClientRect();
     const tx = Math.min(r.width - 210, e.clientX - r.left + 14);
     const ty = Math.min(r.height - 95, e.clientY - r.top + 14);
@@ -1090,6 +964,29 @@
     tip.classList.remove('hidden');
   });
   canvas.addEventListener('mouseleave', () => $('#tooltip').classList.add('hidden'));
+
+  function handleCanvasKey(e) {
+    const panStep = 80 * (window.devicePixelRatio || 1);
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.3); return; }
+    if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomBy(1 / 1.3); return; }
+    if (e.key === '0') { e.preventDefault(); fitView(); draw(); return; }
+    if (!e.key.startsWith('Arrow')) return;
+    e.preventDefault();
+    const dx = e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0;
+    const dy = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+    if (S.viewMode === '3d' && globe) {
+      globe.state.targetLon -= dx * 12;
+      globe.state.targetLat = Math.max(-82, Math.min(82, globe.state.targetLat - dy * 10));
+      stopAutoSpin();
+      schedule3D();
+    } else {
+      S.view.tx += dx * panStep;
+      S.view.ty += dy * panStep;
+      wrapView(); draw();
+    }
+  }
+  canvas.addEventListener('keydown', handleCanvasKey);
+  if (globeCanvas) globeCanvas.addEventListener('keydown', handleCanvasKey);
 
   // Touch gestures (1-finger pan/orbit & tap, 2-finger pinch-to-zoom)
   let touchState = null;
@@ -1179,34 +1076,64 @@
   syncRanges(document);
 
   // ------------------------------------------------------------ boot
-  buildPresets(); buildSliders(); renderLegend(); renderRoute(); initHabitabilityAPI();
-  // Over http(s) the PNGs in layers/ are fetched directly (parallel, cacheable, ~4x smaller than base64).
-  // Opened from file:// the browser would taint the canvas, so the inline base64 bundle is loaded instead.
-  const layersReady = location.protocol === 'file:' && !window.LAYER_DATA
-    ? new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'layers_data.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); })
-    : Promise.resolve();
-  layersReady.then(() => Promise.all(['elev', 'slope', 'rough', 'ice01', 'ice15', 'ice5', 'ti', 'dust', 'base'].map(decode))).then(() => {
+  function ensureFileDataBundle() {
+    if (window.LAYER_DATA || location.protocol !== 'file:') return Promise.resolve();
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'layers_data.js';
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('Failed to load offline bundle layers_data.js'));
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadVikingMosaic() {
+    return new Promise((res, rej) => {
+      const hi = new Image();
+      hi.onload = () => {
+        baseImg = hi;
+        try { if (globe && L.elev) globe.setBaseTexture(hi); } catch (e) { /* ignore tainted fallback */ }
+        res(hi);
+      };
+      hi.onerror = () => rej(new Error('viking_4k.jpg unavailable'));
+      hi.src = 'layers/viking_4k.jpg';
+    });
+  }
+
+  function loadHiResBase() {
+    loadVikingMosaic().then(() => draw()).catch(() => {});
+  }
+
+  buildPresets(); buildSliders(); renderLegend(); renderRoute();
+  initHabitabilityAPI({ onLiveUpdate: () => { if (S.mode === 'crisis') runCrisis(); } });
+
+  ensureFileDataBundle().then(() => {
+    const isFile = location.protocol === 'file:' && !!window.LAYER_DATA;
+    const coreKeys = ['elev', 'slope', 'rough', S.iceBand, 'ti', 'dust'];
+    if (isFile) {
+      return Promise.all([...coreKeys, 'ice01', 'ice5', 'base'].map(decode)).then(() => {
+        if (globe) globe.setLayers(baseImg, L.elev, W, H);
+        loadHiResBase();
+      });
+    }
+    // HTTP(S): stream compact PNG grids + 4K Viking imagery directly without parsing 12 MB layers_data.js
+    const basePromise = loadVikingMosaic().catch(() => decode('base'));
+    return Promise.all([...coreKeys.map(decode), basePromise]).then(() => {
+      if (globe) globe.setLayers(baseImg, L.elev, W, H);
+      setTimeout(() => {
+        ['ice01', 'ice5'].forEach(k => { if (!L[k]) decode(k).catch(() => {}); });
+      }, 300);
+    });
+  }).then(() => {
     L.ice = L[S.iceBand];
-    if (globe) globe.setLayers(baseImg, L.elev, W, H);
-    loadHiResBase();
     window.addEventListener('resize', resize); resize();
     rescore();
     $('#loading').classList.add('hidden');
     applyDemoLink();
-  }).catch(err => { $('#loading').innerHTML = 'Failed to decode layers: ' + err; });
-
-  // Full-resolution Viking MDIM 2.1 mosaic (4096x2048 JPEG, served next to the page). Falls back silently to the
-  // embedded 2048x1024 basemap when it cannot be used (e.g. opened from file:// where WebGL refuses the image).
-  function loadHiResBase() {
-    const hi = new Image();
-    hi.onload = () => {
-      baseImg = hi;                                   // 2D map can always draw it
-      try { if (globe) globe.setBaseTexture(hi); } catch (e) { /* keep embedded texture on the globe */ }
-      draw();
-    };
-    hi.onerror = () => {};
-    hi.src = 'layers/viking_4k.jpg';
-  }
+  }).catch(err => {
+    const el = $('#loading');
+    if (el) el.innerHTML = `<div class="loading-title">Failed to decode planetary layers</div><div class="loading-sub">${escHtml(err && err.message ? err.message : err)}</div>`;
+  });
 
   // Deep links for the demo / presentation:
   //   ?preset=isru  ?view=3d  ?demo=route&from=Jezero&to=Nili   ?demo=crisis&site=Arcadia&tau=9&kp=1

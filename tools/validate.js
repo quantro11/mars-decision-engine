@@ -117,5 +117,7 @@ ${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
   (mensae, valles), so a moderate result is expected and honest. Zones scoring low show where science value outweighed safety.
 * Limitations: 9 landers and ${EZ.length} zones are small samples; site coordinates are point locations evaluated on a 10 km grid.
 `;
-fs.writeFileSync(path.join(ROOT, 'docs/validation.md'), md);
+const targetPath = path.join(ROOT, 'docs/validation.md');
+const prevMd = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8').replace(/\r\n/g, '\n') : '';
+if (prevMd !== md) fs.writeFileSync(targetPath, md);
 console.log(md);

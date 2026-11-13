@@ -22,7 +22,7 @@ WEB = os.path.join(HERE, "..", "web")
 LAYERS = os.path.join(WEB, "layers")
 SRC = os.path.join(HERE, "raw", "mola16_9216x4608.npy")
 OUT_W, OUT_H = 2048, 1024
-MARS_R = 3396190.0
+MARS_R = 3389500.0   # m (IAU-2000 volumetric mean radius, matching preprocess.py and web engine)
 ELEV_MIN_M, ELEV_MAX_M = -8200.0, 21230.0   # unchanged browser encoding (app code relies on it)
 
 
@@ -104,11 +104,11 @@ def main():
     full = json.load(open(os.path.join(LAYERS, "meta.json"), encoding="utf-8"))
     for k in ("elev", "slope", "rough", "generated_by"):
         full[k] = meta[k]
-    json.dump(full, open(os.path.join(LAYERS, "meta.json"), "w", encoding="utf-8"), indent=2)
-    with open(os.path.join(LAYERS, "meta.js"), "w", encoding="utf-8") as f:
-        f.write("// Generated from layers/meta.json - layer scaling and provenance.
-window.LAYER_META = " + json.dumps(full) + ";
-")
+    with open(os.path.join(LAYERS, "meta.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(full, f, indent=2)
+    with open(os.path.join(LAYERS, "meta.js"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("// Generated from layers/meta.json - layer scaling and provenance.\n")
+        f.write("window.LAYER_META = " + json.dumps(full) + ";\n")
     log("patched", os.path.abspath(js))
 
 

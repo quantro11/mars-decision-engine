@@ -10,5 +10,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: node tests/scoring.test.js
+      - run: node tests/ui.test.js
+      - run: node tests/integrity.test.js
+      - run: python tests/test_pipeline.py
       - run: node tools/validate.js > /dev/null

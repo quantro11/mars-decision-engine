@@ -15,7 +15,7 @@ A client-side planetary GIS and mission decision-support engine that fuses real 
 | **03 // Dust-Storm & Thermal Power** | If a 2018-class global storm ($\tau \approx 8\text{–}11$) strikes at an **Areocentric Season ($L_s \in [0^\circ, 360^\circ]$)**, how many sols does the habitat keep power and heat? Heating is charged to the energy budget beyond the waste heat of the electrical load; panel dust accumulates; fission units use the 10 kWe Kilopower design target. | Site latitude, Mars obliquity & eccentricity ($L_s$), Opportunity 2018 empirical $\tau$-attenuation, approximate surface-temperature model, Kilopower 10 kWe design target (KRUSTY 2018 demonstrated ~1 kWe) |
 | **04 // Live Habitability & Biosphere APIs** | What are the real-time space weather hazards, surface atmospheric conditions, and Earth vs. Mars biosphere habitability metrics? Queries NASA Open APIs (`api.nasa.gov`): the DONKI CME catalogue (live) and the InSight weather feed (archive only: the mission ended in Dec 2022). Every value is labelled LIVE / ARCHIVE / REFERENCE / OFFLINE; a failed request shows nothing rather than placeholder telemetry. Compares 6 Earth biosphere markers against Martian ECLSS countermeasures. | NASA DONKI CME API (live), NASA InSight Mars Weather API (archive), InSight climatology (Banfield et al. 2020) |
 | **2D Map & 3D WebGL Globe** | Seamless switching between 2D Equirectangular map and hardware-accelerated **3D WebGL MOLA Displaced Globe** with 4K NASA Viking Orbiter MDIM 2.1 imagery, vertical relief exaggeration (`1×–15×`), directional solar hillshading, Rayleigh/dust limb scattering, and 3D raycast picking. | 4K NASA Viking MDIM 2.1 mosaic (`viking_4k.jpg`), 2048×1024 MOLA DEM vertex displacement & normal perturbation |
-| **Mission Brief Export** | One-click **Export Brief** generates a structured **NASA-STD Mission Reconnaissance Dossier** with downloadable `.json` telemetry and a print/PDF-formatted engineering report. | Full synthesis of active weights, Top-5 candidates, A* traverse, Safe Havens, and storm/thermal simulation |
+| **Mission Brief Export** | One-click **Export Brief** generates a structured **NASA-STD Mission Reconnaissance Dossier** with downloadable `.json` telemetry and a print/PDF-formatted engineering report. | Full synthesis of active weights, Top-5 candidates, A* traverse, candidate rest stops, and storm/thermal simulation |
 
 Everything runs 100% client-side with zero external runtime libraries, no server, and no API keys (works offline by opening `web/index.html` directly). Supports both desktop mouse/keyboard and mobile/tablet touch gestures (pinch-to-zoom, 1-finger pan/orbit, tap designation).
 
@@ -48,23 +48,26 @@ python mola16.py                                          # rebuild elev / slope
 ## Automated Unit Tests & Validation
 
 ```bash
-node tests/scoring.test.js     # unit tests (also run in GitHub Actions)
+node tests/scoring.test.js     # core scoring / A* / storm / radiation / ice-access / heating / SPE / live-API tests
+node tests/ui.test.js          # UI modules (format, overlays, markers, brief, habitability, globe3d) & A* edge cases
+node tests/integrity.test.js   # DOM ID sync, metadata sync, CSP, accessibility & asset hygiene
+python tests/test_pipeline.py  # data pipeline unit checks
 node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
 
-**Validation result:** the nine successful Mars landers (Viking 1/2, Pathfinder, Spirit, Opportunity, Curiosity, InSight, Perseverance, Zhurong) rank in the **89th percentile** of their own latitude band under the Landing-safety preset (random terrain: 50th, p < 0.005) — the model was never told where they are. See [`docs/validation.md`](docs/validation.md).
+**Validation result:** the nine successful Mars landers (Viking 1/2, Pathfinder, Spirit, Opportunity, Curiosity, InSight, Perseverance, Zhurong) rank in the **89th percentile** of their own latitude band under the Landing-safety preset (random terrain: 50th, p < 0.005). Because EDL engineers chose those sites using the same MOLA slope and elevation properties, Test 1 serves as a consistency check rather than an independent prediction. See [`docs/validation.md`](docs/validation.md).
 
-Verifies suitability transfer functions, preset ranking behaviour (ISRU vs. Landing Safety), NASA HLS-2015 hard constraint vetoes, non-maximum suppression candidate extraction, Monte Carlo weight sensitivity, multi-hazard A* obstacle & dust-trap avoidance, safe havens, Opportunity-calibrated dust-storm attenuation, thermal freeze-out, MSL-RAD GCR & SPE regolith radiation shielding, seasonal $L_s$ insolation, ISRU water yield, micro-hazard proxy, and live API data honesty.
+Verifies suitability transfer functions, preset & geometric-mean aggregation behaviour, NASA HLS-2015 hard constraint vetoes, >= 75%-valid candidate extraction, Monte Carlo weight sensitivity, windowed multi-hazard A* obstacle & dust-trap avoidance, candidate rest stops, Opportunity-calibrated dust-storm attenuation, waste-heat/deficit thermal balance, MSL-RAD GCR & unified design-basis SPE shielding, seasonal $L_s$ insolation, SWIM ice-access classification, regional terrain class, XSS-escaped Mission Brief & Live API rendering, and CSP/accessibility integrity.
 
 ## Repository Layout
 
 ```
-.github/         workflows/test.yml                 CI unit test runner (Node 20)
+.github/         workflows/test.yml                 CI test runner (Node 20 + Python 3.12)
 data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py
-web/             index.html, style.css, premium.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers_data.js
-web/ui/          format.js, charts.js, markers.js, habitability.js   UI modules split out of app.js
+web/             index.html, style.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers/meta.js, layers_data.js
+web/ui/          format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js   Modular UI helpers
 tools/           validate.js                         validation report generator
-tests/           scoring.test.js                    Node unit test suite (pure logic, zero DOM dependency)
+tests/           scoring.test.js, ui.test.js, integrity.test.js, test_pipeline.py
 docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical spec, validation, citations, pitch & PDF master guide
 ```
 

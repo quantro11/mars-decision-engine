@@ -35,51 +35,66 @@
     const kmCol = new Float32Array(H);
     for (let y = 0; y < H; y++) kmCol[y] = Math.max(0.05, (2 * Math.PI * MARS_R / W) * Math.cos(L.latOfRow(y) * Math.PI / 180));
 
-    // search window: bounding box with margin (wraps in x)
+    // search window: symmetric bounding box with margin (wraps in x), allocated at window size
     const margin = opts.marginPx ?? 160;
     let dxBox = Math.abs(gx - sx); const wrap = dxBox > W / 2; if (wrap) dxBox = W - dxBox;
     const y0 = Math.max(0, Math.min(sy, gy) - margin), y1 = Math.min(H - 1, Math.max(sy, gy) + margin);
-    const xMin = wrap ? Math.max(sx, gx) : Math.min(sx, gx);
-    const xSpan = dxBox + 2 * margin;
-    const inBox = (x, y) => { if (y < y0 || y > y1) return false; let d = x - xMin + margin; d = ((d % W) + W) % W; return d < xSpan + margin; };
+    const subH = y1 - y0 + 1;
+    const xStart = wrap ? Math.max(sx, gx) : Math.min(sx, gx);
+    const xMin = ((xStart - margin) % W + W) % W;
+    const subW = Math.min(W, dxBox + 2 * margin + 1);
+    const subSize = subW * subH;
+    const toLocal = (x, y) => {
+      if (y < y0 || y > y1) return -1;
+      const ox = (x - xMin + W) % W;
+      return ox < subW ? (y - y0) * subW + ox : -1;
+    };
 
     const glat = L.latOfRow(gy), glon = L.lonOfCol(gx);
-    const gScore = new Float32Array(W * H).fill(Infinity);
-    const came = new Int32Array(W * H).fill(-1);
-    const closed = new Uint8Array(W * H);
-    const start = sy * W + sx, goal = gy * W + gx;
-    gScore[start] = 0;
+    const gScore = new Float32Array(subSize).fill(Infinity);
+    const came = new Int32Array(subSize).fill(-1);
+    const closed = new Uint8Array(subSize);
+    const startLoc = toLocal(sx, sy), goalLoc = toLocal(gx, gy);
+    if (startLoc < 0 || goalLoc < 0) return { ok: false, reason: 'endpoints out of bounds' };
+    gScore[startLoc] = 0;
     const heap = new Heap();
-    heap.push(start, haversineKm(L.latOfRow(sy), L.lonOfCol(sx), glat, glon));
+    heap.push(startLoc, haversineKm(L.latOfRow(sy), L.lonOfCol(sx), glat, glon));
     const N = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     let expanded = 0;
     while (heap.size) {
-      const { n } = heap.pop();
-      if (closed[n]) continue;
-      closed[n] = 1; expanded++;
-      if (n === goal) break;
+      const { n: loc } = heap.pop();
+      if (closed[loc]) continue;
+      closed[loc] = 1; expanded++;
+      if (loc === goalLoc) break;
       if (expanded > 1.5e6) return { ok: false, reason: 'search limit' };
-      const y = (n / W) | 0, x = n - y * W;
+      const ly = (loc / subW) | 0, ox = loc - ly * subW;
       for (const [dx, dy] of N) {
-        const ny = y + dy; if (ny < 0 || ny >= H) continue;
-        const nx = (x + dx + W) % W;
-        if (!inBox(nx, ny)) continue;
-        const m = ny * W + nx; if (closed[m]) continue;
+        const nly = ly + dy; if (nly < 0 || nly >= subH) continue;
+        const nox = (ox + dx + W) % W; if (nox >= subW) continue;
+        const mLoc = nly * subW + nox;
+        if (closed[mLoc]) continue;
+        const ny = y0 + nly, nx = (xMin + nox) % W;
+        const m = ny * W + nx;
         const s = L.slope[m] * sc; if (s > maxSlope) continue;
         // Sub-cell roughness hazard (>50 m) and TES low-TI fine-dust sinkage hazard (<100 tiu)
         let rPen = 0, dPen = 0;
         if (hasRough) { const r = L.rough[m] * rScale; if (r > 50) rPen = (r - 50) / 25; }
         if (hasTi) { const tiRaw = L.ti[m]; if (tiRaw > 0) { const ti = tiRaw * tiScale; if (ti < 100) dPen = 80 * (1 - ti / 100); } }
         const dist = Math.hypot(dx * kmCol[ny], dy * kmRow);
-        const c = gScore[n] + dist * (1 + k * (s + rPen + dPen));
-        if (c < gScore[m]) { gScore[m] = c; came[m] = n; heap.push(m, c + haversineKm(L.latOfRow(ny), L.lonOfCol(nx), glat, glon)); }
+        const c = gScore[loc] + dist * (1 + k * (s + rPen + dPen));
+        if (c < gScore[mLoc]) { gScore[mLoc] = c; came[mLoc] = loc; heap.push(mLoc, c + haversineKm(L.latOfRow(ny), L.lonOfCol(nx), glat, glon)); }
       }
     }
-    if (came[goal] < 0 && goal !== start) return { ok: false, reason: 'no slope-safe path inside search window' };
-    const path = []; let cur = goal;
-    while (cur >= 0) { path.push(cur); if (cur === start) break; cur = came[cur]; }
+    if (came[goalLoc] < 0 && goalLoc !== startLoc) return { ok: false, reason: 'no slope-safe path inside search window' };
+    const path = []; let cur = goalLoc;
+    while (cur >= 0) {
+      const ly = (cur / subW) | 0, ox = cur - ly * subW;
+      path.push((y0 + ly) * W + ((xMin + ox) % W));
+      if (cur === startLoc) break;
+      cur = came[cur];
+    }
     path.reverse();
-    return { ok: true, path, stats: pathStats(L, path, kmCol, kmRow) };
+    return { ok: true, path, stats: pathStats(L, path, kmCol, kmRow), windowCells: subSize };
   }
 
   function pathStats(L, path, kmCol, kmRow) {
