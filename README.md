@@ -54,7 +54,7 @@ node tests/ui.test.js          # UI modules, SVG legends, Web Worker RPC, biline
 node tests/integrity.test.js   # DOM ID sync, metadata sync, strict zero-inline CSP, accessibility & asset hygiene
 python tests/test_pipeline.py  # data pipeline unit checks
 node tests/e2e.test.js         # headless Chromium E2E (HTTP + Web Worker + SwiftShader WebGL + strict CSP + file://)
-node tools/build.js            # builds dist/ (34 files, 22.84 MB) excluding 25.63 MB file://-only layers_data.js
+node tools/build.js            # builds dist/ (34 files, 22.86 MB) excluding 25.63 MB file://-only layers_data.js
 node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
 

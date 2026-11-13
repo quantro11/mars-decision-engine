@@ -22,14 +22,17 @@
    * @param {Object} [deps]
    * @returns {string} HTML fragment
    */
+  const getI18N = () => global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
   const t = (key, fb) => {
-    if (global.MDE_I18N && typeof global.MDE_I18N.t === 'function') {
-      const val = global.MDE_I18N.t(key);
+    const m = getI18N();
+    if (m && typeof m.t === 'function') {
+      const val = m.t(key);
       if (val && val !== key) return val;
     }
     return fb;
   };
-  const isTr = () => !!(global.MDE_I18N && typeof global.MDE_I18N.getLang === 'function' && global.MDE_I18N.getLang() === 'tr');
+  const isTr = () => { const m = getI18N(); return !!(m && typeof m.getLang === 'function' && m.getLang() === 'tr'); };
+  const trDom = (v) => { const m = getI18N(); return (m && typeof m.trDomain === 'function') ? m.trDomain(v) : v; };
 
   function critRowsHTML(v, w, deps = {}) {
     const SCORING = deps.SCORING || global.SCORING;
@@ -123,7 +126,7 @@
         li.className = 'card' + (S.selected && S.selected.cand === i ? ' active' : '');
         const robustTag = c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">${tr ? 'SAĞLAM' : 'ROBUST'} ${(c.robust * 100).toFixed(0)}%</span>` : '';
         li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${escHtml(name)}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">HLS-2015 EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
-          <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${tr ? 'buz' : 'ice'}: <b>${escHtml(ice.status.toLowerCase().replace('_', ' '))}</b> · ≤5° ${tr ? 'hücre' : 'cells'}: <b>${(flat * 100).toFixed(0)}%</b>${robustTag}</div>${critRowsHTML(v, S.weights, { SCORING, escHtml })}
+          <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${tr ? 'buz' : 'ice'}: <b>${escHtml(trDom(ice.status).toLowerCase().replace(/_/g, ' '))}</b> · ≤5° ${tr ? 'hücre' : 'cells'}: <b>${(flat * 100).toFixed(0)}%</b>${robustTag}</div>${critRowsHTML(v, S.weights, { SCORING, escHtml })}
           <a class="trek" href="${escHtml(trekUrl(v.lat, v.lon))}" target="_blank" rel="noopener">${tr ? 'NASA Mars Trek’te incele (HiRISE / CTX) →' : 'Inspect in NASA Mars Trek (HiRISE / CTX) →'}</a>`;
         const trekLink = li.querySelector('.trek');
         if (trekLink) trekLink.onclick = (e) => e.stopPropagation();
@@ -165,7 +168,7 @@
           </div>
           <span class="status-pill ${vetoed ? 'bad' : 'ok'}">${escHtml(vetoed ? t('vetoed', 'Vetoed') : t('withinConstraints', 'Within constraints'))}</span>
         </div>
-        <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${nr.distDeg < 6 ? escHtml(nr.region.name) : (tr ? nr.region.name + ' yakını' : 'near ' + escHtml(nr.region.name))} · ${(nr.distDeg * 59.3).toFixed(0)} km</div>
+        <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${nr.distDeg < 6 ? escHtml(nr.region.name) : (tr ? escHtml(nr.region.name) + ' yakını' : 'near ' + escHtml(nr.region.name))} · ${(nr.distDeg * 59.3).toFixed(0)} km</div>
         <div class="hls-checks">
           <div class="hls-check"><span class="hint">${tr ? 'Rakım ≤ +2 km' : 'Elevation ≤ +2 km'}</span><b class="${passElev ? 'ok' : 'bad'}">${passElev ? passWord : vetoWord}</b></div>
           <div class="hls-check"><span class="hint">${tr ? 'Eğim ≤ 15°' : 'Slope ≤ 15°'}</span><b class="${passSlope ? 'ok' : 'bad'}">${passSlope ? passWord : vetoWord}</b></div>
@@ -176,11 +179,11 @@
           <tr><td>${tr ? 'MOLA Rakım' : 'MOLA Elevation'}</td><td>${v.elev.toFixed(0)} m</td></tr>
           <tr><td>${tr ? 'MOLA %90 Eğim' : 'MOLA 90th-pct Slope'}</td><td>${v.slope.toFixed(1)}°</td></tr>
           <tr><td>${tr ? 'SWIM Buzu' : 'SWIM Ice'} (${escHtml(iceTab)})</td><td>${v.ice === null ? (tr ? '±60° dışı' : 'outside ±60°') : v.ice.toFixed(2)}</td></tr>
-          <tr><td>${tr ? 'Buz erişimi' : 'Ice access'} (${escHtml(ice.depth)})</td><td><b>${escHtml(ice.label)}</b></td></tr>
-          <tr><td>${tr ? 'Mürettebat suyu için kazı' : 'Excavation for crew water'}</td><td>${ice.regolithKgSol === null ? '—' : `~${ice.regolithKgSol} kg ${tr ? 'regolit/sol' : 'regolith/sol'} <small>(${tr ? 'varsayım: ' : 'assumes '}${escHtml(ice.assumption)}${tr ? '; SWIM derişim ölçmez' : '; SWIM does not measure concentration'})</small>`}</td></tr>
+          <tr><td>${tr ? 'Buz erişimi' : 'Ice access'} (${escHtml(ice.depth)})</td><td><b>${escHtml(trDom(ice.label))}</b></td></tr>
+          <tr><td>${tr ? 'Mürettebat suyu için kazı' : 'Excavation for crew water'}</td><td>${ice.regolithKgSol === null ? '—' : `~${ice.regolithKgSol} kg ${tr ? 'regolit/sol' : 'regolith/sol'} <small>(${tr ? 'varsayım: ' : 'assumes '}${escHtml(trDom(ice.assumption))}${tr ? '; SWIM derişim ölçmez' : '; SWIM does not measure concentration'})</small>`}</td></tr>
           <tr><td>${tr ? 'Hücre-içi Pürüzlülük (σ)' : 'Sub-cell Roughness (σ)'}</td><td>${v.rough.toFixed(0)} m</td></tr>
-          <tr><td>${tr ? 'Bölgesel arazi sınıfı' : 'Regional terrain class'}</td><td><b class="${terrain.terrainClass === 'RUGGED' ? 'bad' : terrain.terrainClass === 'MODERATE' ? 'warn' : 'ok'}">${escHtml(terrain.label)}</b></td></tr>
-          <tr><td>${tr ? 'Elips-ölçekli tehlikeler' : 'Ellipse-scale hazards'}</td><td><small>${escHtml(terrain.recommendation)}</small></td></tr>
+          <tr><td>${tr ? 'Bölgesel arazi sınıfı' : 'Regional terrain class'}</td><td><b class="${terrain.terrainClass === 'RUGGED' ? 'bad' : terrain.terrainClass === 'MODERATE' ? 'warn' : 'ok'}">${escHtml(trDom(terrain.label))}</b></td></tr>
+          <tr><td>${tr ? 'Elips-ölçekli tehlikeler' : 'Ellipse-scale hazards'}</td><td><small>${escHtml(trDom(terrain.recommendation))}</small></td></tr>
           <tr><td>${tr ? 'TES Termal Atalet' : 'TES Thermal Inertia'}</td><td>${v.ti === null ? (tr ? 'veri yok' : 'no data') : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
           <tr><td>${tr ? 'TES Toz Yoğunluğu' : 'TES Dust Abundance'}</td><td>${v.dust === null ? (tr ? 'veri yok' : 'no data') : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
           <tr><td>${tr ? 'Atmosferik Sütun' : 'Atmospheric Column'}</td><td>${SCORING.atmoColumnGcm2(v.elev).toFixed(1)} g/cm²</td></tr>
@@ -267,7 +270,7 @@
 
       el.innerHTML = `${verdict}
         ${thermVerdict}
-        <div class="kv"><span>${tr ? 'Mevsim' : 'Season'} (L<sub>s</sub> = ${c.ls}°)</span><b>${escHtml(STORM.seasonName(c.ls))}</b></div>
+        <div class="kv"><span>${tr ? 'Mevsim' : 'Season'} (L<sub>s</sub> = ${c.ls}°)</span><b>${escHtml(trDom(STORM.seasonName(c.ls)))}</b></div>
         <div class="kv"><span>${tr ? 'Yüzey sıcaklığı (yakl.)' : 'Surface temp. (approx.)'}</span><b>${tr ? 'gece' : 'night'} ${sTemp.night}°C · ${tr ? 'ort' : 'mean'} ${sTemp.mean}°C</b></div>
         <div class="kv"><span>${tr ? 'Habitat ısı kaybı' : 'Habitat heat loss'}</span><b>${pTherm} kW · ${tr ? 'ek ısıtıcı' : 'extra heaters'} ${Math.max(...res.rows.map(r => r.heater)).toFixed(0)} kWh/sol max</b></div>
         <div class="kv"><span>${tr ? 'Açık gök güneş, τ 0.5' : 'Clear-sky solar, τ 0.5'}</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
@@ -275,7 +278,7 @@
         <div class="kv"><span>${tr ? `${res.rows.length} sol sonrası toz kaybı` : `Panel dust after ${res.rows.length} sols`}</span><b>−${res.postStormSolarLossPct}% (${tr ? 'temizlik yok' : 'no cleaning events assumed'})</b></div>
         <div class="kv"><span>${tr ? 'Kilopower baz yük' : 'Kilopower baseload'}</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
         <div class="kv kv-top"><span>${tr ? 'Yüzeyde tasarım SPE dozu' : 'Design-basis SPE on surface'}</span><b>${spe.unshieldedDoseMsv} mSv</b></div>
-        <div class="kv"><span>${tr ? `Siperli (${(c.regolith ?? 1.5).toFixed(1)}m regolit)` : `Shielded (${(c.regolith ?? 1.5).toFixed(1)}m regolith)`}</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${escHtml(spe.survivalStatus)})</b></div>
+        <div class="kv"><span>${tr ? `Siperli (${(c.regolith ?? 1.5).toFixed(1)}m regolit)` : `Shielded (${(c.regolith ?? 1.5).toFixed(1)}m regolith)`}</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${escHtml(trDom(spe.survivalStatus))})</b></div>
         <div class="kv"><span>${tr ? '≤ 100 mSv için regolit' : 'Regolith for ≤ 100 mSv'}</span><b>${spe.requiredRegolithM} m</b></div>
         <div class="help note-sm">${tr ? 'SPE değerleri varsayımsal Ağust-1972 benzeri olayı (~1 Sv / 5 g/cm²) esas alır; anlık tahmin değildir.' : 'SPE figures use an assumed August-1972-class event (~1 Sv behind 5 g/cm²), not a forecast. Largest SPE measured on the surface so far (Sept 2017, MSL/RAD): ~0.4 mGy.'}</div>
         ${liveCmeRow}

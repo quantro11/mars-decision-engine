@@ -31,10 +31,15 @@
     if (!I18N) return;
     I18N.setLang(lang);
     applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
-    updateHudLayer();
+    updateHudLayer(); renderLegend();
     if ($('#hud-proj')) $('#hud-proj').textContent = t(S.viewMode === '3d' ? 'proj3d' : 'proj2d');
     setHudHint(t(S.viewMode === '3d' ? 'hudHint3d' : 'hudHint2d'), false);
+    if ($('#btn-ov3d')) $('#btn-ov3d').textContent = t(S.globeOverlay ? 'ovOn' : 'ovOff');
+    if ($('#btn-relief') && globe) $('#btn-relief').textContent = `${t('relief')} ${globe.state.exaggeration}×`;
+    if ($('#ls-v')) $('#ls-v').textContent = `${S.crisis.ls}° · ${(I18N.trDomain ? I18N.trDomain(STORM.seasonName(S.crisis.ls)) : STORM.seasonName(S.crisis.ls)).split(' /')[0]}`;
     if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
+    if (globalThis.MDE_LIVE_STATE && renderHabitability) renderHabitability(false, { useCache: true });
+    if (viewport) viewport.draw();
   }
   try { applyTheme(localStorage.getItem('mde_theme') || 'dark'); } catch (e) { applyTheme('dark'); }
   on('#btn-theme', 'onclick', () => applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'));
@@ -153,23 +158,17 @@
     if (!S.candidates.length) return;
     const btn = $('#sens-run'), out = $('#sens-result');
     if (!btn || !out) return;
-    btn.disabled = true; out.innerHTML = '<div class="help">Running 30 perturbed scorings…</div>';
+    const tr = I18N && I18N.getLang() === 'tr';
+    btn.disabled = true; out.innerHTML = `<div class="help">${escHtml(t('sensRunning'))}</div>`;
     const blockPx = S.candidates[0].blockPx, sepPx = Math.round(800 / 59.3 / META.deg_per_px), matchPx = Math.round(400 / 59.3 / META.deg_per_px);
     const show = (rob) => {
       S.candidates.forEach((c, i) => { c.robust = rob[i]; });
-      const mean = rob.reduce((a, b) => a + b, 0) / rob.length;
-      out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">Weights ±${Math.round(S.sensSpread * 100)}% × 30 runs: top-5 candidates stay in the top-5 (within 400 km) in ${(mean * 100).toFixed(0)}% of runs on average. ${mean >= 0.8 ? 'Ranking is ROBUST to weight uncertainty.' : 'Ranking DEPENDS on the chosen weights.'}</div>`;
+      const mean = rob.reduce((a, b) => a + b, 0) / rob.length, pct = (mean * 100).toFixed(0), sp = Math.round(S.sensSpread * 100);
+      out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">${tr ? `Ağırlıklar ±%${sp} × 30 koşu: İlk-5 aday ort. %${pct} oranında İlk-5’te kalır.` : `Weights ±${sp}% × 30 runs: top-5 stay top-5 (within 400 km) in ${pct}% of runs.`} ${t(mean >= 0.8 ? 'sensRobust' : 'sensSensitive')}</div>`;
       panels.renderCandidates(); btn.disabled = false;
     };
-    const runSyncSens = () => {
-      L.ice = L[S.iceBand];
-      show(SCORING.sensitivity(L, S.weights, S.hard, S.candidates, { mode: S.agg, runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx }, SCORING.mulberry32(2026)));
-    };
-    if (workerReady) {
-      workerCall({ cmd: 'sensitivity', weights: S.weights, hard: S.hard, candidates: S.candidates, spread: S.sensSpread, agg: S.agg, iceBand: S.iceBand, blockPx, sepPx, matchPx })
-        .then(r => show(r.robust)).catch(runSyncSens);
-      return;
-    }
+    const runSyncSens = () => { L.ice = L[S.iceBand]; show(SCORING.sensitivity(L, S.weights, S.hard, S.candidates, { mode: S.agg, runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx }, SCORING.mulberry32(2026))); };
+    if (workerReady) { workerCall({ cmd: 'sensitivity', weights: S.weights, hard: S.hard, candidates: S.candidates, spread: S.sensSpread, agg: S.agg, iceBand: S.iceBand, blockPx, sepPx, matchPx }).then(r => show(r.robust)).catch(runSyncSens); return; }
     setTimeout(runSyncSens, 20);
   }
 
@@ -288,10 +287,10 @@
   document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => setMode(b.dataset.mode));
   if ($('#btn-relief') && globe) {
     const lvls = [1, 5, 8, 15];
-    $('#btn-relief').onclick = () => { const v = lvls[(lvls.indexOf(globe.state.exaggeration) + 1) % lvls.length]; globe.state.exaggeration = v; $('#btn-relief').textContent = `Relief ${v}×`; viewport.draw(); };
+    $('#btn-relief').onclick = () => { const v = lvls[(lvls.indexOf(globe.state.exaggeration) + 1) % lvls.length]; globe.state.exaggeration = v; $('#btn-relief').textContent = `${t('relief')} ${v}×`; viewport.draw(); };
   }
   if (globe) {
-    on('#btn-ov3d', 'onclick', () => { S.globeOverlay = !S.globeOverlay; $('#btn-ov3d').classList.toggle('active', S.globeOverlay); $('#btn-ov3d').textContent = S.globeOverlay ? 'Overlay on' : 'Overlay off'; viewport.draw(); });
+    on('#btn-ov3d', 'onclick', () => { S.globeOverlay = !S.globeOverlay; $('#btn-ov3d').classList.toggle('active', S.globeOverlay); $('#btn-ov3d').textContent = t(S.globeOverlay ? 'ovOn' : 'ovOff'); viewport.draw(); });
     on('#btn-sun', 'onclick', () => { globe.state.sunLight = !globe.state.sunLight; $('#btn-sun').classList.toggle('active', globe.state.sunLight); viewport.draw(); });
     on('#btn-spin', 'onclick', () => { globe.state.autoSpin = !globe.state.autoSpin; $('#btn-spin').classList.toggle('active', globe.state.autoSpin); if (globe.state.autoSpin) viewport.schedule3D(); });
   }
@@ -328,7 +327,7 @@
     }
     computeRoute();
   });
-  bindRange('ls', v => `${v}° · ${STORM.seasonName(v).split(' /')[0]}`, v => { S.crisis.ls = v; panels.runCrisis(); });
+  bindRange('ls', v => `${v}° · ${(I18N && I18N.trDomain ? I18N.trDomain(STORM.seasonName(v)) : STORM.seasonName(v)).split(' /')[0]}`, v => { S.crisis.ls = v; panels.runCrisis(); });
   bindRange('tau', v => (v / 10).toFixed(1), v => { S.crisis.tauPeak = v / 10; panels.runCrisis(); });
   bindRange('area', v => v + ' m²', v => { S.crisis.area = v; panels.runCrisis(); });
   bindRange('cons', v => v + ' kWh/sol', v => { S.crisis.cons = v; panels.runCrisis(); });

@@ -245,10 +245,12 @@
         }
         ctx.stroke(); ctx.setLineDash([]);
       };
+      const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+      const t = (k, fb) => (i18n && i18n.t(k) !== k ? i18n.t(k) : fb);
       if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
       if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
-      if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', 'Start');
-      if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#cfa25c', 'Goal');
+      if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', t('startPin', 'Start'));
+      if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#cfa25c', t('goalPin', 'Goal'));
 
       S.candidates.forEach((c, i) => {
         drawCandidateReticle(c.x, c.y, i + 1, c.score, !!(S.selected && S.selected.cand === i));
@@ -329,9 +331,15 @@
       const g = gridAt(e), tip = $('#tooltip');
       if (!g) { if (tip) tip.classList.add('hidden'); return; }
       const [x, y] = g, v = layers.cellValues(x, y), s = S.score[y * W + x], nr = layers.nearestRegion(v.lat, v.lon);
-      if ($('#hud-coord')) $('#hud-coord').textContent = `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
+      const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+      const tr = !!(i18n && i18n.getLang && i18n.getLang() === 'tr');
+      if ($('#hud-coord')) $('#hud-coord').textContent = (tr
+        ? `ENL ${fmtLat(v.lat)} · BOY ${fmtLon(v.lon)} · RAKIM ${v.elev.toFixed(0)} m · EĞİM ${v.slope.toFixed(1)}° · SKOR ${s.toFixed(2)}`
+        : `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}`)
+        + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
       if (tip) {
-        tip.innerHTML = `<span class="tt-region">${escHtml(nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name)}</span><b>${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))}</b> · score <b>${s.toFixed(2)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>rad ${v.rad.toFixed(0)} mSv/yr · ice ${v.ice === null ? '—' : v.ice.toFixed(2)}<br>rough ${v.rough.toFixed(0)} m · TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
+        const locTxt = nr.distDeg < 6 ? escHtml(nr.region.name) : (tr ? escHtml(nr.region.name) + ' yakını' : 'near ' + escHtml(nr.region.name));
+        tip.innerHTML = `<span class="tt-region">${locTxt}</span><b>${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))}</b> · ${tr ? 'skor' : 'score'} <b>${s.toFixed(2)}</b><br>${tr ? 'rakım' : 'elev'} ${v.elev.toFixed(0)} m · ${tr ? 'eğim' : 'slope'} ${v.slope.toFixed(1)}°<br>rad ${v.rad.toFixed(0)} mSv/${tr ? 'yıl' : 'yr'} · ${tr ? 'buz' : 'ice'} ${v.ice === null ? '—' : v.ice.toFixed(2)}<br>${tr ? 'pürüz' : 'rough'} ${v.rough.toFixed(0)} m · ${tr ? 'TA' : 'TI'} ${v.ti === null ? '—' : v.ti.toFixed(0)} · ${tr ? 'toz' : 'dust'} ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
         const r = canvas.getBoundingClientRect();
         tip.style.left = Math.max(8, Math.min(r.width - 210, e.clientX - r.left + 14)) + 'px';
         tip.style.top = Math.max(8, Math.min(r.height - 95, e.clientY - r.top + 14)) + 'px';

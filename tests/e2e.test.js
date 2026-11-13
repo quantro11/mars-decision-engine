@@ -369,13 +369,24 @@ async function runHttpE2E(browserPath, securityHeaders) {
     await evalJS(`document.getElementById('btn-theme').click()`);
 
     await evalJS(`document.getElementById('btn-lang').click()`);
-    const trState = await evalJS(`({ lang: document.documentElement.getAttribute('lang'), modeLabel: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent, slopeLead: document.querySelector('#maxslope').closest('label').firstChild.nodeValue })`);
+    const trState = await evalJS(`({
+      lang: document.documentElement.getAttribute('lang'),
+      modeLabel: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent,
+      slopeLead: document.querySelector('#maxslope').closest('label').firstChild.nodeValue,
+      legendText: document.getElementById('legend').textContent,
+      saveText: document.getElementById('btn-save-key').textContent,
+      aboutHtml: document.getElementById('about-content').textContent,
+    })`);
     assert.strictEqual(trState.lang, 'tr', 'Clicking #btn-lang should set html lang="tr"');
     assert.strictEqual(trState.modeLabel, 'Saha seçimi', 'Turkish mode button label rendered');
     assert.strictEqual(trState.slopeLead, 'Eğim sınırı ', 'Turkish slider label preserved without clobbering input');
+    assert(trState.legendText.includes('ELENDİ/ZAYIF') || trState.legendText.includes('DİK'), `Legend should localize cleanly: ${trState.legendText}`);
+    assert.strictEqual(trState.saveText, 'Kaydet', 'Module IV save button localized');
+    assert(trState.aboutHtml.includes('Mühendislik Gerekçesi'), '#about-content Method modal translates to Turkish');
     await evalJS(`document.getElementById('btn-lang').click()`);
-    const enLabel = await evalJS(`document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent`);
-    assert.strictEqual(enLabel, 'Site selection', 'Second #btn-lang click reverts cleanly back to English');
+    const enCheck = await evalJS(`({ mode: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent, aboutHtml: document.getElementById('about-content').textContent })`);
+    assert.strictEqual(enCheck.mode, 'Site selection', 'Second #btn-lang click reverts cleanly back to English');
+    assert(enCheck.aboutHtml.includes('Why it matters'), '#about-content reverts cleanly back to English');
 
     // 7. Verify zero CSP violations, zero page errors, zero console errors
     const violations = await evalJS(`window.__cspViolations || []`);

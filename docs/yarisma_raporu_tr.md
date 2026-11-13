@@ -19,7 +19,7 @@ Proje dört entegre modülden oluşur:
 - **SWIM 2.0 Su Buzu:** ±60° enlemleri arasında 0–1 m, 1–5 m ve >5 m derinliklerde buz tutarlılık indeksleri.
 - **MGS TES:** Termal atalet (zemin taşıma/kazı dayanımı) ve yüzey toz bolluğu (~10 km etkin çözünürlük).
 - **Mars Global Cave Catalog v1 (Cushing 2017):** 1062 doğrulanmamış mağara/çukur adayı.
-- **İnternetsiz (`file://`) vs CDN (`dist/`) Teslimatı:** Tek tıkla internetsiz açılış için `web/layers_data.js` (`25.63 MB`) kullanılırken; üretim CDN paketi `tools/build.js` ile yalnızca **34 dosya / 22.84 MB** boyutunda (`dist/`) hazırlanır ve tarayıcı katmanları akışla yükler.
+- **İnternetsiz (`file://`) vs CDN (`dist/`) Teslimatı:** Tek tıkla internetsiz açılış için `web/layers_data.js` (`25.63 MB`) kullanılırken; üretim CDN paketi `tools/build.js` ile yalnızca **34 dosya / 22.86 MB** boyutunda (`dist/`) hazırlanır ve tarayıcı katmanları akışla yükler.
 
 ---
 

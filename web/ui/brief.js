@@ -227,14 +227,16 @@
   function renderBriefHTML(p, fmt, langArg) {
     const FMT = fmt || global.MDE_FMT;
     const esc = FMT.escHtml || ((t) => String(t ?? ''));
-    const lang = langArg || (global.MDE_I18N && global.MDE_I18N.getLang ? global.MDE_I18N.getLang() : 'en');
+    const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+    const lang = langArg || (i18n && i18n.getLang ? i18n.getLang() : 'en');
     const tr = lang === 'tr';
+    const trDom = (v) => (tr && i18n && i18n.trDomain ? i18n.trDomain(v, lang) : v);
     const top = p.top_candidates[0], ds = p.dust_storm_simulation;
     return `
       <div class="brief-meta">
         <div class="brief-kpi"><span>${tr ? 'Görev Profili' : 'Mission Profile'}</span><b>${esc(p.architecture_preset.toUpperCase())} (${p.scoring_aggregation === 'geo' ? 'GEO' : 'SUM'})</b></div>
         <div class="brief-kpi"><span>${tr ? 'Birincil Aday' : 'Primary Candidate'}</span><b>${top ? esc(top.designation.split(' ·')[0]) : 'N/A'}</b></div>
-        <div class="brief-kpi"><span>${tr ? 'GCR Dozu / Buz Erişimi' : 'GCR Dose / Ice Access'}</span><b>${top ? `${top.gcr_dose_msv_yr} mSv/yr · ${esc(top.ice_access)}` : '—'}</b></div>
+        <div class="brief-kpi"><span>${tr ? 'GCR Dozu / Buz Erişimi' : 'GCR Dose / Ice Access'}</span><b>${top ? `${top.gcr_dose_msv_yr} mSv/${tr ? 'yıl' : 'yr'} · ${esc(trDom(top.ice_access))}` : '—'}</b></div>
         <div class="brief-kpi"><span>${tr ? 'Fırtına Dayanımı' : 'Storm Survival'} (τ=${ds.tau_peak})</span><b class="${ds.survives_blackout ? 'ok' : 'bad'}">${ds.survives_blackout ? (tr ? 'NOMİNAL' : 'NOMINAL') : (tr ? 'KESİNTİ SOL ' : 'BLACKOUT SOL ') + ds.blackout_sol}</b></div>
       </div>
       <h3>${tr ? '01 // İlk 5 Keşif Adayı (2°×2° Bölge Ortalamaları, ≥800 km Ara)' : '01 // Top-5 Reconnaissance Candidates (2°×2° Regional Means, ≥800 km Sep)'}</h3>
@@ -251,9 +253,9 @@
             <td>${c.elev_m} m</td>
             <td>${c.slope_p90_deg}°</td>
             <td>${Math.round((c.landing_slope_share_le5deg ?? 0) * 100)}%</td>
-            <td>${esc(c.ice_access)}</td>
+            <td>${esc(trDom(c.ice_access))}</td>
             <td>${c.tes_thermal_inertia === null ? '—' : c.tes_thermal_inertia + ' tiu'}</td>
-            <td>${c.gcr_dose_msv_yr} mSv/yr</td>
+            <td>${c.gcr_dose_msv_yr} mSv/${tr ? 'yıl' : 'yr'}</td>
             <td>${c.robust_pct === null ? '—' : c.robust_pct + '%'}</td>
           </tr>`).join('')}
         </tbody>
@@ -269,10 +271,13 @@
         <div>
           <h3>${tr ? '03 // Küresel Toz Fırtınası, Termal ve SPE Siperleme' : '03 // Global Dust-Storm, Thermal &amp; SPE Shielding'}</h3>
           <p>${tr
-            ? `<b>${esc(ds.station_region)}</b> (<code>${esc(FMT.fmtLat(ds.lat_deg))}</code>) istasyonunda <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${esc(ds.season_name)}), tepe <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² güneş paneli + ${ds.kilopower_units} Kilopower (10 kWe): <b>${ds.survives_blackout ? 'Üs hayatta kalır (min rezerv ' + ds.min_battery_kwh + ' kWh, min iç sıcaklık ' + ds.min_hab_interior_c + '°C)' : 'Sol ' + ds.blackout_sol + ' gününde kesinti' + (ds.thermal_freeze_sol !== null ? ' · 0°C altı Sol ' + ds.thermal_freeze_sol : '')}</b>. ${ds.spe_design_basis_assumption.regolith_cover_m} m regolit altında tasarım SPE dozu: <code>${ds.spe_design_basis_assumption.shielded_dose_msv} mSv</code> (${esc(ds.spe_design_basis_assumption.survival_status)}).`
+            ? `<b>${esc(ds.station_region)}</b> (<code>${esc(FMT.fmtLat(ds.lat_deg))}</code>) istasyonunda <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${esc(trDom(ds.season_name))}), tepe <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² güneş paneli + ${ds.kilopower_units} Kilopower (10 kWe): <b>${ds.survives_blackout ? 'Üs hayatta kalır (min rezerv ' + ds.min_battery_kwh + ' kWh, min iç sıcaklık ' + ds.min_hab_interior_c + '°C)' : 'Sol ' + ds.blackout_sol + ' gününde kesinti' + (ds.thermal_freeze_sol !== null ? ' · 0°C altı Sol ' + ds.thermal_freeze_sol : '')}</b>. ${ds.spe_design_basis_assumption.regolith_cover_m} m regolit altında tasarım SPE dozu: <code>${ds.spe_design_basis_assumption.shielded_dose_msv} mSv</code> (${esc(trDom(ds.spe_design_basis_assumption.survival_status))}).`
             : `Simulated at <b>${esc(ds.station_region)}</b> (<code>${esc(FMT.fmtLat(ds.lat_deg))}</code>) during <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${esc(ds.season_name)}), peak <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² array + ${ds.kilopower_units} Kilopower unit(s, 10 kWe design target): <b>${ds.survives_blackout ? 'Base survives (min reserve ' + ds.min_battery_kwh + ' kWh, min habitat temp ' + ds.min_hab_interior_c + '°C)' : 'Blackout on Sol ' + ds.blackout_sol + (ds.thermal_freeze_sol !== null ? ' · below 0°C Sol ' + ds.thermal_freeze_sol : '')}</b>. Design-basis SPE assumption behind ${ds.spe_design_basis_assumption.regolith_cover_m} m regolith: <code>${ds.spe_design_basis_assumption.shielded_dose_msv} mSv</code> (${esc(ds.spe_design_basis_assumption.survival_status)}).`}</p>
         </div>
-      </div>`;
+      </div>
+      <div class="help mt-sm">${tr
+        ? '04 // Doğrulama ve Kapsam: 9 gerçek Mars iniş aracında ort. 90. yüzdelik (geometrik 89.) ve 39 NASA HLS-2015 keşif bölgesinde 71. yüzdelik (p < 0.005). 4096×2048 (~5 km/px) bölgesel eleme modelidir; iniş elipsleri için HiRISE / CTX incelemesi gerekir.'
+        : '04 // Validation & Scope: Benchmark yields mean 90th percentile across 9 Mars landers (89th geom.) and 71st across 39 NASA HLS-2015 zones (p < 0.005) on a 4096×2048 (~5 km/px) regional grid; landing ellipses require HiRISE / CTX verification.'}</div>`;
   }
 
   function triggerDownload(filename, mime, content) {

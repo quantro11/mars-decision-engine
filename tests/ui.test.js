@@ -173,18 +173,23 @@ assert.ok(routeFeat && routeFeat.geometry.type === 'MultiLineString', 'Antimerid
 const fakeLbl = { firstChild: { nodeType: 3, nodeValue: 'Slope limit ' } };
 const fakeInp = { closest: () => fakeLbl, parentElement: { querySelector: () => null } };
 const fakeBrand = { textContent: 'Mars Base Decision Engine' };
+const fakeAbout = { innerHTML: '<h3>English</h3>' };
 const fakeLangBtn = { textContent: 'TR', title: '', setAttribute() {} };
 const fakeDoc = {
   documentElement: { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } },
-  querySelector: (sel) => (sel === '.brand-name' ? fakeBrand : sel === '#maxslope' ? fakeInp : sel === '#btn-lang' ? fakeLangBtn : null),
+  querySelector: (sel) => (sel === '.brand-name' ? fakeBrand : sel === '#maxslope' ? fakeInp : sel === '#about-content' ? fakeAbout : sel === '#btn-lang' ? fakeLangBtn : null),
   querySelectorAll: () => [],
 };
 I18N.setLang('tr', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Saha seçimi');
+assert.strictEqual(I18N.trDomain('LIKELY'), 'YÜKSEK OLASILIK');
+assert.ok(fakeAbout.innerHTML.includes('Veri Seti') && !fakeAbout.innerHTML.includes('style='), '#about-content swaps cleanly to Turkish');
+assert.ok(OV.renderLegendHTML('score', 'tr').includes('ELENDİ/ZAYIF'), 'Map legend renders Turkish scale labels');
 assert.strictEqual(fakeBrand.textContent, 'Mars Üs Karar Motoru');
 assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Eğim sınırı ');
 I18N.setLang('en', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Site selection');
+assert.strictEqual(fakeAbout.innerHTML, '<h3>English</h3>', 'Reverting to English restores original #about-content cleanly');
 assert.strictEqual(fakeBrand.textContent, 'Mars Base Decision Engine');
 assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Slope limit ');
 
@@ -224,6 +229,10 @@ assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Slope limit ');
   assert.ok(!els['#live-api-results'].innerHTML.includes('<svg onload'));
   assert.ok(els['#live-api-results'].innerHTML.includes('&lt;script&gt;'));
   assert.ok(els['#live-api-results'].innerHTML.includes('&lt;svg onload=alert(1)&gt;'));
+  I18N.setLang('tr', fakeDoc);
+  await HAB.renderHabitability(false, { useCache: true, document: mockDoc, storage: mockStorage, liveApi: Live });
+  assert.ok(els['#live-api-results'].innerHTML.includes('Mars Yüzey Hava Durumu') && els['#live-api-status'].innerHTML.includes('ARŞİV'), 'Turkish cached re-render translates Module IV');
+  I18N.setLang('en', fakeDoc);
 
   // --- 8. 3D WebGL Globe engine: fallback, raycast project/unproject, context loss/restore
   const g3dMod = require('../web/globe3d.js');

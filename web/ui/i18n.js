@@ -57,6 +57,18 @@
       crisisChooseSite: 'Choose a site on the map',
       stormSurvives: 'Survives the storm',
       stormBlackout: 'Blackout on sol',
+      ovOn: 'Overlay on',
+      ovOff: 'Overlay off',
+      relief: 'Relief',
+      sensRunning: 'Running 30 perturbed scorings…',
+      sensRobust: 'Ranking is ROBUST to weight uncertainty.',
+      sensSensitive: 'Ranking DEPENDS on the chosen weights.',
+      apiShow: 'Show',
+      apiHide: 'Hide',
+      apiSaved: 'Saved NASA API Key',
+      apiQuerying: 'Querying NASA Open APIs (api.nasa.gov)…',
+      startPin: 'Start',
+      goalPin: 'Goal',
     },
     tr: {
       brandName: 'Mars Üs Karar Motoru',
@@ -112,6 +124,18 @@
       crisisChooseSite: 'Haritadan veya aday kartından bir saha seçin',
       stormSurvives: 'Fırtınayı atlatır',
       stormBlackout: 'Kesinti günü sol',
+      ovOn: 'Katman açık',
+      ovOff: 'Katman kapalı',
+      relief: 'Kabartma',
+      sensRunning: '30 sarsılmış ağırlık senaryosu hesaplanıyor…',
+      sensRobust: 'Sıralama ağırlık belirsizliğine KARŞI SAĞLAMDIR.',
+      sensSensitive: 'Sıralama seçilen ağırlıklara DUYARLIDIR.',
+      apiShow: 'Göster',
+      apiHide: 'Gizle',
+      apiSaved: 'NASA API Anahtarı Kaydedildi',
+      apiQuerying: 'NASA Open API sorgulanıyor (api.nasa.gov)…',
+      startPin: 'Başlangıç',
+      goalPin: 'Hedef',
     },
   };
 
@@ -146,6 +170,9 @@
     ['#panel-crisis .station-lbl', 'Saha'],
     ['#panel-habitability .sec-head h2', 'Canlı Gezegen ve Yaşanabilirlik API'],
     ['#panel-habitability p.help', 'NASA Open API ile canlı uzay havası, Mars yüzey telemetrisi ve Dünya–Mars yaşanabilirlik metrikleri.'],
+    ['#panel-habitability .api-key-box label', 'NASA Open API Anahtarı'],
+    ['#btn-save-key', 'Kaydet'],
+    ['#panel-habitability .api-key-box .note-sm', 'Resmi NASA Open API (api.nasa.gov) kullanılır. Varsayılan DEMO_KEY tanımlıdır.'],
     ['#btn-fetch-live', 'Bağlan ve Canlı Veri Çek'],
     ['.layers .sec-head h2', 'Harita katmanı'],
     ['#overlay button[data-ov="score"]', 'Skor'],
@@ -157,16 +184,24 @@
     ['#overlay button[data-ov="rad"]', 'Radyasyon'],
     ['#overlay button[data-ov="cave"]', 'Mağara'],
     ['#overlay button[data-ov="none"]', 'Uydu'],
+    ['#btn-sun', 'Güneş'],
+    ['#btn-spin', 'Dönüş'],
     ['#zoom-reset', 'Sığdır'],
+    ['#loading .loading-title', 'Mars hazırlanıyor'],
+    ['#loading .loading-sub', 'MOLA kabartma, SWIM buzu ve TES termal katmanları çözümleniyor'],
     ['#candidates-sec .sec-head h2', 'En iyi aday bölgeler'],
     ['#candidates-sec .sec-head .hint', '2°×2° blok · ≥ 800 km ara'],
     ['#detail-sec .sec-head h2', 'Seçili konum'],
     ['#detail .empty-state p.help', 'Fiziksel verileri görmek için harita/küre üzerinde bir noktaya veya yukarıdaki adaylardan birine tıklayın.'],
+    ['.sources-tag', 'Veri'],
+    ['.sources-right span', 'Grid 4096 × 2048 · piksel başına ≈ 5 km'],
+    ['#brief-modal .modal-header .hint', 'Brifing'],
     ['#brief-title', 'Üs seçimi ve hayatta kalma brifingi'],
     ['#btn-dl-json', 'JSON İndir'],
     ['#btn-dl-geojson', 'GeoJSON İndir'],
     ['#btn-print-brief', 'Yazdır / PDF'],
     ['#brief-close', 'Kapat'],
+    ['#about .modal-header .hint', 'Yöntem'],
     ['#modal-title', 'Karar motoru nasıl çalışır?'],
     ['#about-close', 'Kapat'],
   ];
@@ -195,6 +230,83 @@
     ['#show-ez', 'NASA 2015 keşif zonları'],
   ];
 
+  const ABOUT_TR_HTML = `
+    <h3>1 · Kriter başına uygunluk, 0 ile 1 arası</h3>
+    <table class="tbl">
+      <thead><tr><th>Kriter</th><th>Veri Seti</th><th>Kural</th><th>Mühendislik Gerekçesi</th></tr></thead>
+      <tbody>
+        <tr><td><b>Rakım</b></td><td>MGS MOLA</td><td>−2 km altında 1 → +2 km üstünde 0</td><td>Daha kalın atmosfer paraşüt ve retro-itki emniyet payını artırır; NASA sınırı +2 km’dir.</td></tr>
+        <tr><td><b>Eğim</b></td><td>MOLA, hücre içi %90 persentil</td><td>5° altında 1 → 15° üstünde 0</td><td>İniş platformları ≤ 5°, mürettebatlı roverlar ≤ 15° eğim ister.</td></tr>
+        <tr><td><b>Su buzu</b></td><td>SWIM 2.0</td><td>tutarlılık −1…+1 → 0…1</td><td>Yerinde su, oksijen ve yakıt üretimi (ISRU) için kritik kaynak.</td></tr>
+        <tr><td><b>Pürüzlülük</b></td><td>MOLA, hücre içi σ</td><td>30 m altında 1 → 250 m üstünde 0</td><td>Grid altı kaya, uçurum ve radar saçılma riski göstergesi.</td></tr>
+        <tr><td><b>Termal atalet</b></td><td>MGS TES</td><td>&lt; 100 → ≤ 0.3 · 150–400 → 1 · 700’de 0</td><td>Zemin taşıma kapasitesi, güneş paneli toz riski ve kazı kolaylığı.</td></tr>
+        <tr><td><b>Enlem</b></td><td>—</td><td>(cos φ − cos 50°) / (1 − cos 50°)</td><td>Ortalama güneş ışınımı enlemle düşer; NASA insanlı iniş sınırı ±50°’dir.</td></tr>
+        <tr><td><b>Radyasyon (GCR)</b></td><td>MOLA + MSL/RAD</td><td>≤ 200 mSv/yıl → 1 · ≥ 290 → 0</td><td>Curiosity RAD (Gale Krateri: 0.64 mSv/gün) kalibreli atmosferik sütun zırhlaması.</td></tr>
+      </tbody>
+    </table>
+    <div class="modal-grid">
+      <div>
+        <h3>2 · Ağırlıklı toplam veya geometrik ortalama</h3>
+        <p>Varsayılan modda her hücre <code>S = Σ wᵢ·fᵢ</code> formülüyle skorlanır. Kısıtlar aktifken +2 km üstü, 15°’den dik veya ±50° dışı hücreler ağırlıktan bağımsız sıfır puan alır. Opsiyonel <b>Telafisiz</b> modu ağırlıklı geometrik ortalamaya geçer; zayıf tek bir kriter yüksek buzla telafi edilemez.</p>
+        <h3>3 · 3B Küre Motoru</h3>
+        <p>Gerçek MOLA rakım verisiyle (Hellas −8.2 km … Olympus +21 km) şekillendirilmiş, piksel bazlı ışıklandırılmış ve J2000 yıldız alanı önünde Viking Orbiter renkli mozaiğiyle kaplanmış bağımlılıksız WebGL küresi.</p>
+      </div>
+      <div>
+        <h3>4 · Çoklu tehlike rota planlayıcı (A*)</h3>
+        <p>Boylam sarmalı 8-komşuluklu adaptif A* algoritması. Adım maliyeti <code>mesafe × (1 + k · (eğim + pürüzlülük + toz))</code>; eğim sınırı üstü yasaklanır, düşük termal ataletli (&lt;100 tiu) toz tuzakları cezalandırılır ve en az 200 km aralıkla düz/sert aday mola noktaları işaretlenir.</p>
+        <h3>5 · Toz fırtınası enerji ve termal model</h3>
+        <p>Günlük güneş enerjisi <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35(τ−0.5)</sup></code> bağıntısıyla τ ≈ 10.8’de Opportunity 2018 kaybını doğrular; habitat ısıtması önce elektrik yükünün atık ısısından karşılanır.</p>
+      </div>
+    </div>
+    <h3>6 · Mevsim, radyasyon ve Monte Carlo ağırlık duyarlılığı</h3>
+    <p>Mevsimsel insolasyon Mars’ın 25.19° eksen eğikliğini ve yörünge dışmerkezliğini (e = 0.0934, günberi Lₛ = 251°) içerir. Atmosfer sütun kütlesi (16.4 g/cm², 11.1 km ölçek yüksekliği) hem kronik GCR dozunu hem Ağustos-1972 sınıfı tasarım SPE olayını (λ = 15 g/cm²) hesaplar. Monte Carlo testi tüm ağırlıkları 30 kez sarsarak İlk-5 kararlılığını ölçer.</p>
+    <h3>7 · Modelin sınırları ve dürüst beyan</h3>
+    <ul class="spec-list">
+      <li><b>Çözünürlük:</b> Piksel başına ≈ 5 km (TES ≈ 10 km); metre ölçeğindeki kayalar ve küçük kraterler çözünmez, iniş elipsi için site kartındaki HiRISE bağlantısı incelenmelidir.</li>
+      <li><b>Yükseklik adımı:</b> Küresel MOLA katmanı ≈ 115 m adımlıdır; eğimler bölgesel gradyanları yansıtır.</li>
+      <li><b>Buz kapsamı:</b> SWIM yalnızca ±60° arası tutarlılık haritalar; derişim veya kazı verimi ölçmez, ±60° dışı sıfır sayılır.</li>
+      <li><b>Modellenmeyenler:</b> Yerel ufuk gölgelemesi, aktif panel temizliği ve kriyojenik yakıt buharlaşması.</li>
+    </ul>
+    <h3>8 · İstatistiksel doğrulama ve Dünya–Mars çift kullanım (Dual-Use)</h3>
+    <ul class="spec-list">
+      <li><b>Yörünge doğrulaması (9 iniş aracı + 39 HLS-2015 bölgesi):</b> ±5° enlem bantları içinde 200 rastgele boylam çekimine karşı tarihsel 9 Mars iniş aracı ortalama <b>90. yüzdelikte</b> (<code>p &lt; 0.005</code>; geometrik <b>89.</b>) ve tüm 39 NASA HLS-2015 keşif bölgesi ortalama <b>71. yüzdelikte</b> (<code>p &lt; 0.005</code>, toplam &amp; geometrik) yer alır.</li>
+      <li><b>Dünya CBS ve afet yönetimi uyarlaması:</b> Kısıt-veto ÇKKV çekirdeği, eğim/toz cezalı A* rota planlayıcısı ve güneş-batarya modeli karasal DEM verileriyle afet sonrası geçici yaşam alanı seçimi, arama-kurtarma aracı rotalaması ve mikro-şebeke boyutlandırmada doğrudan çalışır; GeoJSON çıktısı QGIS/Leaflet ile uyumludur.</li>
+    </ul>`;
+
+  const DOMAIN_TR = {
+    NO_DATA: 'VERİ YOK',
+    LIKELY: 'YÜKSEK OLASILIK',
+    POSSIBLE: 'OLASI',
+    UNLIKELY: 'DÜŞÜK',
+    'Outside SWIM coverage': 'SWIM kapsamı dışı (±60°)',
+    'Ice likely (datasets agree)': 'Buz olası (veri setleri uyumlu)',
+    'Ice possible (mixed evidence)': 'Buz mümkün (kısmi veri)',
+    'Ice unlikely': 'Buz olasılığı düşük',
+    '10% ice by mass, 10 L/sol crew make-up water': 'kütlece %10 buz, 10 L/sol mürettebat tamamlama suyu',
+    'Smooth regional relief': 'Düzgün bölgesel kabartma',
+    'Moderate regional relief': 'Orta düzey bölgesel kabartma',
+    'Rugged regional relief': 'Engebeli bölgesel kabartma',
+    'Regional class from MOLA only. Boulders and small craters are not resolved: check HiRISE / CTX before selecting an ellipse.': 'Yalnızca MOLA bazlı bölgesel sınıf. Kaya ve küçük kraterler çözünmez: iniş elipsi seçmeden önce HiRISE / CTX kontrol edilmelidir.',
+    WITHIN_100_MSV: '100 mSv SINIRI İÇİNDE',
+    ABOVE_100_MSV: '100 mSv ÜSTÜNDE',
+    ABOVE_250_MSV: '250 mSv ÜSTÜNDE (KRİTİK)',
+    'Annual Mean': 'Yıllık Ortalama',
+    'Perihelion / S. Summer Dust Season': 'Günberi / G. Yaz Toz Mevsimi',
+    'N. Spring / S. Autumn Equinox': 'K. İlkbahar / G. Sonbahar Ekinoksu',
+    'N. Summer / Aphelion': 'K. Yaz / Günöte',
+    'N. Autumn / S. Spring Equinox': 'K. Sonbahar / G. İlkbahar Ekinoksu',
+    'N. Winter / S. Summer Solstice': 'K. Kış / G. Yaz Gündönümü',
+  };
+
+  const HAB_TR = {
+    'Atmospheric Pressure': { marker: 'Atmosfer Basıncı', earth: '101.3 kPa', mars: '~0.65–0.90 kPa', deficit: 'Armstrong sınırı (6.3 kPa) altı; sıvılar kaynar', eclss: 'Tam basınçlı uzay giysisi ve 82 kPa habitat kabuğu.' },
+    'Oxygen Partial Pressure': { marker: 'Oksijen Kısmi Basıncı', earth: '21.2 kPa (%20.95 O₂)', mars: '<0.001 kPa (%95.3 CO₂)', deficit: 'Anoksik atmosfer (<15 sn içinde hipoksi)', eclss: 'MOXIE / Katı Oksit Elektrolizi (SOXE) ile sürekli O₂.' },
+    'Thermal Environment': { marker: 'Termal Ortam', earth: '+15°C ort (−50°C … +50°C)', mars: '−55°C ort (−125°C gece … +15°C gündüz)', deficit: 'Aşırı hipotermi / elektronik ve batarya donması', eclss: 'Aerojel MLI yalıtım + 10 kWe Kilopower atık ısısı.' },
+    'Water Activity (aw)': { marker: 'Su Aktivitesi (aw)', earth: 'Yüzeyde bol sıvı su (aw = 1.0)', mars: 'Kuru yüzey; yeraltı buzu (aw ~ 0.001)', deficit: 'Sıvı su 0°C’de bile yüzeyde hızla süblimleşir', eclss: 'SWIM 2.0 permafrost termal kuyusu (ISRU ≥45 L/sol).' },
+    'Radiation Exposure': { marker: 'Radyasyon Maruziyeti', earth: '2.4 mSv/yıl (manyetosfer + 1033 g/cm² hava)', mars: '230–300 mSv/yıl GCR + akut CME güneş fırtınaları', deficit: 'Dünya arka planının ~100 katı; ölümcül akut CME riski', eclss: '2.2 m regolit siperi veya >3.5 m bazalt lav tüpü.' },
+    'Solar UV & Ozone Shielding': { marker: 'Güneş UV ve Ozon Kalkanı', earth: 'Stratosferik ozon UVC’nin %99’unu tutar', mars: 'Korunmasız güneş UVC radyasyon akısı', deficit: 'DNA parçalayıcı biyolojik sterilizan yüzey ışınımı', eclss: 'Altın kaplı polikarbonat vizör ve opak kabuk.' },
+  };
+
   function resolve(doc, spec) {
     try {
       if (Array.isArray(spec)) return doc.querySelectorAll(spec[0])[spec[1]] || null;
@@ -217,6 +329,14 @@
   function t(key, lang = activeLang) {
     const tbl = STRINGS[lang] || STRINGS.en;
     return tbl[key] ?? STRINGS.en[key] ?? key;
+  }
+
+  function trDomain(val, lang = activeLang) {
+    return lang === 'tr' ? (DOMAIN_TR[val] ?? val) : val;
+  }
+
+  function trHab(item, lang = activeLang) {
+    return lang === 'tr' && item && HAB_TR[item.marker] ? HAB_TR[item.marker] : item;
   }
 
   function applyDom(doc, lang) {
@@ -247,6 +367,21 @@
       node.nodeValue = lang === 'tr' ? trVal : span._mdeEnLast;
     }
 
+    const aboutC = doc.querySelector('#about-content');
+    if (aboutC) {
+      if (aboutC._mdeEnHtml === undefined) aboutC._mdeEnHtml = aboutC.innerHTML;
+      aboutC.innerHTML = lang === 'tr' ? ABOUT_TR_HTML : aboutC._mdeEnHtml;
+    }
+
+    const btnTog = doc.querySelector('#btn-toggle-key');
+    const inpKey = doc.querySelector('#nasa-api-key');
+    if (btnTog && inpKey) btnTog.textContent = t(inpKey.type === 'text' ? 'apiHide' : 'apiShow', lang);
+
+    const apiSt = doc.querySelector('#live-api-status');
+    if (apiSt && (!global.MDE_LIVE_STATE || apiSt.textContent.includes('Ready to query') || apiSt.textContent.includes('sorgusuna hazır'))) {
+      apiSt.textContent = lang === 'tr' ? '● NASA API sorgusuna hazır' : '● Ready to query NASA APIs';
+    }
+
     const btnLang = doc.querySelector('#btn-lang');
     if (btnLang) {
       btnLang.textContent = t('btnLang', lang);
@@ -262,5 +397,7 @@
     return activeLang;
   }
 
-  global.MDE_I18N = { STRINGS, t, getLang, setLang, applyDom };
+  const api = { STRINGS, t, trDomain, trHab, getLang, setLang, applyDom };
+  global.MDE_I18N = api;
+  if (typeof globalThis !== 'undefined') globalThis.MDE_I18N = api;
 })(typeof module === 'object' && module.exports ? module.exports : globalThis);

@@ -66,7 +66,7 @@ assert.ok(html.includes('class="skip-link"') && html.includes('id="sr-status"') 
 assert.ok((html.match(/aria-modal=["']true["']/g) || []).length === 2, 'both modals must declare aria-modal="true"');
 assert.ok(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').split(/\r?\n/).length <= 450, 'web/app.js coordinator stays compact (<= 450 lines)');
 assert.ok(fs.existsSync(path.join(ROOT, 'CONTRIBUTING.md')) && fs.existsSync(path.join(ROOT, 'docs/yarisma_raporu_tr.md')), 'CONTRIBUTING.md and competition guide exist');
-for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/panels.js', 'ui/overlays.js', 'ui/map2d.js', 'ui/layers.js', 'app.js']) {
+for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/panels.js', 'ui/overlays.js', 'ui/charts.js', 'ui/format.js', 'ui/map2d.js', 'ui/layers.js', 'live_api.js', 'app.js']) {
   const src = fs.readFileSync(path.join(WEB, f), 'utf8');
   assert.ok(!/style=/.test(src), `Inline HTML style= attribute found in web/${f} (strict style-src 'self' violation)`);
   for (const hex of ['#38bdf8', '#a3e635', '#f97316']) {

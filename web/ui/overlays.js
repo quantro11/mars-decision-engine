@@ -86,8 +86,21 @@
     }
   }
 
-  function renderLegendHTML(overlay) {
-    const lut = LUT[overlay], ends = LEGEND_ENDS[overlay];
+  const LEGEND_ENDS_TR = {
+    score: ['≤0.35 ELENDİ/ZAYIF', '1.00 EN İYİ'],
+    ice: ['−1.0 BUZ YOK', '+1.0 YÜKSEK BUZ'],
+    slope: ['0.0° DÜZ', '≥16.0° DİK'],
+    elev: ['−8.2 KM', '+21.2 KM'],
+    ti: ['0 İNCE TOZ', '≥700 ANAKAYA'],
+    dust: ['%0 TOZ', '%100 TOZ'],
+    rad: ['190 mSv/YIL DÜŞÜK', '340 mSv/YIL YÜKSEK'],
+    cave: ['0 KM MAĞARA ADAYI', '≥1020 KM'],
+  };
+
+  function renderLegendHTML(overlay, langArg) {
+    const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+    const lang = langArg || (i18n && i18n.getLang ? i18n.getLang() : 'en');
+    const lut = LUT[overlay], ends = (lang === 'tr' ? LEGEND_ENDS_TR : LEGEND_ENDS)[overlay];
     if (!lut || !ends) return '';
     const gradId = `ov-grad-${overlay}`;
     const stops = [];
@@ -99,4 +112,4 @@
   }
 
   global.MDE_OVERLAYS = { LUT, LEGEND_ENDS, lerpStops, buildRadLut, fillOverlayBuffer, renderLegendHTML };
-})(typeof window !== 'undefined' ? window : module.exports);
+})(typeof module === 'object' && module.exports ? module.exports : globalThis);

@@ -90,10 +90,18 @@
     };
   }
 
+  async function safeFetch(url, fetchFn, timeoutMs = 8000) {
+    if (fetchFn) return fetchFn(url);
+    if (typeof AbortController === 'undefined') return fetch(url);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try { return await fetch(url, { signal: ctrl.signal }); } finally { clearTimeout(timer); }
+  }
+
   async function fetchNASAWeather(apiKey, fetchFn) {
-    const key = apiKey || 'DEMO_KEY', f = fetchFn || fetch;
+    const key = apiKey || 'DEMO_KEY';
     try {
-      const res = await f(`https://api.nasa.gov/insight_weather/?api_key=${encodeURIComponent(key)}&feedtype=json&ver=1.0`);
+      const res = await safeFetch(`https://api.nasa.gov/insight_weather/?api_key=${encodeURIComponent(key)}&feedtype=json&ver=1.0`, fetchFn);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const parsed = parseInsight(await res.json());
       if (parsed) return { mode: 'archive', source: 'NASA InSight Mars Weather API (mission ended Dec 2022)', data: parsed, reference: INSIGHT_REFERENCE };
@@ -104,10 +112,10 @@
   }
 
   async function fetchSpaceWeather(apiKey, fetchFn) {
-    const key = apiKey || 'DEMO_KEY', f = fetchFn || fetch;
+    const key = apiKey || 'DEMO_KEY';
     try {
       const past = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-      const res = await f(`https://api.nasa.gov/DONKI/CME?startDate=${past}&api_key=${encodeURIComponent(key)}`);
+      const res = await safeFetch(`https://api.nasa.gov/DONKI/CME?startDate=${past}&api_key=${encodeURIComponent(key)}`, fetchFn);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const events = (Array.isArray(data) ? data : []).map(e => ({

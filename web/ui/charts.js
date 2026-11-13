@@ -28,13 +28,15 @@
     let db = '', dt = '';
     rows.forEach((r, i) => { db += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yb(r.batt).toFixed(1); dt += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yt(r.tau).toFixed(1); });
     const areaB = `${db}L${X(n - 1).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
-    return `<svg class="chart" viewBox="0 0 ${w} ${h}">
+      const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+      const tr = !!(i18n && i18n.getLang && i18n.getLang() === 'tr');
+      return `<svg class="chart" viewBox="0 0 ${w} ${h}">
       <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
       <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
       <path d="${areaB}" fill="rgba(127,155,179,.14)"/>
       <path d="${dt}" fill="none" stroke="#c8743c" stroke-width="1.2" stroke-dasharray="3 3"/>
       <path d="${db}" fill="none" stroke="#7f9bb3" stroke-width="1.8"/>
-      <text x="${pad}" y="10" fill="#7f9bb3" font-size="8.5" font-family="JetBrains Mono, monospace">battery</text>
+      <text x="${pad}" y="10" fill="#7f9bb3" font-size="8.5" font-family="JetBrains Mono, monospace">${tr ? 'batarya' : 'battery'}</text>
       <text x="${w - 8}" y="10" fill="#c8743c" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">τ, 0–12</text>
       <text x="${pad}" y="${h - 5}" fill="#5e5950" font-size="8.5" font-family="JetBrains Mono, monospace">sol 0</text>
       <text x="${w - 8}" y="${h - 5}" fill="#8f897e" font-size="8.5" font-family="JetBrains Mono, monospace" text-anchor="end">sol ${n}</text>
