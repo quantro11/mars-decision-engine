@@ -60,55 +60,64 @@
     }
   ];
 
-  async function fetchNASAWeather(apiKey) {
-    const key = apiKey || 'DEMO_KEY';
+  // Data-honesty rule: every result carries `mode`:
+  //   'live'      fetched just now from the named service
+  //   'archive'   real measured data, but from an ended mission (fetched or published)
+  //   'reference' published climatology, NOT a measurement of today
+  //   'offline'   request failed, nothing to show
+  // The UI must display `mode`; nothing here is ever invented and labelled as telemetry.
+
+  // InSight (Elysium Planitia, 4.5 N 135.6 E) ended on 21 Dec 2022, so this feed can only ever return archive sols.
+  const INSIGHT_REFERENCE = {
+    // Published InSight/TWINS + PS seasonal ranges (Banfield et al. 2020, Nature Geoscience 13).
+    site: 'Elysium Planitia (InSight lander)',
+    air_temp_c: { min: -95, max: -15 },
+    pressure_pa: { min: 640, max: 760 },
+    citation: 'Banfield et al. 2020, Nat. Geosci. 13, 190-198',
+  };
+
+  function parseInsight(data) {
+    const keys = data && Array.isArray(data.sol_keys) ? data.sol_keys : [];
+    if (!keys.length) return null;
+    const sol = keys[keys.length - 1], d = data[sol] || {};
+    return {
+      sol: +sol,
+      air_temp_c: d.AT ? { min: d.AT.mn, max: d.AT.mx, mean: d.AT.av } : null,
+      pressure_pa: d.PRE ? d.PRE.av : null,
+      wind_mps: d.HWS ? d.HWS.av : null,
+      season: d.Season || null,
+      first_utc: d.First_UTC || null,
+    };
+  }
+
+  async function fetchNASAWeather(apiKey, fetchFn) {
+    const key = apiKey || 'DEMO_KEY', f = fetchFn || fetch;
     try {
-      const res = await fetch(`https://api.nasa.gov/insight_weather/?api_key=${encodeURIComponent(key)}&feedtype=json&ver=1.0`);
-      if (!res.ok) throw new Error('NASA API HTTP ' + res.status);
-      const data = await res.json();
-      return { ok: true, source: 'NASA InSight Mars Weather Service', isLive: true, data };
+      const res = await f(`https://api.nasa.gov/insight_weather/?api_key=${encodeURIComponent(key)}&feedtype=json&ver=1.0`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const parsed = parseInsight(await res.json());
+      if (parsed) return { mode: 'archive', source: 'NASA InSight Mars Weather API (mission ended Dec 2022)', data: parsed, reference: INSIGHT_REFERENCE };
+      return { mode: 'reference', source: 'InSight feed returned no sols - showing published climatology', data: null, reference: INSIGHT_REFERENCE };
     } catch (err) {
-      return {
-        ok: true,
-        source: 'NASA InSight / REMS Calibrated Baseline Telemetry',
-        isLive: false,
-        data: {
-          current_sol: 3842,
-          air_temp_c: { max: -14.2, min: -86.5, mean: -54.1 },
-          ground_temp_c: { max: +2.8, min: -95.0 },
-          pressure_pa: 735,
-          wind_speed_mps: 5.2,
-          uv_index: 'Extreme (UVC Unattenuated)',
-          season_ls: 251,
-          opacity: 'Moderate Dust Haze (tau ~ 0.65)'
-        }
-      };
+      return { mode: 'reference', source: 'InSight feed unreachable (' + err.message + ') - showing published climatology', data: null, reference: INSIGHT_REFERENCE };
     }
   }
 
-  async function fetchSpaceWeather(apiKey) {
-    const key = apiKey || 'DEMO_KEY';
+  async function fetchSpaceWeather(apiKey, fetchFn) {
+    const key = apiKey || 'DEMO_KEY', f = fetchFn || fetch;
     try {
-      const now = new Date();
-      const past = new Date(now.getTime() - 14 * 86400000);
-      const start = past.toISOString().split('T')[0];
-      const res = await fetch(`https://api.nasa.gov/DONKI/CME?startDate=${start}&api_key=${encodeURIComponent(key)}`);
-      if (!res.ok) throw new Error('DONKI HTTP ' + res.status);
+      const past = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+      const res = await f(`https://api.nasa.gov/DONKI/CME?startDate=${past}&api_key=${encodeURIComponent(key)}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      return { ok: true, source: 'NASA DONKI Space Weather Service', isLive: true, events: Array.isArray(data) ? data.slice(0, 5) : [] };
+      const events = (Array.isArray(data) ? data : []).map(e => ({
+        id: e.activityID, startTime: e.startTime,
+        speed_kms: e.cmeAnalyses && e.cmeAnalyses[0] ? e.cmeAnalyses[0].speed : null,
+        note: e.note || '',
+      })).sort((a, b) => (a.startTime < b.startTime ? 1 : -1));
+      return { mode: 'live', source: 'NASA DONKI CME catalogue (last 30 days)', events };
     } catch (err) {
-      return {
-        ok: true,
-        source: 'NASA Space Weather Database (DONKI Telemetry Feed)',
-        isLive: false,
-        events: [
-          {
-            activityID: 'CME-2026-MARS-RAD-01',
-            startTime: new Date().toISOString(),
-            note: 'Active Space Weather Monitoring: No acute Coronal Mass Ejection intercepting Mars orbital plane in past 24h.'
-          }
-        ]
-      };
+      return { mode: 'offline', source: 'NASA DONKI unreachable (' + err.message + ')', events: [] };
     }
   }
 
@@ -116,6 +125,8 @@
     EARTH_BASELINE,
     MARS_HABITABILITY_CRITERIA,
     fetchNASAWeather,
-    fetchSpaceWeather
+    fetchSpaceWeather,
+    parseInsight,
+    INSIGHT_REFERENCE
   };
 })(typeof window !== 'undefined' ? window : module.exports);

@@ -126,4 +126,17 @@ const Live = require('../web/live_api.js').LIVE_API;
 assert.ok(Live.EARTH_BASELINE.pressure_kpa === 101.3);
 assert.ok(Live.MARS_HABITABILITY_CRITERIA.length === 6, '6 vital biosphere habitability markers defined');
 
-console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal / SPE / micro-hazard / live-API tests passed.');
+// --- data honesty: failed requests never produce fake telemetry
+(async () => {
+  const fail = async () => { throw new Error('net down'); };
+  const w = await Live.fetchNASAWeather('DEMO_KEY', fail);
+  assert.strictEqual(w.mode, 'reference'); assert.strictEqual(w.data, null, 'no invented sol / pressure');
+  const sw = await Live.fetchSpaceWeather('DEMO_KEY', fail);
+  assert.strictEqual(sw.mode, 'offline'); assert.strictEqual(sw.events.length, 0, 'no invented CME');
+  const ok = (body) => async () => ({ ok: true, json: async () => body });
+  const arch = await Live.fetchNASAWeather('k', ok({ sol_keys: ['675'], '675': { AT: { mn: -90, mx: -20, av: -60 }, PRE: { av: 750 }, First_UTC: '2020-10-19T18:32:20Z' } }));
+  assert.strictEqual(arch.mode, 'archive'); assert.strictEqual(arch.data.sol, 675); assert.strictEqual(arch.data.pressure_pa, 750);
+  const live = await Live.fetchSpaceWeather('k', ok([{ activityID: 'A', startTime: '2026-11-01T00:00Z' }, { activityID: 'B', startTime: '2026-11-05T00:00Z' }]));
+  assert.strictEqual(live.mode, 'live'); assert.strictEqual(live.events[0].id, 'B', 'newest CME first');
+  console.log('All scoring / A* / storm / radiation / seasonal / ISRU / thermal / SPE / micro-hazard / live-API / data-honesty tests passed.');
+})().catch((e) => { console.error(e); process.exit(1); });

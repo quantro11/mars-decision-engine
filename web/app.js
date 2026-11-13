@@ -992,10 +992,27 @@
       LIVE_API.fetchSpaceWeather(apiKey)
     ]);
 
-    if (st) st.innerHTML = `<span style="color:#10b981">🟢 CONNECTED</span> · ${weatherRes.source} · Key: ${apiKey === 'DEMO_KEY' ? 'DEMO_KEY' : 'Custom'}`;
+    const BADGE = { live: ['#10b981', 'LIVE'], archive: ['#38bdf8', 'ARCHIVE'], reference: ['#f59e0b', 'REFERENCE · NOT LIVE'], offline: ['#ef4444', 'OFFLINE'] };
+    const badge = (m) => `<span style="color:${BADGE[m][0]};font-weight:700">● ${BADGE[m][1]}</span>`;
+    if (st) st.innerHTML = `Weather: ${badge(weatherRes.mode)} · Space weather: ${badge(spaceRes.mode)} · Key: ${apiKey === 'DEMO_KEY' ? 'DEMO_KEY' : 'Custom'}`;
 
-    const w = weatherRes.data;
-    const cme = spaceRes.events && spaceRes.events[0];
+    const w = weatherRes.data, ref = weatherRes.reference;
+    const esc = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    const weatherBlock = w
+      ? `<div class="kv"><span>Last archived sol</span><b>Sol ${w.sol}${w.first_utc ? ' · ' + esc(w.first_utc.slice(0, 10)) : ''}</b></div>
+         <div class="kv"><span>Air temperature (min / mean / max)</span><b>${w.air_temp_c ? `${w.air_temp_c.min.toFixed(0)} / ${w.air_temp_c.mean.toFixed(0)} / ${w.air_temp_c.max.toFixed(0)} °C` : 'not reported'}</b></div>
+         <div class="kv"><span>Pressure</span><b>${w.pressure_pa ? w.pressure_pa.toFixed(0) + ' Pa' : 'not reported'}</b></div>
+         <div class="kv"><span>Wind</span><b>${w.wind_mps ? w.wind_mps.toFixed(1) + ' m/s' : 'not reported'}</b></div>`
+      : `<div class="kv"><span>Site</span><b>${ref.site}</b></div>
+         <div class="kv"><span>Air temperature range</span><b>${ref.air_temp_c.min} … ${ref.air_temp_c.max} °C</b></div>
+         <div class="kv"><span>Seasonal pressure range</span><b>${ref.pressure_pa.min} … ${ref.pressure_pa.max} Pa</b></div>
+         <div class="help" style="font-size:10px">Published climatology (${ref.citation}), not a current measurement.</div>`;
+    const cme = spaceRes.events[0];
+    const spaceBlock = spaceRes.mode === 'offline'
+      ? `<div class="help">No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.</div>`
+      : `<div class="kv"><span>CMEs catalogued (30 days)</span><b>${spaceRes.events.length}</b></div>
+         ${cme ? `<div class="kv"><span>Most recent</span><b>${esc(cme.startTime)}${cme.speed_kms ? ' · ' + Math.round(cme.speed_kms) + ' km/s' : ''}</b></div>` : ''}
+         <div class="help" style="font-size:10px">DONKI catalogues heliospheric CMEs; whether one reaches Mars depends on its direction and is not assessed here.</div>`;
 
     const critRows = LIVE_API.MARS_HABITABILITY_CRITERIA.map(c => `
       <div style="background:rgba(255,255,255,.02);border:1px solid rgba(236,231,223,.08);border-radius:5px;padding:8px 10px;margin-bottom:8px">
@@ -1014,21 +1031,16 @@
     `).join('');
 
     el.innerHTML = `
-      <div class="sec-head" style="margin-top:10px"><h2>NASA Surface Weather Feed</h2></div>
+      <div class="sec-head" style="margin-top:10px"><h2>Mars Surface Weather</h2></div>
       <div style="background:rgba(0,0,0,.25);border:1px solid rgba(236,231,223,.1);border-radius:6px;padding:10px;margin-bottom:12px">
-        <div class="kv"><span>Reported Mission Sol</span><b>Sol ${w.current_sol || 3842}</b></div>
-        <div class="kv"><span>Air Temperature (min/max)</span><b>${w.air_temp_c ? w.air_temp_c.min + '°C / ' + w.air_temp_c.max + '°C' : '-84°C / -12°C'}</b></div>
-        <div class="kv"><span>Ground Temperature</span><b>${w.ground_temp_c ? w.ground_temp_c.min + '°C / ' + w.ground_temp_c.max + '°C' : '-95°C / +3°C'}</b></div>
-        <div class="kv"><span>Atmospheric Pressure</span><b>${w.pressure_pa || 735} Pa (0.73 kPa)</b></div>
-        <div class="kv"><span>UV Radiation Level</span><b>${w.uv_index || 'Extreme (Unshielded UVC)'}</b></div>
-        <div class="kv"><span>Atmospheric Haze Opacity</span><b>${w.opacity || 'Moderate Dust Haze (tau ~ 0.65)'}</b></div>
+        <div class="help" style="font-size:10px;margin-bottom:6px">${badge(weatherRes.mode)} ${esc(weatherRes.source)}</div>
+        ${weatherBlock}
       </div>
 
-      <div class="sec-head"><h2>Live Space Weather (NASA DONKI)</h2></div>
+      <div class="sec-head"><h2>Space Weather (NASA DONKI)</h2></div>
       <div style="background:rgba(0,0,0,.25);border:1px solid rgba(236,231,223,.1);border-radius:6px;padding:10px;margin-bottom:12px">
-        <div class="kv"><span>Coronal Mass Ejections</span><b>${spaceRes.events ? spaceRes.events.length + ' logged events' : '0 active'}</b></div>
-        <div class="kv"><span>Interplanetary Alert Status</span><b style="color:#10b981">NOMINAL (Transit Corridor Clear)</b></div>
-        ${cme ? `<div class="help" style="margin-top:6px;font-size:10px">${cme.note || 'Active solar proton monitoring via SOHO/STEREO.'}</div>` : ''}
+        <div class="help" style="font-size:10px;margin-bottom:6px">${badge(spaceRes.mode)} ${esc(spaceRes.source)}</div>
+        ${spaceBlock}
       </div>
 
       <div class="sec-head"><h2>Earth vs. Mars Biosphere Habitability Index</h2></div>

@@ -133,3 +133,17 @@ P_boulder(%) = clamp(round(r / 250 · 55 + s / 15 · 45), 4, 95)
 3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
 4. SWIM coverage ends at ±60°.
 5. The storm model has empirical optical-depth and dust-deposition constants; it is designed for comparing mission architectures, not for flight avionics sizing.
+
+## Data honesty (Module IV)
+
+Every externally fetched value carries one of four labels, shown in the UI next to the value:
+
+| Label | Meaning |
+|---|---|
+| LIVE | fetched just now (NASA DONKI CME catalogue, last 30 days) |
+| ARCHIVE | real measurement from an ended mission (InSight weather API; InSight ended 21 Dec 2022) |
+| REFERENCE | published climatology, not a measurement of today (InSight seasonal ranges, Banfield et al. 2020) |
+| OFFLINE | the request failed; nothing is shown |
+
+No placeholder sol numbers, pressures or CME events are ever generated. DONKI catalogues heliospheric CMEs; whether one reaches Mars is not assessed. Unit tests assert both rules (`tests/scoring.test.js`, data-honesty block).
+

@@ -492,6 +492,6 @@ def build_pdf(filename):
     print(f"PDF successfully generated: {filename}")
 
 if __name__ == '__main__':
-    out_dir = r"C:\Users\User\.gemini\antigravity\scratch\mars-decision-engine"
+    out_dir = os.path.dirname(os.path.abspath(__file__))
     pdf_path = os.path.join(out_dir, "Mars_Decision_Engine_Teknik_ve_Satis_Rehberi.pdf")
     build_pdf(pdf_path)
