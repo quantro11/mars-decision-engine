@@ -5,7 +5,7 @@
 // Test 1: every successful Mars lander was placed by an engineering team optimising landing safety.
 //         If our "Landing safety" score is meaningful, those sites should rank high among all cells
 //         of the same latitude band - even though the model was never told where they are.
-// Test 2: NASA's 2015 Human Landing Site workshop proposed ~47 Exploration Zones (we carry 17 of them).
+// Test 2: NASA's 2015 Human Landing Site workshop candidates (all 39 sites USGS mosaicked with CTX).
 //         Under the "Balanced crewed mission" preset, do those zones score above random terrain?
 // Baseline for both: a random cell has an expected percentile of 50.
 const fs = require('fs');
@@ -70,7 +70,8 @@ const scoreLand = S.scoreMap(L, S.PRESETS.landing.w, false, new Float32Array(W *
 const t1 = LANDERS.map(([n, la, lo]) => ({ n, la, lo, p: bandPercentile(scoreLand, la, lo, 5) }));
 
 const scoreBal = S.scoreMap(L, S.PRESETS.balanced.w, true, new Float32Array(W * H));
-const EZ = REGIONS.filter((r) => r.ez && Math.abs(r.lat) <= 50);
+// All 39 candidate sites mapped by USGS for the NASA 2015 Human Landing Site workshop (centres of their CTX mosaics)
+const EZ = JSON.parse(fs.readFileSync(path.join(__dirname, 'hls2015_ez_sites.json'), 'utf8')).sites.filter((r) => Math.abs(r.lat) <= 50);
 const t2 = EZ.map((r) => ({ n: r.name, p: bandPercentile(scoreBal, r.lat, r.lon, 5) }));
 
 // Monte Carlo null model: mean percentile of the same number of random cells (same latitudes)
@@ -86,6 +87,11 @@ const pLand = nullLand.filter((m) => m >= mean(t1.map((t) => t.p))).length / nul
 const nullEZ = nullMean(EZ.map((r) => ({ la: r.lat })), scoreBal, 200);
 const pEZ = nullEZ.filter((m) => m >= mean(t2.map((t) => t.p))).length / nullEZ.length;
 
+// robustness of both tests to the aggregation rule
+const scoreLandGeo = S.scoreMap(L, S.PRESETS.landing.w, false, new Float32Array(W * H), 'geo');
+const scoreBalGeo = S.scoreMap(L, S.PRESETS.balanced.w, true, new Float32Array(W * H), 'geo');
+const t1geo = mean(LANDERS.map(([, la, lo]) => bandPercentile(scoreLandGeo, la, lo, 5)));
+const t2geo = mean(EZ.map((r) => bandPercentile(scoreBalGeo, r.lat, r.lon, 5)));
 const fmtP = (p) => (p === 0 ? '< 0.005' : p.toFixed(3));
 const md = `# Validation
 
@@ -109,12 +115,23 @@ ${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
 
 **Mean ${mean(t2.map((t) => t.p)).toFixed(0)}** (random: ${mean(nullEZ).toFixed(0)}, 95 % ≤ ${nullEZ[Math.floor(0.95 * nullEZ.length)].toFixed(0)}), one-sided p = ${fmtP(pEZ)}.
 
+## Robustness to the aggregation rule
+
+| Test | Weighted sum (default) | Weighted geometric mean |
+|---|---|---|
+| 1 — landers | ${mean(t1.map((t) => t.p)).toFixed(0)} | ${t1geo.toFixed(0)} |
+| 2 — HLS-2015 sites | ${mean(t2.map((t) => t.p)).toFixed(0)} | ${t2geo.toFixed(0)} |
+
 ## How to read this
 
 * Test 1 shows the score **reproduces engineering practice**: lander sites were chosen by EDL engineers using the same kind of MOLA slope and
   elevation data the landing preset scores. That makes it partly circular — it is a sanity check, not an independent prediction.
-* Test 2 is the more independent check and it is **not significant**: Exploration Zones were proposed for science *and* resources, often next to rough terrain
-  (mensae, valles), so a moderate result is expected and honest. Zones scoring low show where science value outweighed safety.
+* Test 2 is the more independent check (the workshop weighed science, resources and engineering, not our formula):
+  ${pEZ < 0.05 ? `the candidate sites score **significantly above random** (p = ${fmtP(pEZ)}).` : `the result is **not significant** (p = ${fmtP(pEZ)}).`}
+  Zones scoring low are where science value outweighed landing safety (canyons, chaos terrain, mensae).
+* Earlier versions used only the ${REGIONS.filter((r) => r.ez && Math.abs(r.lat) <= 50).length} zones present in the app's gazetteer, a hand-picked subset biased toward rough terrain;
+  that subset scores ${mean(REGIONS.filter((r) => r.ez && Math.abs(r.lat) <= 50).map((r) => bandPercentile(scoreBal, r.lat, r.lon, 5))).toFixed(0)} on average. The full list is the less biased sample.
+* Site positions are the centres of the USGS CTX mosaic footprints, an approximation of each ~100 km-radius Exploration Zone.
 * Limitations: 9 landers and ${EZ.length} zones are small samples; site coordinates are point locations evaluated on a 10 km grid.
 `;
 const targetPath = path.join(ROOT, 'docs/validation.md');

@@ -45,5 +45,12 @@
     "nodata": 0,
     "source": "TES surface dust abundance (Bandfield 2002) via ASU JMARS WMS layer TES_Dust_numeric, 8 ppd"
   },
-  "generated_by": "data_pipeline/preprocess.py + data_pipeline/mola16.py (elev/slope/rough)"
+  "generated_by": "data_pipeline/preprocess.py + data_pipeline/mola16.py (elev/slope/rough)",
+  "cave": {
+    "unit": "km",
+    "scale": 4,
+    "offset": 0,
+    "max": 1020,
+    "source": "distance to nearest of 1062 cave candidates, Mars Global Cave Candidate Catalog v1 (Cushing 2017, USGS Astrogeology); candidates are unconfirmed"
+  }
 }

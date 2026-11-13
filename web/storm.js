@@ -60,22 +60,27 @@
     return 'N. Winter / S. Summer Solstice';
   }
 
-  // Rough empirical surface-temperature approximation (order-of-magnitude, NOT a calibrated climate model):
-  // equatorial diurnal mean ~ -50 C (Viking / REMS / InSight range), colder with latitude, +-seasonal terms.
   // Returns { mean, night, day } surface temperatures in Celsius as a function of latitude and season (Ls).
+  // Diurnal-mean surface temperature from radiative balance with the insolation model above:
+  //   T = ((1 - A) * Q_eff / (eps * sigma))^(1/4),  A = 0.25 (TES global mean bolometric albedo), eps = 0.95
+  //   Q_eff = 0.5 * Q(lat, Ls) + 0.5 * annual-mean Q(lat): the half-weight on the annual mean stands in for seasonal
+  //   thermal lag of the regolith. Floor 148 K = CO2 frost point (seasonal caps). Day / night offsets (+28 / -36 C) are
+  //   typical diurnal amplitudes for moderate thermal inertia (Viking / REMS / InSight range) - approximate.
+  const ALBEDO = 0.25, EMISS = 0.95, SIGMA = 5.670e-8, T_FROST = 148;
+  const annualQ = new Map();
+  function annualMeanQ(lat) {
+    const k = Math.round(lat * 2) / 2;
+    if (!annualQ.has(k)) { let q = 0; for (let l = 0; l < 360; l += 5) q += insolationTOA(k, l) / 72; annualQ.set(k, q); }
+    return annualQ.get(k);
+  }
   function surfaceTempC(lat, ls) {
-    const phi = Math.abs(lat) * DEG;
-    let mean = -50.0 - 55.0 * Math.sin(phi); // Equatorial ~-50C, polar ~-105C
-    if (ls !== undefined && ls !== null) {
-      // Seasonal shift: Mars obliquity (25.19 deg) + eccentricity (perihelion Ls=251 warms planet globally ~10C)
-      const eccBoost = 6.0 * Math.cos((ls - LS_PERIHELION) * DEG);
-      const isNorth = lat > 0;
-      const declinationDelta = Math.abs(lat) > 5 ? 14.0 * Math.cos((ls - (isNorth ? 71.0 : 251.0)) * DEG) : 0;
-      mean += eccBoost + declinationDelta;
-    }
-    const night = mean - 36.0; // Diurnal drop (thin atmosphere causes steep radiative cooling)
-    const day = mean + 28.0;
-    return { mean: Math.round(mean * 10) / 10, night: Math.round(night * 10) / 10, day: Math.round(day * 10) / 10 };
+    const qa = annualMeanQ(lat);
+    const qNow = (ls === undefined || ls === null) ? null : insolationTOA(lat, ls);
+    const q = qNow === null ? qa : 0.5 * qNow + 0.5 * qa;
+    // polar night: the surface sits at the CO2 frost point (seasonal cap)
+    const tK = qNow === 0 ? T_FROST : Math.max(T_FROST, Math.pow((1 - ALBEDO) * q / (EMISS * SIGMA), 0.25));
+    const mean = tK - 273.15;
+    return { mean: Math.round(mean * 10) / 10, night: Math.round((mean - 36) * 10) / 10, day: Math.round((mean + 28) * 10) / 10 };
   }
 
   // Habitat heat loss: UA = 90 W/K (~220 m2 envelope, U ~ 0.4 W/m2K; assumption) to reach +20 C inside.

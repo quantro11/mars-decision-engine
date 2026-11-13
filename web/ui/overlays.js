@@ -19,6 +19,7 @@
     ti: [[0, 115, 38, 22], [0.15, 195, 115, 38], [0.4, 75, 168, 95], [0.7, 56, 135, 215], [1, 238, 244, 255]],
     dust: [[0, 35, 55, 85], [0.5, 185, 145, 85], [1, 255, 228, 155]],
     rad: [[0, 40, 120, 90], [0.5, 230, 200, 60], [1, 220, 40, 90]],
+    cave: [[0, 250, 230, 160], [0.12, 200, 120, 60], [0.5, 70, 50, 70], [1, 20, 18, 30]],
   };
 
   const LEGEND_ENDS = {
@@ -29,6 +30,7 @@
     ti: ['0 FINE DUST', '≥700 BEDROCK'],
     dust: ['0% DUST', '100% DUST'],
     rad: ['190 mSv/YR LOW', '340 mSv/YR HIGH'],
+    cave: ['0 KM CAVE CANDIDATE', '≥1020 KM'],
   };
 
   const LUT = {};
@@ -71,6 +73,8 @@
         if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round(r * 4 / 700 * 255));
       } else if (overlay === 'rad') {
         v = radLut[L.elev[i]];
+      } else if (overlay === 'cave') {
+        v = L.cave ? L.cave[i] : 255;
       } else if (overlay === 'dust') {
         const r = L.dust[i];
         if (r === 0) { v = 0; a = 0; } else v = Math.min(255, Math.round((r - 1) * 1.275));

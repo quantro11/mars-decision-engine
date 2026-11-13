@@ -24,27 +24,63 @@ A random cell has an expected percentile of 50. p-values come from 200 random-lo
 
 | Exploration Zone | Percentile in band |
 |---|---|
-| Jezero Crater (Perseverance) | 68 |
-| Gale Crater (Curiosity) | 0 |
-| Deuteronilus Mensae | 0 |
-| Protonilus Mensae | 81 |
-| Phlegra Montes | 27 |
-| Erebus Montes | 39 |
-| Hebrus Valles | 77 |
-| Nili Fossae | 58 |
-| Mawrth Vallis | 66 |
-| Eberswalde Crater | 93 |
-| Huygens Crater | 56 |
-| Hellas Planitia floor | 98 |
-| Noctis Labyrinthus | 0 |
-| Valles Marineris (Melas) | 99 |
+| Acheron Fossae | 30 |
+| Acidalia Plantia | 85 |
+| Arabia Terra | 94 |
+| Aram Chaos | 72 |
+| Arcadia | 77 |
+| Arcadia Planitia | 62 |
+| Ausonia | 90 |
+| Cerberus | 89 |
+| Columbus Crater | 54 |
+| Copernicus Crater | 84 |
+| Coprates EMelas Chasm | 98 |
+| Deuteronilus1 2 | 12 |
+| Erebus Montes | 34 |
+| Gale | 96 |
+| Gusev | 99 |
+| Hadriacus | 100 |
+| Hale Crater | 74 |
+| Hebrus | 89 |
+| Hellas3 | 94 |
+| Hellas Hellas2 | 84 |
+| Huygens | 69 |
+| Hypanis Delta | 82 |
+| Ismenius Cavus | 74 |
+| Jezero | 64 |
+| Kasei Valles | 8 |
+| Mawrth Valles | 66 |
+| McLaughlin Crater | 61 |
+| NE Marineris Crater | 99 |
+| Newton Crater | 85 |
+| Nili | 58 |
+| Noachis | 67 |
+| Noachis Terra Chloride | 67 |
+| Noactis Landing | 84 |
+| Protonilus | 6 |
+| SE Marineris | 73 |
+| S Meridiani Sinus Planium | 96 |
+| S Nectaris Fossae | 73 |
+| Viking | 88 |
+| Zephyria | 77 |
 
-**Mean 54** (random: 48, 95 % ≤ 63), one-sided p = 0.235.
+**Mean 72** (random: 48, 95 % ≤ 57), one-sided p = < 0.005.
+
+## Robustness to the aggregation rule
+
+| Test | Weighted sum (default) | Weighted geometric mean |
+|---|---|---|
+| 1 — landers | 89 | 87 |
+| 2 — HLS-2015 sites | 72 | 71 |
 
 ## How to read this
 
 * Test 1 shows the score **reproduces engineering practice**: lander sites were chosen by EDL engineers using the same kind of MOLA slope and
   elevation data the landing preset scores. That makes it partly circular — it is a sanity check, not an independent prediction.
-* Test 2 is the more independent check and it is **not significant**: Exploration Zones were proposed for science *and* resources, often next to rough terrain
-  (mensae, valles), so a moderate result is expected and honest. Zones scoring low show where science value outweighed safety.
-* Limitations: 9 landers and 14 zones are small samples; site coordinates are point locations evaluated on a 10 km grid.
+* Test 2 is the more independent check (the workshop weighed science, resources and engineering, not our formula):
+  the candidate sites score **significantly above random** (p = < 0.005).
+  Zones scoring low are where science value outweighed landing safety (canyons, chaos terrain, mensae).
+* Earlier versions used only the 14 zones present in the app's gazetteer, a hand-picked subset biased toward rough terrain;
+  that subset scores 54 on average. The full list is the less biased sample.
+* Site positions are the centres of the USGS CTX mosaic footprints, an approximation of each ~100 km-radius Exploration Zone.
+* Limitations: 9 landers and 39 zones are small samples; site coordinates are point locations evaluated on a 10 km grid.

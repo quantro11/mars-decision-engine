@@ -148,6 +148,17 @@ assert.ok(FMT.candidateName(25, 77.6, { distDeg: 6.6, region: { name: 'Jezero Cr
 assert.ok(CH.profileSVG([{ km: 0, elev: -2000, slope: 2 }, { km: 50, elev: -1500, slope: 12 }]).includes('<svg'));
 assert.ok(CH.crisisSVG([{ batt: 100, tau: 1 }, { batt: 50, tau: 8 }], 100).includes('<svg'));
 
+// --- Surface temperature from radiative balance (same insolation model)
+const tEq = T.surfaceTempC(0, null).mean, tV2w = T.surfaceTempC(47.6, 270).mean, tV2s = T.surfaceTempC(47.6, 90).mean;
+assert.ok(tEq > -60 && tEq < -40, 'equatorial annual mean near the observed -50 C');
+assert.ok(tV2w < tV2s - 20, 'Viking 2 latitude: winter much colder than summer');
+assert.strictEqual(T.surfaceTempC(-80, 90).mean, Math.round((148 - 273.15) * 10) / 10, 'polar night floors at CO2 frost point');
+
+// --- Shelter (cave candidate) criterion: weight 0 by default, so presets and validation are unchanged
+for (const k in S.PRESETS) assert.strictEqual(S.PRESETS[k].w.cave, 0);
+assert.strictEqual(S.F.cave(20), 1); assert.strictEqual(S.F.cave(600), 0); assert.strictEqual(S.F.cave(null), 0);
+assert.ok(S.scoreCell({ ...ideal, cave: 30 }, { ...w, cave: 0.3 }, true) > S.scoreCell({ ...ideal, cave: 900 }, { ...w, cave: 0.3 }, true));
+
 // --- data honesty: failed requests never produce fake telemetry
 (async () => {
   const fail = async () => { throw new Error('net down'); };

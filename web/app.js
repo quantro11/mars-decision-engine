@@ -24,6 +24,7 @@
     lat: 'LAT',
     ti: 'TES',
     rad: 'RAD',
+    cave: 'CAVE',
   };
 
   const OVERLAY_NAMES = {
@@ -86,6 +87,7 @@
       rough: L.rough[i] * META.rough.scale,
       ice: iceRaw === 0 ? null : META.ice.offset + iceRaw * META.ice.scale,
       ti: L.ti[i] === 0 ? null : L.ti[i] * META.ti.scale,
+      cave: !L.cave || L.cave[i] === 255 ? null : L.cave[i] * META.cave.scale,
       dust: L.dust[i] === 0 ? null : META.dust.offset + L.dust[i] * META.dust.scale,
       lat: L.latOfRow(y), lon: L.lonOfCol(x),
     };
@@ -101,7 +103,7 @@
       e += v.elev; sl += v.slope; r += v.rough; n++; if (v.ice !== null) { ic += v.ice; nIce++; }
       if (v.ti !== null) { t += v.ti; nT++; } if (v.dust !== null) { du += v.dust; nD++; }
     }
-    return { rad: SCORING.radDose(e / n), elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
+    return { rad: SCORING.radDose(e / n), elev: e / n, slope: sl / n, rough: r / n, ice: nIce ? ic / nIce : null, ti: nT ? t / nT : null, dust: nD ? du / nD : null, cave: cellValues(((cx % W) + W) % W, Math.min(H - 1, Math.max(0, cy))).cave, lat: L.latOfRow(cy), lon: L.lonOfCol(cx) };
   }
 
   // ------------------------------------------------------------ state
@@ -453,6 +455,7 @@
       lat: `${v.lat.toFixed(1)}°`,
       ti: v.ti === null ? 'no data' : `${v.ti.toFixed(0)} tiu`,
       rad: `${v.rad.toFixed(0)} mSv/yr`,
+      cave: v.cave == null ? '> 1000 km' : `${v.cave.toFixed(0)} km`,
     };
     return SCORING.CRITERIA.map(c => {
       const f = c.key === 'rad' ? SCORING.F.rad(v.elev) : SCORING.F[c.key](v[c.key]);
@@ -468,6 +471,15 @@
       if (y < 0 || y >= H) continue; n++; if (L.slope[y * W + (((x % W) + W) % W)] <= lim) ok++;
     }
     return n ? ok / n : 0;
+  }
+
+  // nearest MGC3 cave candidate (Cushing 2017): candidates are unconfirmed
+  function nearestCave(lat, lon) {
+    if (!window.CAVES || !CAVES.length) return 'catalogue not loaded';
+    let best = null, bd = Infinity;
+    for (const c of CAVES) { const d = ASTAR.haversineKm(lat, lon, c[0], c[1]); if (d < bd) { bd = d; best = c; } }
+    const TYPES = { sky: 'skylight', APC: 'atypical pit crater', pit: 'pit', lat: 'lava-tube related', kst: 'karst-like', end: 'trough-end' };
+    return `${bd.toFixed(0)} km · ${TYPES[best[2]] || best[2]}${best[3] ? ' · ~' + best[3] + ' m' : ''} <small>(unconfirmed candidate)</small>`;
   }
 
   function renderCandidates() {
@@ -531,6 +543,7 @@
         <tr><td>TES Thermal Inertia</td><td>${v.ti === null ? 'no data' : v.ti.toFixed(0) + ' J m⁻² K⁻¹ s⁻½'}</td></tr>
         <tr><td>TES Dust Abundance</td><td>${v.dust === null ? 'no data' : (v.dust * 100).toFixed(0) + ' %'}</td></tr>
         <tr><td>Atmospheric Column</td><td>${SCORING.atmoColumnGcm2(v.elev).toFixed(1)} g/cm²</td></tr>
+        <tr><td>Nearest cave candidate</td><td>${nearestCave(v.lat, v.lon)}</td></tr>
         <tr><td>GCR Dose (MSL-RAD)</td><td>${SCORING.radDoseMsvYr(v.elev).toFixed(0)} mSv/yr</td></tr>
         <tr><td>Design-basis SPE (assumption)</td><td>${spe.unshieldedDoseMsv} mSv on the surface · ${spe.requiredRegolithM} m regolith for ≤ 100 mSv</td></tr>
         <tr><td>Surface temp. (approx.)</td><td>night ${sTemp.night.toFixed(0)} °C · mean ${sTemp.mean.toFixed(0)} °C</td></tr>
@@ -1109,7 +1122,7 @@
 
   ensureFileDataBundle().then(() => {
     const isFile = location.protocol === 'file:' && !!window.LAYER_DATA;
-    const coreKeys = ['elev', 'slope', 'rough', S.iceBand, 'ti', 'dust'];
+    const coreKeys = ['elev', 'slope', 'rough', S.iceBand, 'ti', 'dust', 'cave'];
     if (isFile) {
       return Promise.all([...coreKeys, 'ice01', 'ice5', 'base'].map(decode)).then(() => {
         if (globe) globe.setLayers(baseImg, L.elev, W, H);

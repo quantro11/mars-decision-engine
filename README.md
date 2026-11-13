@@ -55,7 +55,7 @@ python tests/test_pipeline.py  # data pipeline unit checks
 node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
 
-**Validation result:** the nine successful Mars landers (Viking 1/2, Pathfinder, Spirit, Opportunity, Curiosity, InSight, Perseverance, Zhurong) rank in the **89th percentile** of their own latitude band under the Landing-safety preset (random terrain: 50th, p < 0.005). Because EDL engineers chose those sites using the same MOLA slope and elevation properties, Test 1 serves as a consistency check rather than an independent prediction. See [`docs/validation.md`](docs/validation.md).
+**Validation result:** the nine successful Mars landers rank in the **89th percentile** of their own latitude band under Landing safety (random: 50th, p < 0.005; partly circular, see notes), and all 39 NASA HLS-2015 candidate sites rank in the **72nd percentile** under the Balanced preset (random: 48th, p < 0.005). Both hold under geometric-mean scoring. See [`docs/validation.md`](docs/validation.md).
 
 Verifies suitability transfer functions, preset & geometric-mean aggregation behaviour, NASA HLS-2015 hard constraint vetoes, >= 75%-valid candidate extraction, Monte Carlo weight sensitivity, windowed multi-hazard A* obstacle & dust-trap avoidance, candidate rest stops, Opportunity-calibrated dust-storm attenuation, waste-heat/deficit thermal balance, MSL-RAD GCR & unified design-basis SPE shielding, seasonal $L_s$ insolation, SWIM ice-access classification, regional terrain class, XSS-escaped Mission Brief & Live API rendering, and CSP/accessibility integrity.
 
@@ -63,10 +63,10 @@ Verifies suitability transfer functions, preset & geometric-mean aggregation beh
 
 ```
 .github/         workflows/test.yml                 CI test runner (Node 20 + Python 3.12)
-data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py
-web/             index.html, style.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers/meta.js, layers_data.js
+data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py, caves.py
+web/             index.html, style.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers/meta.js, layers_data.js, caves.js
 web/ui/          format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js   Modular UI helpers
-tools/           validate.js                         validation report generator
+tools/           validate.js, hls2015_ez_sites.json   validation report generator + the 39 HLS-2015 sites
 tests/           scoring.test.js, ui.test.js, integrity.test.js, test_pipeline.py
 docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical spec, validation, citations, pitch & PDF master guide
 ```
@@ -77,5 +77,7 @@ docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical 
 * **NASA Viking Orbiter MDIM 2.1 Optical Mosaic** — Global colorized optical mosaic (`Mars_Viking_MDIM21_ClrMosaic_global_232m`, NASA Mars Trek / USGS), 4096×2048 px.
 * **SWIM 2.0 Subsurface Water Ice** — Subsurface Water Ice Mapping composite consistency maps at 0–1 m, 1–5 m, and >5 m depth (Planetary Science Institute / NASA, `swim.psi.edu`), 3 km/px, ±60° latitude.
 * **MGS TES Thermal Inertia & Dust Abundance** — Mars Global Surveyor Thermal Emission Spectrometer (Christensen et al.; Bandfield 2002) via ASU JMARS WMS (`TES_Thermal_Inertia_numeric`, `TES_Dust_numeric`).
+* **Mars Global Cave Candidate Catalog v1** — 1062 cave-entrance / skylight candidates (Cushing 2017, USGS Astrogeology / PDS), used as an optional shelter-access criterion (weight 0 by default).
+* **NASA HLS-2015 candidate sites** — 39 CTX mosaics published by USGS Astrogeology, used for validation.
 * **NASA HLS-2015 Constraints** — First Landing Site / Exploration Zone Workshop for Human Missions to Mars (2015): elevation ≤ +2 km, |latitude| ≤ 50°, landing/traverse slope limits ≤ 5° / ≤ 15°.
 * **Surface GCR Radiation & Dust-Storm Calibration** — MSL Curiosity RAD surface dose measurements at Gale Crater (Hassler et al., *Science* 2014, ≈232 mSv/yr) and MER Opportunity June 2018 global storm telemetry ($\tau \approx 10.8$, ~97% solar array loss).

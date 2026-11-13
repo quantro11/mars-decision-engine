@@ -92,7 +92,7 @@ battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption − he
 * `exp(−0.35 (τ − 0.5))`: empirical, fitted so τ ≈ 10.8 gives ≈ 3 % of clear-sky output (Opportunity, June 2018: ≈ 650 → ≈ 22 Wh/sol).
 * **Panel dust:** output decreases by 0.28 %/sol (order of the MER Opportunity average) and 3× that while τ is elevated, floor 35 %. Wind cleaning events are **not** modelled (conservative); a "dust cleaning" option keeps panels clean.
 * **Heating:** the heat loss is charged to the energy budget only beyond what the electrical load already dissipates. When generation plus battery cannot cover the loss, the interior relaxes toward the ambient mean in proportion to the heat deficit (1.5-sol time constant) and recovers the same way. "Below 0 °C" is reported.
-* `T_mean(φ, Ls)` is a rough empirical approximation (equatorial diurnal mean ≈ −50 °C, colder with latitude, seasonal terms), not a climate model.
+* `T_mean(φ, Ls)` comes from radiative balance with the same insolation model: `T = ((1 − A)·Q_eff / (ε σ))^¼`, A = 0.25 (TES global bolometric albedo), ε = 0.95, `Q_eff = ½ Q(φ, Ls) + ½ Q̄(φ)` (the annual-mean half stands in for seasonal thermal lag), floor 148 K (CO₂ frost). Gives ≈ −49 °C at the equator (REMS / InSight ground temperatures are in the −50s), −88 °C in Viking 2's northern winter, −58 °C in its summer. Day/night offsets (+28 / −36 °C) are typical diurnal amplitudes. Habitat UA = 0.09 kW/K is a design parameter, not a property of Mars.
 * **Fission power:** 10 kWe is the *design target* of NASA's Kilopower / Fission Surface Power concept. The 2018 KRUSTY ground test demonstrated a ~1 kWe prototype; 10 kWe units have not flown.
 
 ## 8. Ice access (replaces an earlier "ISRU yield" estimate)
@@ -102,6 +102,13 @@ It does **not** measure ice concentration, purity or extractable yield, so the e
 
 * Classes (our thresholds): consistency ≥ 0.5 → *likely*, ≥ 0 → *possible*, < 0 → *unlikely*, outside ±60° → *no data*; reported for the selected depth band.
 * Excavation figure, shown with its assumption: **if** the ground were ice-cemented regolith at 10 wt % water, 10 L/sol of crew make-up water needs ≈ 100 kg of regolith per sol. Both numbers are assumptions, not data.
+
+## 8a. Shelter access (cave candidates)
+
+Distance from every cell to the nearest of the 1062 entries of the **Mars Global Cave Candidate Catalog v1** (MGC³, Cushing 2017, USGS Astrogeology / PDS):
+skylights, atypical pit craters, lava-tube and trough-end pits found in THEMIS / CTX / HiRISE images. `f = ramp(d, 50 km, 500 km)`.
+Candidates are **unconfirmed**; most lie on the Tharsis volcanoes, so they rarely coincide with low, icy, landable ground (2.4 % of cells are within 100 km).
+The criterion therefore has **weight 0 in every preset**; users can raise it to explore shelter-first architectures. Built by `data_pipeline/caves.py`.
 
 ## 9. Atmospheric column & GCR surface radiation model
 
@@ -140,13 +147,13 @@ Certifying a landing ellipse always requires HiRISE / CTX imagery; every candida
 
 ## 12a. Validation
 
-See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.js`).
+See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.js`; runs in CI).
 
-* The nine successful Mars landers rank in the **89th percentile** of their latitude band under the Landing-safety preset (random = 50, p < 0.005).
-  **Caveat:** this is partly circular — those sites were themselves selected using MOLA slope and elevation, so agreement shows the score
-  reproduces engineering practice, not that it predicts anything new.
-* The more independent test — NASA HLS-2015 Exploration Zones under the Balanced preset — is **not significant** (54 vs 48), which is expected
-  because many zones were proposed for science next to rough terrain. There is no ground truth for "best human base site".
+* **Test 1 — landers:** the nine successful landers rank in the **89th percentile** of their latitude band under Landing safety (random = 50, p < 0.005).
+  Partly circular: those sites were chosen with MOLA slope / elevation, so this shows the score reproduces engineering practice.
+* **Test 2 — NASA HLS-2015 candidate sites (all 39 USGS-mosaicked sites):** **72nd percentile** under Balanced (random = 48, p < 0.005). The workshop
+  weighed science, resources and engineering independently of this formula. An earlier version used only 14 hand-picked gazetteer zones (54th percentile).
+* Both results hold under the geometric-mean aggregation (87 and 71).
 
 ## 13. Known limitations & Operational Mitigations
 

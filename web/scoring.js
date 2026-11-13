@@ -89,6 +89,8 @@
     ti(v) { if (v === null) return 0.5; if (v < 100) return Math.max(0, v / 100 * 0.3); if (v < 150) return 0.3 + 0.7 * (v - 100) / 50; if (v <= 400) return 1; return ramp(v, 400, 700); },
     // Radiation: lower dose is better. <= 200 mSv/yr (Hellas floor) = 1, >= 290 mSv/yr (above +2 km) = 0.
     rad(h_m) { return ramp(radDose(h_m), 200, 290); },
+    // Shelter access: distance (km) to the nearest MGC3 cave candidate. <= 50 km = 1, >= 500 km = 0. null = >= 1020 km.
+    cave(km) { return km === null ? 0 : ramp(km, 50, 500); },
     // Solar energy and thermal budget: mean insolation ~ cos(lat), rescaled so 0 deg = 1 and 50 deg = 0.
     lat(deg) { const c = Math.cos(Math.abs(deg) * Math.PI / 180), c50 = Math.cos(50 * Math.PI / 180); return Math.max(0, Math.min(1, (c - c50) / (1 - c50))); },
   };
@@ -101,19 +103,20 @@
     { key: 'lat',   label: 'Latitude (solar / thermal)', unit: '°' },
     { key: 'ti',    label: 'Thermal inertia (surface)',  unit: 'tiu' },
     { key: 'rad',   label: 'Radiation (GCR dose)',       unit: 'mSv/yr' },
+    { key: 'cave',  label: 'Shelter (cave candidate)',   unit: 'km' },
   ];
 
   const PRESETS = {
-    landing:  { name: 'Landing safety',          icon: '🛬', w: { elev: 0.25, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15, rad: 0.05 } },
-    isru:     { name: 'ISRU / sustainability',   icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.40, rough: 0.10, lat: 0.10, ti: 0.10, rad: 0.05 } },
-    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.15, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15, rad: 0.05 } },
+    landing:  { name: 'Landing safety',          icon: '🛬', w: { elev: 0.25, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15, rad: 0.05, cave: 0 } },
+    isru:     { name: 'ISRU / sustainability',   icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.40, rough: 0.10, lat: 0.10, ti: 0.10, rad: 0.05, cave: 0 } },
+    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.15, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15, rad: 0.05, cave: 0 } },
   };
 
   const HARD = { elevMax: 2000, slopeMax: 15, latMax: 50 };
 
   function normalize(w) {
     const s = Object.values(w).reduce((a, b) => a + b, 0) || 1;
-    const out = { elev: 0, slope: 0, ice: 0, rough: 0, lat: 0, ti: 0, rad: 0 };
+    const out = { elev: 0, slope: 0, ice: 0, rough: 0, lat: 0, ti: 0, rad: 0, cave: 0 };
     for (const k in w) out[k] = w[k] / s;
     return out;
   }
@@ -123,7 +126,7 @@
     if (hard && (v.elev > HARD.elevMax || v.slope > HARD.slopeMax || Math.abs(v.lat) > HARD.latMax)) return 0;
     return (w.elev || 0) * F.elev(v.elev) + (w.slope || 0) * F.slope(v.slope) + (w.ice || 0) * F.ice(v.ice)
          + (w.rough || 0) * F.rough(v.rough) + (w.lat || 0) * F.lat(v.lat) + (w.ti || 0) * F.ti(v.ti)
-         + (w.rad || 0) * F.rad(v.elev);
+         + (w.rad || 0) * F.rad(v.elev) + (w.cave || 0) * F.cave(v.cave ?? null);
   }
 
   // Full-map scoring. layers: {elev, slope, rough, ice: Float32Array|null-coded, lat: Float32Array (per row)}
@@ -135,11 +138,14 @@
     const w = normalize(weights), geo = mode === 'geo';
     const ln = (f) => Math.log(Math.max(0.01, f));
     const { width, height } = L;
-    const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256), ft = new Float32Array(256);
+    const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256), ft = new Float32Array(256), fc = new Float32Array(256);
+    const useCave = !!(L.cave && w.cave > 0);
     for (let i = 0; i < 256; i++) {
       const h = L.meta.elev.offset + i * L.meta.elev.scale;
       const fsv = F.slope(i * L.meta.slope.scale), frv = F.rough(i * L.meta.rough.scale);
       const fiv = i === 0 ? 0 : F.ice(L.meta.ice.offset + i * L.meta.ice.scale), ftv = i === 0 ? F.ti(null) : F.ti(i * L.meta.ti.scale);
+      const fcv = i === 255 ? 0 : F.cave(i * (L.meta.cave ? L.meta.cave.scale : 4));
+      fc[i] = geo ? w.cave * ln(fcv) : w.cave * fcv;
       if (geo) { fe[i] = w.elev * ln(F.elev(h)) + w.rad * ln(F.rad(h)); fs[i] = w.slope * ln(fsv); fr[i] = w.rough * ln(frv); fi[i] = w.ice * ln(fiv); ft[i] = w.ti * ln(ftv); }
       else { fe[i] = w.elev * F.elev(h) + w.rad * F.rad(h); fs[i] = w.slope * fsv; fr[i] = w.rough * frv; fi[i] = w.ice * fiv; ft[i] = w.ti * ftv; }
     }
@@ -153,7 +159,7 @@
         const i = row + x;
         const e = L.elev[i], s = L.slope[i];
         if (hard && (e > elevHardIdx || s > slopeHardIdx)) { out[i] = 0; continue; }
-        const t = fe[e] + fs[s] + fi[L.ice[i]] + fr[L.rough[i]] + ft[L.ti[i]] + fl;
+        const t = fe[e] + fs[s] + fi[L.ice[i]] + fr[L.rough[i]] + ft[L.ti[i]] + fl + (useCave ? fc[L.cave[i]] : 0);
         out[i] = geo ? Math.exp(t) : t;
       }
     }
