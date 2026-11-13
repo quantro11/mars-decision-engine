@@ -32,21 +32,24 @@ Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m v
 | Roughness | `ramp(r, 30, 250)` | elevation σ inside a 10 km cell: < 30 m plains, > 250 m heavily cratered / mountainous |
 | Thermal inertia | `<= 0.3*I/100` below 100; rises to 1 at 150; 1 for 150-400; `ramp(I, 400, 700)` above; 0.5 if no data | I < 100: thick fine dust - low bearing strength, panel dust loading, EDL radar ambiguity (MER site-selection rule: I > 100-150). 150-400: sand / duricrust, diggable. > 500: rock / bedrock - hazard, hard to excavate |
 | Latitude | `(cos φ − cos 50°) / (1 − cos 50°)`, clipped to 0…1 | mean annual insolation ∝ cos φ; NASA HLS limit ±50° (thermal + solar) |
+| Radiation (GCR) | `ramp(D_GCR(h), 200, 290)` | annual surface cosmic-ray dose from atmospheric column shielding (1 at ≤ 200 mSv/yr on Hellas floor → 0 at ≥ 290 mSv/yr above +2 km) |
 
 ## 4. Aggregation
 
 `S = Σ wᵢ fᵢ`, weights normalised to Σ w = 1.
 Hard constraints (toggle): `h > +2000 m`, `s > 15°`, `|φ| > 50°` ⇒ `S = 0`.
 
-Presets (elev / slope / ice / rough / lat / thermal inertia):
+Presets (elev / slope / ice / rough / lat / thermal inertia / rad):
 
-* Landing safety 0.30 / 0.25 / 0.05 / 0.15 / 0.10 / 0.15
-* ISRU / sustainability 0.10 / 0.15 / 0.45 / 0.10 / 0.10 / 0.10
-* Balanced crewed mission 0.20 / 0.20 / 0.25 / 0.10 / 0.10 / 0.15
+* Landing safety 0.25 / 0.25 / 0.05 / 0.15 / 0.10 / 0.15 / 0.05
+* ISRU / sustainability 0.10 / 0.15 / 0.40 / 0.10 / 0.10 / 0.10 / 0.05
+* Balanced crewed mission 0.15 / 0.20 / 0.25 / 0.10 / 0.10 / 0.15 / 0.05
 
-## 5. Candidate extraction
+## 5. Candidate extraction & Monte Carlo sensitivity
 
-Mean score per 2° × 2° block (11 × 11 px); greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer (within 6°; otherwise compass-sector offset from nearest region). Cards show block means.
+Mean score per 2° × 2° block (11 × 11 px); greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer (within 6°; otherwise compass-sector offset from nearest region). Cards show block means, Mars Trek HiRISE/CTX inspection links, and `ROBUST %` confidence scores.
+
+For robustness testing (`sensitivity`), every weight is perturbed independently by a uniform factor in `[1 − spread, 1 + spread]` (default ±20%) across 30 deterministic PRNG runs (`mulberry32`), reporting the fraction of runs where each Top-5 candidate remains in the Top-5 (within 400 km).
 
 ## 6. Multi-hazard route planner (A*) & Emergency Safe Havens
 
@@ -94,12 +97,12 @@ Crew Margin       = Yield − 10.0 L/sol                (4-crew metabolic demand
 ## 9. Atmospheric column & GCR surface radiation model
 
 ```
-Σ(h)       = clamp(16.0 · exp(−h / 11100), 1.5, 38.0)   [g/cm²]
-D_GCR(h)   = 155 + 245 · exp(−Σ(h) / 20.5)              [mSv/yr]
+Σ(h)       = 16.4 · exp(−h / 11100)                     [g/cm²]
+D_GCR(h)   = 0.64 · exp(−(Σ(h) − 24.6) / 60) · 365.25   [mSv/yr]
 ```
 
-* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4500\text{ m}$, $\Sigma \approx 24\text{ g/cm}^2 \Rightarrow D_{\text{GCR}} \approx 231\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $232 \pm 10\text{ mSv/yr}$).
-* Because $D_{\text{GCR}}(h)$ is a monotonic function of elevation $h$ (already weighted in `S`), it is reported as an explicit diagnostic metric in the site inspector and Mission Brief rather than a separate weight slider, avoiding collinear double-counting.
+* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4400\text{ m}$, $\Sigma \approx 24.4\text{ g/cm}^2 \Rightarrow 0.64\text{ mSv/day} \approx 234\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $0.64 \pm 0.12\text{ mSv/day}$).
+* Because surface cosmic-ray protection answers a distinct crew life-support question beyond atmospheric EDL braking, `rad` is exposed both as a suitability criterion slider (0.05 preset weight), a dedicated global map layer (`Radiation`), and explicit column/dose telemetry in the site inspector and Mission Brief.
 
 ## 10. Solar Particle Event (SPE) Acute Radiation & Regolith Shielding
 

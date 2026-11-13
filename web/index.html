@@ -273,6 +273,7 @@
         <tr><td><b>Roughness</b></td><td>MOLA, σ within cell</td><td>1 below 30 m → 0 above 250 m</td><td>Proxy for boulders, scarps and radar scatter below the grid.</td></tr>
         <tr><td><b>Thermal inertia</b></td><td>MGS TES</td><td>&lt; 100 → ≤ 0.3 · 150–400 → 1 · 0 at 700</td><td>Bearing strength of the ground, dust on arrays, how easily it can be excavated.</td></tr>
         <tr><td><b>Latitude</b></td><td>—</td><td>(cos φ − cos 50°) / (1 − cos 50°)</td><td>Mean sunlight falls with latitude; NASA's limit is ±50°.</td></tr>
+        <tr><td><b>Radiation (GCR)</b></td><td>MOLA + MSL/RAD</td><td>1 at ≤ 200 mSv/yr → 0 at ≥ 290 mSv/yr</td><td>Atmospheric column shielding calibrated to Curiosity RAD (0.64 mSv/day at Gale Crater).</td></tr>
       </tbody>
     </table>
 
@@ -281,25 +282,25 @@
         <h3>2 · Weighted sum and hard constraints</h3>
         <p>Each cell scores <code>S = Σ wᵢ·fᵢ</code> with weights normalised to one. With constraints on, cells above +2 km, steeper than 15° or beyond ±50° score zero regardless of weights.</p>
         <h3>3 · The globe</h3>
-        <p>A sphere displaced by real MOLA elevation (−8.2 km in Hellas to +21 km on Olympus Mons), lit per pixel from the same raster, and textured with the Viking Orbiter colour mosaic.</p>
+        <p>A sphere displaced by real MOLA elevation (−8.2 km in Hellas to +21 km on Olympus Mons), lit per pixel from the same raster, and textured with the Viking Orbiter colour mosaic against an astronomical J2000 starfield.</p>
       </div>
       <div>
         <h3>4 · Route planner</h3>
-        <p>Multi-hazard A* over an 8-connected, longitude-wrapping grid. Each step costs <code>distance × (1 + k · (slope + rough_pen + dust_pen))</code>, penalising steep grades, rough sub-cell relief (&gt;50 m) and low-TI fine dust traps (&lt;100 tiu); slopes above the limit are impassable. The straight line is shown for comparison.</p>
-        <h3>5 · Dust-storm power model</h3>
-        <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code>, fitted so that τ ≈ 10.8 reproduces Opportunity's 2018 loss (≈ 650 → 22 Wh/sol). Battery = clamp(battery + production − load).</p>
+        <p>Multi-hazard A* over an 8-connected, longitude-wrapping grid. Each step costs <code>distance × (1 + k · (slope + rough_pen + dust_pen))</code>, penalising steep grades, rough sub-cell relief (&gt;50 m) and low-TI fine dust traps (&lt;100 tiu); slopes above the limit are impassable and emergency safe havens are identified every ≥200 km.</p>
+        <h3>5 · Dust-storm power &amp; thermal model</h3>
+        <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code> with 0.2%/sol dust settling, fitted so τ ≈ 10.8 reproduces Opportunity's 2018 loss. Thermal life support models surface temperatures and habitat freeze-out when power reserves run dry.</p>
       </div>
     </div>
 
-    <h3>6 · Season and radiation</h3>
-    <p>Seasonal insolation <code>S(φ, Lₛ)</code> uses Mars's 25.19° obliquity and orbital eccentricity (e = 0.0934, perihelion at Lₛ = 251°). Atmospheric column mass follows from MOLA elevation with an 11.1 km scale height (16 g/cm² at datum) and is mapped to an annual galactic-cosmic-ray dose calibrated to Curiosity's RAD measurement at Gale Crater (≈ 232 mSv/yr at −4.5 km; Hassler et al., <i>Science</i> 2014).</p>
+    <h3>6 · Season, radiation &amp; weight sensitivity</h3>
+    <p>Seasonal insolation <code>S(φ, Lₛ)</code> uses Mars's 25.19° obliquity and orbital eccentricity (e = 0.0934, perihelion at Lₛ = 251°). Atmospheric column mass follows from MOLA elevation (16.4 g/cm² at datum, 11.1 km scale height) for both chronic GCR dose (calibrated to Curiosity RAD: 0.64 mSv/day at −4.4 km) and acute SPE regolith trench attenuation. The Monte Carlo test perturbs every weight 30 times to measure Top-5 ranking stability.</p>
 
     <h3>7 · What this model does not do</h3>
     <ul class="spec-list">
-      <li><b>Resolution.</b> About 10 km per pixel: it ranks regions, not landing ellipses. Boulders and small craters need HiRISE.</li>
+      <li><b>Resolution.</b> About 10 km per pixel: sub-cell boulder hazards use a MOLA roughness/slope statistical proxy; meter-scale landing ellipses require HiRISE imagery (linked per site).</li>
       <li><b>Elevation steps.</b> The global MOLA layer is quantised at ≈ 115 m, so slopes are regional gradients.</li>
       <li><b>Ice coverage.</b> SWIM maps ±60° latitude; outside that, ice is unknown and scored zero.</li>
-      <li><b>Not modelled.</b> Local topographic shielding, thermal cycling and dust-devil cleaning of panels.</li>
+      <li><b>Not modelled.</b> Local topographic horizon shadowing, active mechanical array wipers, and propellant boil-off.</li>
     </ul>
   </div>
 </div>

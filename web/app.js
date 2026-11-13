@@ -739,31 +739,6 @@
   }
   $('#hard').onchange = (e) => { S.hard = e.target.checked; rescore(); };
   document.querySelectorAll('#iceband button').forEach(b => b.onclick = () => { document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b)); S.iceBand = b.dataset.band; rescore(); });
-  if ($('#sens')) {
-    $('#sens').oninput = (e) => {
-      S.sensSpread = +e.target.value / 100;
-      if ($('#sens-v')) $('#sens-v').textContent = `±${e.target.value}%`;
-    };
-  }
-  if ($('#sens-run')) {
-    $('#sens-run').onclick = () => {
-      const outEl = $('#sens-result');
-      if (!outEl || !S.candidates.length) return;
-      const t0 = performance.now();
-      const blockPx = Math.round(2 / META.deg_per_px), sepPx = Math.round(800 / 59.3 / META.deg_per_px);
-      const rates = SCORING.sensitivity(L, S.weights, S.hard, S.candidates, {
-        runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx: blockPx * 2,
-      }, SCORING.mulberry32(42));
-      const ms = (performance.now() - t0).toFixed(0);
-      outEl.innerHTML = `<div class="hint" style="margin:6px 0 4px">30 Monte Carlo runs (±${Math.round(S.sensSpread * 100)}% weights, ${ms} ms)</div>` +
-        S.candidates.map((c, i) => {
-          const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
-          const pct = Math.round((rates[i] || 0) * 100);
-          const cls = pct >= 80 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
-          return `<div class="kv"><span>#0${i + 1} ${candidateName(v.lat, v.lon, nr).split(' ·')[0]}</span><b class="${cls}">${pct}% Top-5</b></div>`;
-        }).join('');
-    };
-  }
   document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; updateHudLayer(); ovDirty = true; renderLegend(); draw(); });
   $('#opacity').oninput = (e) => { S.opacity = +e.target.value / 100; const vEl = $('#opacity-v'); if (vEl) vEl.textContent = e.target.value + '%'; draw(); };
   $('#show-regions').onchange = (e) => { S.showRegions = e.target.checked; draw(); };
@@ -819,6 +794,8 @@
     const wn = SCORING.normalize(S.weights);
     const cands = S.candidates.map((c, i) => {
       const v = blockValues(c.x, c.y, c.blockPx), nr = nearestRegion(v.lat, v.lon);
+      const isru = SCORING.calcISRU(v.ice, S.iceBand);
+      const micro = SCORING.calcMicroHazard(v.slope, v.rough);
       return {
         rank: i + 1,
         designation: candidateName(v.lat, v.lon, nr),
@@ -826,20 +803,22 @@
         lat_deg: +v.lat.toFixed(2),
         lon_deg: +v.lon.toFixed(2),
         suitability_score: +c.score.toFixed(3),
+        robust_pct: c.robust != null ? Math.round(c.robust * 100) : null,
         elev_m: Math.round(v.elev),
         slope_p90_deg: +v.slope.toFixed(1),
         swim_ice_consistency: v.ice === null ? null : +v.ice.toFixed(2),
-        isru_water_yield_l_sol: SCORING.calcISRU(v.ice, S.iceBand).yieldLitersSol,
-        isru_eclss_status: SCORING.calcISRU(v.ice, S.iceBand).status,
+        isru_water_yield_l_sol: isru.yieldLitersSol,
+        isru_eclss_status: isru.status,
         roughness_m: Math.round(v.rough),
-        tactical_micro_hazard: SCORING.calcMicroHazard(v.slope, v.rough).tacticalGrade,
-        boulder_risk_pct: SCORING.calcMicroHazard(v.slope, v.rough).boulderRiskPct,
-        hirise_recommendation: SCORING.calcMicroHazard(v.slope, v.rough).recommendation,
+        tactical_micro_hazard: micro.tacticalGrade,
+        boulder_risk_pct: micro.boulderRiskPct,
+        hirise_recommendation: micro.recommendation,
         tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
         atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
         gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
         nocturnal_temp_c: STORM.surfaceTempC(v.lat, S.crisis.ls).night,
         thermal_heating_kw: STORM.thermalDemandKw(v.lat, S.crisis.ls),
+        mars_trek_url: trekUrl(v.lat, v.lon),
       };
     });
     const selCell = S.selected ? (() => {
@@ -859,6 +838,7 @@
     })() : null;
     const crisisSite = S.crisis.site || (S.candidates[0] ? { x: S.candidates[0].x, y: S.candidates[0].y } : { x: 1024, y: 512 });
     const cv = cellValues(crisisSite.x, crisisSite.y), cnr = nearestRegion(cv.lat, cv.lon);
+    const spe = SCORING.calcSPE(cv.elev, S.crisis.regolith ?? 1.5);
     const sim = STORM.simulate({
       lat: cv.lat, ls: S.crisis.ls, panelArea: S.crisis.area, efficiency: 0.2,
       consumption: S.crisis.cons, capacity: S.crisis.batt, kilopower: S.crisis.kp, sols: 120,
@@ -892,11 +872,11 @@
         nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls).night,
         hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls),
         spe_acute_radiation: {
-          unshielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).unshieldedDoseMsv,
-          regolith_cover_m: +(S.crisis.regolith || 1.5).toFixed(1),
-          shielded_dose_msv: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).shieldedDoseMsv,
-          required_trench_depth_m: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).requiredRegolithM,
-          survival_status: SCORING.calcSPE(cv.elev, S.crisis.regolith || 1.5).survivalStatus,
+          unshielded_dose_msv: spe.unshieldedDoseMsv,
+          regolith_cover_m: +(S.crisis.regolith ?? 1.5).toFixed(1),
+          shielded_dose_msv: spe.shieldedDoseMsv,
+          required_trench_depth_m: spe.requiredRegolithM,
+          survival_status: spe.survivalStatus,
         },
         panel_area_m2: S.crisis.area,
         kilopower_units: S.crisis.kp,
@@ -914,41 +894,42 @@
     const modal = $('#brief-modal'), body = $('#brief-body');
     if (!modal || !body) return;
     const p = buildBriefPayload();
-    const top = p.top_candidates[0];
+    const top = p.top_candidates[0], ds = p.dust_storm_simulation;
     body.innerHTML = `
       <div class="brief-meta">
         <div class="brief-kpi"><span>Mission Profile</span><b>${(p.architecture_preset).toUpperCase()}</b></div>
         <div class="brief-kpi"><span>Primary Candidate</span><b>${top ? top.designation.split(' ·')[0] : 'N/A'}</b></div>
-        <div class="brief-kpi"><span>GCR Radiation (Top-1)</span><b>${top ? top.gcr_dose_msv_yr + ' mSv/yr' : '—'}</b></div>
-        <div class="brief-kpi"><span>Storm Survival (τ=${p.dust_storm_simulation.tau_peak})</span><b class="${p.dust_storm_simulation.survives ? 'ok' : 'bad'}">${p.dust_storm_simulation.survives ? 'NOMINAL' : 'BLACKOUT SOL ' + p.dust_storm_simulation.blackout_sol}</b></div>
+        <div class="brief-kpi"><span>GCR Dose / ISRU Yield</span><b>${top ? `${top.gcr_dose_msv_yr} mSv/yr · ${top.isru_water_yield_l_sol} L/sol` : '—'}</b></div>
+        <div class="brief-kpi"><span>Storm Survival (τ=${ds.tau_peak})</span><b class="${ds.survives_blackout ? 'ok' : 'bad'}">${ds.survives_blackout ? 'NOMINAL' : 'BLACKOUT SOL ' + ds.blackout_sol}</b></div>
       </div>
       <h3>01 // Top-5 Reconnaissance Candidates (2°×2° Regional Means, ≥800 km Sep)</h3>
       <table class="tbl">
         <thead>
-          <tr><th>Rank</th><th>Region Designation</th><th>Coordinates</th><th>Score</th><th>Elev</th><th>Slope</th><th>SWIM Ice</th><th>TES TI</th><th>GCR Dose</th></tr>
+          <tr><th>Rank</th><th>Region Designation</th><th>Coordinates</th><th>Score</th><th>Elev</th><th>Slope</th><th>ISRU H₂O</th><th>TES TI</th><th>GCR Dose</th><th>Robust</th></tr>
         </thead>
         <tbody>
           ${p.top_candidates.map(c => `<tr>
             <td><b>#0${c.rank}</b></td>
-            <td>${c.designation} ${c.hls2015_ez ? '<span class="flag ez">HLS-EZ</span>' : ''}</td>
+            <td><a href="${c.mars_trek_url}" target="_blank" rel="noopener">${c.designation}</a> ${c.hls2015_ez ? '<span class="flag ez">HLS-EZ</span>' : ''}</td>
             <td><code>${fmtLat(c.lat_deg)}, ${fmtLon(c.lon_deg)}</code></td>
             <td><b>${c.suitability_score.toFixed(2)}</b></td>
             <td>${c.elev_m} m</td>
             <td>${c.slope_p90_deg}°</td>
-            <td>${c.swim_ice_consistency === null ? '—' : c.swim_ice_consistency.toFixed(2)}</td>
+            <td>${c.isru_water_yield_l_sol.toFixed(1)} L/sol</td>
             <td>${c.tes_thermal_inertia === null ? '—' : c.tes_thermal_inertia + ' tiu'}</td>
             <td>${c.gcr_dose_msv_yr} mSv/yr</td>
+            <td>${c.robust_pct === null ? '—' : c.robust_pct + '%'}</td>
           </tr>`).join('')}
         </tbody>
       </table>
       <div class="modal-grid" style="margin-top:10px">
         <div>
           <h3>02 // Surface Traverse Analysis (A*)</h3>
-          ${p.traverse_plan ? `<p>A* slope-safe corridor requires <b>${p.traverse_plan.astar_safe_km} km</b> (max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>` : '<p class="help">No active traverse waypoints designated. Switch to Module 02 (Rover Traverse A*) to include path telemetry.</p>'}
+          ${p.traverse_plan ? `<p>A* multi-hazard corridor requires <b>${p.traverse_plan.astar_safe_km} km</b> (max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>, low-TI dust <code>${p.traverse_plan.astar_dust_trap_km} km</code>, ${p.traverse_plan.emergency_safe_havens.length} emergency safe havens) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>` : '<p class="help">No active traverse waypoints designated. Switch to Module II (Rover Route) to include path telemetry.</p>'}
         </div>
         <div>
-          <h3>03 // Global Dust-Storm Power Balance</h3>
-          <p>Simulated at <b>${p.dust_storm_simulation.station_region}</b> (<code>${fmtLat(p.dust_storm_simulation.lat_deg)}</code>) during <b>L<sub>s</sub> = ${p.dust_storm_simulation.season_ls_deg}°</b> (${p.dust_storm_simulation.season_name}), peak <code>τ = ${p.dust_storm_simulation.tau_peak}</code>, ${p.dust_storm_simulation.panel_area_m2} m² array + ${p.dust_storm_simulation.kilopower_units} Kilopower unit(s): <b>${p.dust_storm_simulation.survives ? 'Base survives (min reserve ' + p.dust_storm_simulation.min_battery_kwh + ' kWh)' : 'Battery exhausted on Sol ' + p.dust_storm_simulation.blackout_sol}</b>.</p>
+          <h3>03 // Global Dust-Storm, Thermal &amp; SPE Shielding</h3>
+          <p>Simulated at <b>${ds.station_region}</b> (<code>${fmtLat(ds.lat_deg)}</code>) during <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${ds.season_name}), peak <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² array + ${ds.kilopower_units} Kilopower unit(s): <b>${ds.survives_blackout ? 'Base survives (min reserve ' + ds.min_battery_kwh + ' kWh, min habitat temp ' + ds.min_hab_interior_c + '°C)' : 'Blackout on Sol ' + ds.blackout_sol + (ds.thermal_freeze_sol !== null ? ' · freezes Sol ' + ds.thermal_freeze_sol : '')}</b>. Acute SPE dose behind ${ds.spe_acute_radiation.regolith_cover_m} m regolith: <code>${ds.spe_acute_radiation.shielded_dose_msv} mSv</code> (${ds.spe_acute_radiation.survival_status}).</p>
         </div>
       </div>`;
     modal.classList.remove('hidden');
@@ -1029,7 +1010,25 @@
   }
 
   // ------------------------------------------------------------ map interaction (2D & 3D)
-  let drag = null, moved = false;
+  function stopAutoSpin() {
+    if (globe && globe.state.autoSpin) {
+      globe.state.autoSpin = false;
+      if ($('#btn-spin')) $('#btn-spin').classList.remove('active');
+    }
+  }
+  function pickAt(clientX, clientY) {
+    const g = gridAt({ clientX, clientY }); if (!g) return;
+    const [x, y] = g;
+    if (S.mode === 'route') {
+      const r = S.route;
+      if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; }
+      renderRoute(); if (r.goal) computeRoute(); draw(); return;
+    }
+    if (S.mode === 'crisis') setCrisisSite(x, y);
+    select(x, y, null);
+  }
+
+  let drag = null, moved = false, lastTouchTap = 0;
   canvas.addEventListener('mousedown', (e) => {
     drag = {
       x: e.clientX, y: e.clientY,
@@ -1047,10 +1046,7 @@
       const sens = 0.14 * (globe.state.camDist - 0.85) / (window.devicePixelRatio || 1);
       globe.state.targetLon = drag.rLon - dx * sens;
       globe.state.targetLat = Math.max(-82, Math.min(82, drag.rLat + dy * sens));
-      if (globe.state.autoSpin) {
-        globe.state.autoSpin = false;
-        if ($('#btn-spin')) $('#btn-spin').classList.remove('active');
-      }
+      stopAutoSpin();
       schedule3D();
     } else {
       S.view.tx = drag.tx + dx; S.view.ty = drag.ty + dy; wrapView(); draw();
@@ -1058,14 +1054,8 @@
   });
   window.addEventListener('mouseup', () => { drag = null; });
   canvas.addEventListener('click', (e) => {
-    if (moved) return;
-    const g = gridAt(e); if (!g) return;
-    const [x, y] = g;
-    if (S.mode === 'route') { const r = S.route;
-      if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; }
-      renderRoute(); if (r.goal) computeRoute(); draw(); return; }
-    if (S.mode === 'crisis') { setCrisisSite(x, y); }
-    select(x, y, null);
+    if (moved || performance.now() - lastTouchTap < 450) return;
+    pickAt(e.clientX, e.clientY);
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -1084,7 +1074,7 @@
     if (!g) { tip.classList.add('hidden'); return; }
     const [x, y] = g, v = cellValues(x, y), s = S.score[y * W + x], nr = nearestRegion(v.lat, v.lon);
     $('#hud-coord').textContent = `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}` + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
-    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · score <b>${s.toFixed(2)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>ice ${v.ice === null ? '—' : v.ice.toFixed(2)} · rough ${v.rough.toFixed(0)} m<br>TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
+    tip.innerHTML = `<span class="tt-region">${nr.distDeg < 6 ? nr.region.name : 'near ' + nr.region.name}</span><b>${fmtLat(v.lat)}, ${fmtLon(v.lon)}</b> · score <b>${s.toFixed(2)}</b><br>elev ${v.elev.toFixed(0)} m · slope ${v.slope.toFixed(1)}°<br>rad ${v.rad.toFixed(0)} mSv/yr · ice ${v.ice === null ? '—' : v.ice.toFixed(2)}<br>rough ${v.rough.toFixed(0)} m · TI ${v.ti === null ? '—' : v.ti.toFixed(0)} · dust ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
     const r = canvas.getBoundingClientRect();
     const tx = Math.min(r.width - 210, e.clientX - r.left + 14);
     const ty = Math.min(r.height - 95, e.clientY - r.top + 14);
@@ -1105,11 +1095,13 @@
         rLat: globe ? globe.state.targetLat : 0, rLon: globe ? globe.state.targetLon : 0,
       };
     } else if (e.touches.length === 2) {
-      const [t1, t2] = e.touches;
+      const [t1, t2] = e.touches, rect = canvas.getBoundingClientRect();
+      const mx = ((t1.clientX + t2.clientX) / 2 - rect.left) * devicePixelRatio;
+      const my = ((t1.clientY + t2.clientY) / 2 - rect.top) * devicePixelRatio;
       touchState = {
         mode: 'pinch', moved: true,
         dist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY) || 1,
-        scale: S.view.scale,
+        scale: S.view.scale, tx: S.view.tx, ty: S.view.ty, mx, my,
         camDist: globe ? globe.state.targetDist : 2.55,
       };
     }
@@ -1125,20 +1117,27 @@
         const sens = 0.14 * (globe.state.camDist - 0.85) / (window.devicePixelRatio || 1);
         globe.state.targetLon = touchState.rLon - dx * sens;
         globe.state.targetLat = Math.max(-82, Math.min(82, touchState.rLat + dy * sens));
+        stopAutoSpin();
         schedule3D();
       } else {
         S.view.tx = touchState.tx + dx; S.view.ty = touchState.ty + dy; wrapView(); draw();
       }
     } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
-      const [t1, t2] = e.touches;
+      const [t1, t2] = e.touches, rect = canvas.getBoundingClientRect();
       const d = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY) || 1;
       const ratio = d / touchState.dist;
       if (S.viewMode === '3d' && globe) {
         globe.state.targetDist = Math.max(1.22, Math.min(4.6, touchState.camDist / ratio));
         schedule3D();
       } else {
+        const mx = ((t1.clientX + t2.clientX) / 2 - rect.left) * devicePixelRatio;
+        const my = ((t1.clientY + t2.clientY) / 2 - rect.top) * devicePixelRatio;
         const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
-        S.view.scale = Math.max(minS, Math.min(40, touchState.scale * ratio));
+        const ns = Math.max(minS, Math.min(40, touchState.scale * ratio));
+        const k = ns / touchState.scale;
+        S.view.scale = ns;
+        S.view.tx = mx - (touchState.mx - touchState.tx) * k;
+        S.view.ty = my - (touchState.my - touchState.ty) * k;
         wrapView(); updateScaleBar(); draw();
       }
     }
@@ -1146,18 +1145,8 @@
   canvas.addEventListener('touchend', (e) => {
     if (touchState && touchState.mode === 'drag' && !touchState.moved && e.changedTouches.length === 1) {
       const t = e.changedTouches[0];
-      const g = gridAt({ clientX: t.clientX, clientY: t.clientY });
-      if (g) {
-        const [x, y] = g;
-        if (S.mode === 'route') {
-          const r = S.route;
-          if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; }
-          renderRoute(); if (r.goal) computeRoute(); draw();
-        } else {
-          if (S.mode === 'crisis') setCrisisSite(x, y);
-          select(x, y, null);
-        }
-      }
+      lastTouchTap = performance.now();
+      pickAt(t.clientX, t.clientY);
     }
     if (e.touches.length === 0) touchState = null;
   });
@@ -1224,6 +1213,7 @@
       computeRoute();
     } else if (q.get('demo') === 'crisis') {
       const a = find(q.get('site')) || REGIONS[10];
+      if (q.get('ls') && $('#ls')) { $('#ls').value = Math.max(0, Math.min(360, Math.round(+q.get('ls')))); $('#ls').oninput(); }
       if (q.get('tau')) { $('#tau').value = Math.round(+q.get('tau') * 10); $('#tau').oninput(); }
       if (q.get('kp')) { $('#kp').value = q.get('kp'); $('#kp').oninput(); }
       setMode('crisis'); setCrisisSite(L.colOfLon(a.lon), L.rowOfLat(a.lat));

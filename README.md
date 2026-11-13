@@ -10,7 +10,7 @@ A client-side planetary GIS and mission decision-support engine that fuses real 
 
 | Module | Engineering Question Answered | Orbital Datasets & Physical Models |
 |---|---|---|
-| **01 // Site Selection** | Where is the optimal compromise between *safe EDL / landing* (low elevation, low slope, low roughness, moderate thermal inertia, equatorial insolation) and *sustainable ISRU* (shallow water ice)? Includes 3 mission presets, normalized sliders, NASA HLS-2015 vetoes, Top-5 candidate extraction, **ISRU Water Yield (L/sol) & 4-crew ECLSS mass balance**, and **MSL-RAD GCR radiation shielding**. | MGS MOLA DEM, MOLA 90th-pct slope & roughness, PSI SWIM 2.0 ice (3 depth bands), MGS TES thermal inertia & dust abundance, Viking MDIM 2.1 optical mosaic |
+| **01 // Site Selection** | Where is the optimal compromise between *safe EDL / landing* (low elevation, low slope, low roughness, moderate thermal inertia, equatorial insolation) and *sustainable ISRU* (shallow water ice)? Includes 3 mission presets, live normalized weight sliders, NASA HLS-2015 vetoes, Top-5 candidate extraction, **Monte Carlo weight-sensitivity testing (`ROBUST %`)**, direct **NASA Mars Trek** HiRISE/CTX links, **ISRU Water Yield (L/sol) & 4-crew ECLSS mass balance**, and **MSL-RAD GCR radiation shielding**. | MGS MOLA DEM, MOLA 90th-pct slope & roughness, PSI SWIM 2.0 ice (3 depth bands), MGS TES thermal inertia & dust abundance, Viking MDIM 2.1 optical mosaic |
 | **02 // Rover Traverse A\*** | Which corridor between surface coordinates avoids rover tip-over, boulder fields, and Spirit-like sand traps? Runs an 8-connected, spherical multi-hazard A* pathfinder on MOLA slope, roughness, and TES dust grids; automatically discovers **Emergency Safe Havens** (sheltered encampments) and compares distance, peak/mean slope, dust traps, and elevation profile against direct path. | MGS MOLA 90th-percentile slope, elevation & sub-cell roughness rasters, MGS TES thermal inertia |
 | **03 // Dust-Storm & Thermal Power** | If a 2018-class global storm ($\tau \approx 8\text{–}11$) strikes at an **Areocentric Season ($L_s \in [0^\circ, 360^\circ]$)**, how many sols does the habitat survive before blackout or **Habitat Freeze-out ($0^\circ\text{C}$)** under nocturnal ambient temperatures (down to $-120^\circ\text{C}$)? Simulates post-storm dust fallout and 10 kWe Kilopower fission baseload units. | Site latitude, Mars obliquity & eccentricity ($L_s$), Opportunity 2018 empirical $\tau$-attenuation, nocturnal radiative temperature model, NASA KRUSTY Kilopower model |
 | **04 // Live Habitability & Biosphere APIs** | What are the real-time space weather hazards, surface atmospheric conditions, and Earth vs. Mars biosphere habitability metrics? Queries NASA Open APIs (`api.nasa.gov`): the DONKI CME catalogue (live) and the InSight weather feed (archive only: the mission ended in Dec 2022). Every value is labelled LIVE / ARCHIVE / REFERENCE / OFFLINE; a failed request shows nothing rather than placeholder telemetry. Compares 6 Earth biosphere markers against Martian ECLSS countermeasures. | NASA DONKI CME API (live), NASA InSight Mars Weather API (archive), InSight climatology (Banfield et al. 2020) |
@@ -54,17 +54,18 @@ node tools/validate.js         # validation against real landers + HLS-2015 zone
 
 **Validation result:** the nine successful Mars landers (Viking 1/2, Pathfinder, Spirit, Opportunity, Curiosity, InSight, Perseverance, Zhurong) rank in the **89th percentile** of their own latitude band under the Landing-safety preset (random terrain: 50th, p < 0.005) — the model was never told where they are. See [`docs/validation.md`](docs/validation.md).
 
-Verifies suitability transfer functions, preset ranking behaviour (ISRU vs. Landing Safety), NASA HLS-2015 hard constraint vetoes, non-maximum suppression candidate extraction, A* obstacle avoidance & gap traversal, Opportunity-calibrated dust-storm attenuation, MSL-RAD GCR radiation shielding, and seasonal $L_s$ insolation.
+Verifies suitability transfer functions, preset ranking behaviour (ISRU vs. Landing Safety), NASA HLS-2015 hard constraint vetoes, non-maximum suppression candidate extraction, Monte Carlo weight sensitivity, multi-hazard A* obstacle & dust-trap avoidance, safe havens, Opportunity-calibrated dust-storm attenuation, thermal freeze-out, MSL-RAD GCR & SPE regolith radiation shielding, seasonal $L_s$ insolation, ISRU water yield, micro-hazard proxy, and live API data honesty.
 
 ## Repository Layout
 
 ```
+.github/         workflows/test.yml                 CI unit test runner (Node 20)
 data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py
-web/             index.html, style.css, premium.css, app.js, globe3d.js, scoring.js, astar.js, storm.js, regions.js, live_api.js, layers_data.js
+web/             index.html, style.css, premium.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers_data.js
 web/ui/          format.js, charts.js, markers.js, habitability.js   UI modules split out of app.js
 tools/           validate.js                         validation report generator
 tests/           scoring.test.js                    Node unit test suite (pure logic, zero DOM dependency)
-docs/            methodology.md, pitch.md           Full mathematical specification, citations, limitations & pitch script
+docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical spec, validation, citations, pitch & PDF master guide
 ```
 
 ## Primary Data Sources & Citations
