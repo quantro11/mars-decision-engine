@@ -32,8 +32,10 @@ class TestDataPipeline(unittest.TestCase):
 
     def test_build_5km_matches_shipped_meta(self):
         import json
-        meta = json.load(open(os.path.join("web", "layers", "meta.json"), encoding="utf-8"))
-        src = open(os.path.join("data_pipeline", "build_5km.py"), encoding="utf-8").read()
+        with open(os.path.join(ROOT, "web", "layers", "meta.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+        with open(os.path.join(ROOT, "data_pipeline", "build_5km.py"), encoding="utf-8") as f:
+            src = f.read()
         self.assertIn("OUT_W, OUT_H = %d, %d" % (meta["width"], meta["height"]), src)
         self.assertAlmostEqual(meta["deg_per_px"], 360 / meta["width"])
         self.assertIn("cave", meta)

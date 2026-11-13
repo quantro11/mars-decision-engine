@@ -46,29 +46,32 @@ python mola16.py                                          # rebuild elev / slope
 python build_5km.py                                       # shipped build: full 4096x2048 layer set (16-bit MOLA, SWIM, TES, caves)
 ```
 
-## Automated Unit Tests & Validation
+## Automated Tests, E2E & Production Build
 
 ```bash
 node tests/scoring.test.js     # core scoring / A* / storm / radiation / ice-access / heating / SPE / live-API tests
-node tests/ui.test.js          # UI modules (format, overlays, markers, brief, habitability, globe3d) & A* edge cases
-node tests/integrity.test.js   # DOM ID sync, metadata sync, CSP, accessibility & asset hygiene
+node tests/ui.test.js          # UI modules, SVG legends, Web Worker RPC, bilinear terrain, A* global wrap & rest stops
+node tests/integrity.test.js   # DOM ID sync, metadata sync, strict zero-inline CSP, accessibility & asset hygiene
 python tests/test_pipeline.py  # data pipeline unit checks
+node tests/e2e.test.js         # headless Chromium E2E (HTTP + Web Worker + SwiftShader WebGL + strict CSP + file://)
+node tools/build.js            # builds dist/ (33 files, 22.81 MB) excluding 25.63 MB file://-only layers_data.js
 node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
 
 **Validation result:** the nine successful Mars landers rank in the **90th percentile** of their own latitude band under Landing safety (random: 50th, p < 0.005; partly circular, see notes), and all 39 NASA HLS-2015 candidate sites rank in the **71st percentile** under the Balanced preset (random: 49th, p < 0.005). Both hold under geometric-mean scoring. See [`docs/validation.md`](docs/validation.md).
 
-Verifies suitability transfer functions, preset & geometric-mean aggregation behaviour, NASA HLS-2015 hard constraint vetoes, >= 75%-valid candidate extraction, Monte Carlo weight sensitivity, windowed multi-hazard A* obstacle & dust-trap avoidance, candidate rest stops, Opportunity-calibrated dust-storm attenuation, waste-heat/deficit thermal balance, MSL-RAD GCR & unified design-basis SPE shielding, seasonal $L_s$ insolation, SWIM ice-access classification, regional terrain class, XSS-escaped Mission Brief & Live API rendering, and CSP/accessibility integrity.
+Verifies suitability transfer functions, preset & geometric-mean aggregation behaviour, NASA HLS-2015 hard constraint vetoes, >= 75%-valid candidate extraction, Monte Carlo weight sensitivity, adaptive-window multi-hazard A* obstacle & dust-trap avoidance, flat/firm stop candidates, Opportunity-calibrated dust-storm attenuation, waste-heat/deficit thermal balance, MSL-RAD GCR & unified design-basis SPE shielding, seasonal $L_s$ insolation, SWIM ice-access classification, regional terrain class, XSS-escaped Mission Brief & Live API rendering, strict inline-free CSP, headless Chromium WebGL, and Web Worker RPC.
 
 ## Repository Layout
 
 ```
-.github/         workflows/test.yml                 CI test runner (Node 20 + Python 3.12)
+.github/         workflows/test.yml                 CI test runner (Node 20 + Python 3.12 + Chromium E2E)
+CONTRIBUTING.md  Architecture, dual delivery, testing & strict CSP guide
 data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py, caves.py, build_5km.py
-web/             index.html, style.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers/meta.js, layers_data.js, caves.js
-web/ui/          format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js   Modular UI helpers
-tools/           validate.js, hls2015_ez_sites.json   validation report generator + the 39 HLS-2015 sites
-tests/           scoring.test.js, ui.test.js, integrity.test.js, test_pipeline.py
+web/             index.html, style.css, app.js, worker.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, caves.js, layers/meta.js, layers_data.js
+web/ui/          layers.js, panels.js, map2d.js, format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js
+tools/           validate.js, build.js, hls2015_ez_sites.json   Validation report, HTTP dist/ builder, 39 HLS-2015 sites
+tests/           scoring.test.js, ui.test.js, integrity.test.js, test_pipeline.py, e2e.test.js
 docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical spec, validation, citations, pitch & PDF master guide
 ```
 

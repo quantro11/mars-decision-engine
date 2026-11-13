@@ -23,21 +23,26 @@
     return 2 * MARS_R * Math.asin(Math.sqrt(a));
   }
 
-  // L: {width,height, slope:Uint8Array, rough?:Uint8Array, ti?:Uint8Array, meta, latOfRow(y), lonOfCol(x)}
-  // opts: {k, maxSlope, marginPx}
-  function plan(L, sx, sy, gx, gy, opts) {
+  /**
+   * Plan a minimum-hazard rover route using 8-connected A* on MOLA slope, roughness, and TES TI.
+   * Tries a compact search window first and expands automatically if needed to avoid false blocks.
+   * @param {Object} L Layer store { width, height, slope, rough?, ti?, meta, latOfRow, lonOfCol }
+   * @param {number} sx Start X column
+   * @param {number} sy Start Y row
+   * @param {number} gx Goal X column
+   * @param {number} gy Goal Y row
+   * @param {{ k?: number, maxSlope?: number, marginPx?: number, strictWindow?: boolean }} [opts]
+   * @returns {{ ok: boolean, path?: number[], stats?: Object, windowCells?: number, attempts?: number, reason?: string }}
+   */
+  function planInWindow(L, sx, sy, gx, gy, opts, margin, kmCol, kmRow) {
     const k = opts.k ?? 0.3, maxSlope = opts.maxSlope ?? 15;
     const W = L.width, H = L.height, sc = L.meta.slope.scale;
     const rScale = L.meta.rough ? L.meta.rough.scale : 0;
     const tiScale = L.meta.ti ? L.meta.ti.scale : 0;
     const hasRough = !!(L.rough && rScale), hasTi = !!(L.ti && tiScale);
-    const kmRow = (Math.PI * MARS_R) / H;
-    const kmCol = new Float32Array(H);
-    for (let y = 0; y < H; y++) kmCol[y] = Math.max(0.05, (2 * Math.PI * MARS_R / W) * Math.cos(L.latOfRow(y) * Math.PI / 180));
 
-    // search window: symmetric bounding box with margin (wraps in x), allocated at window size
-    const margin = opts.marginPx ?? Math.round(W * 0.078);                       // ~28 deg of longitude, scales with grid width
-    const maxExpand = Math.max(2e5, Math.round(1.5e6 * (W * H) / 2097152));      // expansion budget scales with cell count
+    // Search window: symmetric bounding box with margin (wraps in x); expansion budget scales with grid size
+    const maxExpand = Math.max(2e5, Math.round(1.5e6 * (W * H) / 2097152));
     let dxBox = Math.abs(gx - sx); const wrap = dxBox > W / 2; if (wrap) dxBox = W - dxBox;
     const y0 = Math.max(0, Math.min(sy, gy) - margin), y1 = Math.min(H - 1, Math.max(sy, gy) + margin);
     const subH = y1 - y0 + 1;
@@ -98,6 +103,28 @@
     return { ok: true, path, stats: pathStats(L, path, kmCol, kmRow), windowCells: subSize };
   }
 
+  function plan(L, sx, sy, gx, gy, opts = {}) {
+    const W = L.width, H = L.height;
+    const kmRow = (Math.PI * MARS_R) / H;
+    const kmCol = new Float32Array(H);
+    for (let y = 0; y < H; y++) kmCol[y] = Math.max(0.05, (2 * Math.PI * MARS_R / W) * Math.cos(L.latOfRow(y) * Math.PI / 180));
+
+    const baseMargin = opts.marginPx ?? Math.round(W * 0.078);
+    const margins = opts.strictWindow ? [baseMargin] : [baseMargin, Math.max(baseMargin * 2, Math.floor(Math.max(W, H) / 4)), Math.max(W, H)];
+    let lastRes = { ok: false, reason: 'no slope-safe path' };
+    const tried = new Set();
+    for (let i = 0; i < margins.length; i++) {
+      const m = Math.min(Math.max(W, H), margins[i]);
+      if (tried.has(m)) continue;
+      tried.add(m);
+      lastRes = planInWindow(L, sx, sy, gx, gy, opts, m, kmCol, kmRow);
+      if (lastRes.ok) { lastRes.attempts = tried.size; return lastRes; }
+      if (lastRes.reason === 'search limit') break;
+    }
+    if (!lastRes.ok && !opts.strictWindow) lastRes.reason = 'no slope-safe path found across global corridor';
+    return lastRes;
+  }
+
   function pathStats(L, path, kmCol, kmRow) {
     const W = L.width, sc = L.meta.slope.scale;
     const rScale = L.meta.rough ? L.meta.rough.scale : 0;
@@ -118,9 +145,7 @@
       profile.push({ km, elev: L.meta.elev.offset + L.elev[n] * L.meta.elev.scale, slope: s, rough: r, ti });
     }
 
-    // Candidate rest stops along the traverse: flat (<= 4 deg), smooth (sigma <= 35 m), firm (TI >= 160) cells at >= 200 km spacing.
-    // Terrain suitability only - no shelter from radiation or dust is implied.
-    // Identifies low-slope, smooth-bearing plains suitable for emergency dust-storm / radiation encampment
+    // Candidate rest stops along traverse: flat (<= 4 deg), smooth (sigma <= 35 m), firm (TI >= 160), >= 200 km apart (terrain only; no shelter implied)
     const safeHavens = [];
     let lastHavenKm = 0;                       // first stop at least 200 km from the start
     for (let i = 0; i < profile.length; i++) {
@@ -131,7 +156,7 @@
           elev: Math.round(q.elev),
           slope: q.slope.toFixed(1),
           name: `Stop #${safeHavens.length + 1}`,
-          type: 'Smooth Basin / Natural Shelter'
+          type: 'Flat, smooth, firm terrain (no shelter implied)',
         });
         lastHavenKm = q.km;
       }

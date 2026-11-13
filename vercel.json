@@ -1,6 +1,6 @@
 {
-  "outputDirectory": "web",
-  "buildCommand": null,
+  "outputDirectory": "dist",
+  "buildCommand": "node tools/build.js",
   "framework": null,
   "headers": [
     {
@@ -14,7 +14,7 @@
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.nasa.gov; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.nasa.gov; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" }
       ]
     }
   ]

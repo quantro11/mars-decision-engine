@@ -34,10 +34,11 @@ const L = {
 };
 const rgba = new Uint8ClampedArray(W * H * 4);
 const score = S.scoreMap(L, S.PRESETS.balanced.w, true, new Float32Array(W * H));
-for (const mode of ['score', 'ice', 'slope', 'elev', 'ti', 'rad', 'dust']) {
+for (const mode of ['score', 'ice', 'slope', 'elev', 'ti', 'rad', 'dust', 'cave']) {
   OV.fillOverlayBuffer(rgba, mode, L, score, radLut);
   assert.ok(rgba[3] > 0 || mode === 'score', `overlay ${mode} sets pixel buffer`);
-  assert.ok(OV.renderLegendHTML(mode).includes('linear-gradient'), `legend renders for ${mode}`);
+  const legHtml = OV.renderLegendHTML(mode);
+  assert.ok(legHtml.includes('linearGradient') && !legHtml.includes('style='), `SVG legend renders cleanly without inline styles for ${mode}`);
 }
 OV.fillOverlayBuffer(rgba, 'none', L, score, radLut);
 assert.strictEqual(rgba[3], 0, 'none overlay clears alpha');
@@ -85,11 +86,37 @@ const L2 = {
 };
 const localRoute = A.plan(L2, 100, 128, 120, 128, { marginPx: 30, maxSlope: 15, k: 0.3 });
 assert.ok(localRoute.ok && localRoute.windowCells < W2 * H2 / 4, 'A* allocates compact local window instead of full globe');
+assert.ok((localRoute.stats.safeHavens || []).every(h => !/shelter/i.test(h.name) && /no shelter implied/i.test(h.type)), 'rest stops make no shelter claim');
 const wrapRoute = A.plan(L2, W2 - 3, 128, 3, 128, { marginPx: 30, maxSlope: 15, k: 0.3 });
 assert.ok(wrapRoute.ok && wrapRoute.path.length <= 10, 'A* wraps across antimeridian seamlessly');
-for (let y = 0; y < H2; y++) L2.slope[y * W2 + 110] = 240; // 30 deg solid wall across full height
+// Wall blocks narrow marginPx:4 window directly, triggering adaptive global detour around antimeridian
+for (let y = 0; y < H2; y++) L2.slope[y * W2 + 110] = 240;
+const narrowStrict = A.plan(L2, 100, 128, 120, 128, { marginPx: 4, strictWindow: true, maxSlope: 15, k: 0.3 });
+assert.strictEqual(narrowStrict.ok, false, 'strict narrow window fails when barrier exceeds margin');
+const adaptiveDetour = A.plan(L2, 100, 128, 120, 128, { marginPx: 4, maxSlope: 15, k: 0.3 });
+assert.ok(adaptiveDetour.ok && adaptiveDetour.attempts >= 2, 'adaptive window automatically expands to find valid global corridor');
+// Enclose start point with walls on both East (x=110) and West (x=95) hemispheres
+for (let y = 0; y < H2; y++) L2.slope[y * W2 + 95] = 240;
 const blocked = A.plan(L2, 100, 128, 120, 128, { marginPx: 30, maxSlope: 15, k: 0.3 });
-assert.strictEqual(blocked.ok, false, 'A* reports failure when no slope-safe path exists');
+assert.strictEqual(blocked.ok, false, 'A* reports failure when enclosed on both hemispheres');
+
+// --- 4b. Bilinear sub-cell elevation interpolation
+const elevSample = S.sampleBilinear(Uint8Array.of(0, 10, 0, 10), 2, 2, 0.5, 0.5, 100, -1000);
+assert.strictEqual(elevSample, -500, 'bilinear interpolation computes continuous fractional elevation');
+
+// --- 4c. Web Worker RPC protocol handler
+const WK = require('../web/worker.js').MDE_WORKER;
+const wState = WK.createWorkerState({ SCORING: S, ASTAR: A, META: L.meta });
+assert.strictEqual(WK.handleWorkerMessage({ id: 1, cmd: 'initLayers', width: W, height: H, meta: L.meta, elev: L.elev, slope: L.slope, rough: L.rough, ice15: L.ice, ti: L.ti, dust: L.dust, cave: new Uint8Array(W * H).fill(10) }, wState).ok, true);
+const wScore = WK.handleWorkerMessage({ id: 2, cmd: 'score', weights: { ...S.PRESETS.balanced.w, cave: 0.1 }, hard: true, agg: 'geo', iceBand: 'ice15', blockPx: 4, sepPx: 8 }, wState);
+assert.ok(wScore.ok && wScore.score instanceof Float32Array && wScore.candidates.length >= 1, 'worker computes geo score with cave criterion and candidates');
+const wRob = WK.handleWorkerMessage({ id: 3, cmd: 'sensitivity', weights: S.PRESETS.balanced.w, hard: true, candidates: wScore.candidates, spread: 0.2, agg: 'sum', iceBand: 'ice15', blockPx: 4, sepPx: 8, matchPx: 6 }, wState);
+assert.ok(wRob.ok && wRob.robust.length === wScore.candidates.length, 'worker computes sensitivity robustness');
+
+// --- 4d. Panel semantic meter bars (0 inline styles)
+const PN = require('../web/ui/panels.js').MDE_PANELS;
+const critMarkup = PN.critRowsHTML({ elev: -2000, slope: 3, ice: 0.5, rough: 20, lat: 10, ti: 250, rad: 210, cave: 40 }, S.PRESETS.balanced.w, { SCORING: S, escHtml: FMT.escHtml });
+assert.ok(critMarkup.includes('<meter class="crit-meter') && !critMarkup.includes('style=') && critMarkup.includes('40 km'), 'criteria bars use semantic <meter> with zero inline styles including shelter');
 
 // --- 5. Monte Carlo sensitivity determinism
 const refCands = [{ x: 20, y: 8, score: 0.8 }];

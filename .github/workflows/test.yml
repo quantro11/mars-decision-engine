@@ -18,4 +18,6 @@ jobs:
       - run: node tests/integrity.test.js
       - run: pip install numpy pillow
       - run: python tests/test_pipeline.py
+      - run: node tests/e2e.test.js
+      - run: node tools/build.js
       - run: node tools/validate.js > /dev/null

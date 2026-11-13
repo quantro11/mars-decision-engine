@@ -93,7 +93,7 @@
 
         // Subtle specular sheen on high-albedo / overlay zones
         vec3 H = normalize(L + V);
-        float spec = pow(max(0.0, dot(pertN, H)), 28.0) * 0.10 * terminator;
+        float spec = pow(max(0.0001, dot(pertN, H)), 28.0) * 0.10 * terminator;
         surfaceCol = surfaceCol * shade + vec3(spec);
       } else {
         float reliefShade = clamp(0.75 + 0.45 * dot(pertN, normalize(u_camPos)), 0.45, 1.18);
@@ -102,7 +102,7 @@
 
       // Martian atmospheric limb scattering (Rayleigh/dust Fresnel halo)
       float ndotv = max(0.0, dot(N, V));
-      float rim = pow(1.0 - ndotv, 3.0);
+      float rim = pow(max(0.0001, 1.0 - ndotv), 3.0);
       vec3 atmoColor = mix(vec3(0.92, 0.48, 0.28), vec3(0.35, 0.72, 0.98), 0.38);
       surfaceCol += atmoColor * rim * 0.42;
 

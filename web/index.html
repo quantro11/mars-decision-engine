@@ -12,6 +12,9 @@
 </head>
 <body>
 
+<a class="skip-link" href="#main-workspace">Skip to map &amp; workspace</a>
+<div id="sr-status" class="sr-only" role="status" aria-live="polite"></div>
+
 <header class="topbar">
   <div class="brand">
     <span class="brand-emblem" aria-hidden="true">
@@ -28,30 +31,31 @@
   </div>
 
   <nav class="modes" aria-label="Modules">
-    <button class="mode-btn active" data-mode="score"><span class="mode-idx">I</span><span class="mode-label">Site selection</span></button>
-    <button class="mode-btn" data-mode="route"><span class="mode-idx">II</span><span class="mode-label">Rover route</span></button>
-    <button class="mode-btn" data-mode="crisis"><span class="mode-idx">III</span><span class="mode-label">Dust-storm power</span></button>
-    <button class="mode-btn" data-mode="habitability"><span class="mode-idx">IV</span><span class="mode-label">Live habitability</span></button>
+    <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-idx">I</span><span class="mode-label">Site selection</span></button>
+    <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-idx">II</span><span class="mode-label">Rover route</span></button>
+    <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-idx">III</span><span class="mode-label">Dust-storm power</span></button>
+    <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-idx">IV</span><span class="mode-label">Live habitability</span></button>
   </nav>
 
   <div class="topbar-right">
     <div class="view-switch" role="group" aria-label="View">
-      <button id="btn-2d" class="view-btn active" data-view="2d">Map</button>
-      <button id="btn-3d" class="view-btn" data-view="3d">Globe</button>
+      <button id="btn-2d" class="view-btn active" data-view="2d" aria-pressed="true">Map</button>
+      <button id="btn-3d" class="view-btn" data-view="3d" aria-pressed="false">Globe</button>
     </div>
     <div class="select-wrap">
       <select id="flyto" aria-label="Fly to a region">
         <option value="">Go to a region…</option>
       </select>
     </div>
-    <button id="btn-export" class="btn-spec" title="Export the current analysis as a brief (JSON / printable)">Export brief</button>
-    <button id="btn-about" class="btn-spec">Method</button>
+    <button id="btn-theme" class="btn-spec" type="button" aria-pressed="false" title="Toggle high-contrast light/dark theme">Light theme</button>
+    <button id="btn-export" class="btn-spec" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="brief-modal" title="Export the current analysis as a brief (JSON / printable)">Export brief</button>
+    <button id="btn-about" class="btn-spec" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">Method</button>
   </div>
 </header>
 
-<main class="layout">
+<main id="main-workspace" class="layout" tabindex="-1">
   <!-- LEFT -->
-  <aside class="panel left">
+  <aside class="panel left" aria-label="Mission controls">
     <section id="panel-score" class="mode-panel">
       <div class="sec-head"><h2>Mission priority</h2></div>
       <div class="presets" id="presets"></div>
@@ -199,7 +203,7 @@
         </div>
         <div class="scale-box" title="Scale at the equator">
           <span id="scale-label">1000 km</span>
-          <div class="scale-bar" id="scale-bar" style="width: 64px;"></div>
+          <div class="scale-bar" id="scale-bar"></div>
         </div>
         <div class="zoom-btns">
           <button id="zoom-in" title="Zoom in">+</button>
@@ -227,7 +231,7 @@
   </section>
 
   <!-- RIGHT -->
-  <aside class="panel right">
+  <aside class="panel right" aria-label="Candidates and site details">
     <section id="candidates-sec">
       <div class="sec-head"><h2>Best candidate regions</h2><span class="hint">2°×2° blocks · ≥ 800 km apart</span></div>
       <ol id="candidates" class="cards"></ol>
@@ -340,6 +344,9 @@
 <script src="ui/charts.js"></script>
 <script src="ui/markers.js"></script>
 <script src="ui/overlays.js"></script>
+<script src="ui/layers.js"></script>
+<script src="ui/panels.js"></script>
+<script src="ui/map2d.js"></script>
 <script src="ui/habitability.js"></script>
 <script src="ui/brief.js"></script>
 <script src="app.js"></script>

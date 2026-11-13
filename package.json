@@ -4,7 +4,9 @@
   "description": "NASA Space Apps Challenge — Interplanetary Survival Guide: Martian Map. A client-side GIS & survival engine fusing MOLA, SWIM 2.0, TES, and Viking datasets.",
   "main": "web/app.js",
   "scripts": {
-    "test": "node tests/scoring.test.js && node tests/ui.test.js && node tests/integrity.test.js && python tests/test_pipeline.py",
+    "test": "node tests/scoring.test.js && node tests/ui.test.js && node tests/integrity.test.js && python tests/test_pipeline.py && node tests/e2e.test.js",
+    "test:e2e": "node tests/e2e.test.js",
+    "build": "node tools/build.js",
     "validate": "node tools/validate.js",
     "start": "npx serve web"
   },

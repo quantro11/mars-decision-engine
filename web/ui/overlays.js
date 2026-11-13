@@ -89,12 +89,13 @@
   function renderLegendHTML(overlay) {
     const lut = LUT[overlay], ends = LEGEND_ENDS[overlay];
     if (!lut || !ends) return '';
+    const gradId = `ov-grad-${overlay}`;
     const stops = [];
     for (let i = 0; i <= 10; i++) {
       const v = Math.round(i * 25.5);
-      stops.push(`rgb(${lut[v * 3]},${lut[v * 3 + 1]},${lut[v * 3 + 2]})`);
+      stops.push(`<stop offset="${i * 10}%" stop-color="rgb(${lut[v * 3]},${lut[v * 3 + 1]},${lut[v * 3 + 2]})"/>`);
     }
-    return `<div class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></div><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
+    return `<svg class="bar legend-svg" viewBox="0 0 200 4" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">${stops.join('')}</linearGradient></defs><rect width="200" height="4" rx="2" fill="url(#${gradId})"/></svg><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
   }
 
   global.MDE_OVERLAYS = { LUT, LEGEND_ENDS, lerpStops, buildRadLut, fillOverlayBuffer, renderLegendHTML };

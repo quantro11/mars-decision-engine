@@ -216,7 +216,35 @@
     return keep.map(k => k / runs);
   }
 
+  /** Linearly interpolate an encoded layer array at fractional grid coordinates (wrapping horizontally).
+   * @param {Uint8Array} arr
+   * @param {number} width
+   * @param {number} height
+   * @param {number} fx
+   * @param {number} fy
+   * @param {number} scale
+   * @param {number} [offset=0]
+   * @param {number|null} [nodataVal=null] Value treated as missing data before decoding
+   * @returns {number|null}
+   */
+  function sampleBilinear(arr, width, height, fx, fy, scale, offset = 0, nodataVal = null) {
+    if (!arr) return null;
+    const x0 = ((Math.floor(fx) % width) + width) % width;
+    const x1 = (x0 + 1) % width;
+    const yClamped = Math.max(0, Math.min(height - 1.0001, fy));
+    const y0 = Math.floor(yClamped), y1 = Math.min(height - 1, y0 + 1);
+    const tx = fx - Math.floor(fx), ty = yClamped - y0;
+    const raw = [arr[y0 * width + x0], arr[y0 * width + x1], arr[y1 * width + x0], arr[y1 * width + x1]];
+    if (nodataVal !== null && raw.some(v => v === nodataVal)) {
+      const center = arr[Math.round(yClamped) * width + (((Math.round(fx) % width) + width) % width)];
+      return center === nodataVal ? null : offset + center * scale;
+    }
+    const a = offset + raw[0] * scale, b = offset + raw[1] * scale;
+    const c = offset + raw[2] * scale, d = offset + raw[3] * scale;
+    return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+  }
+
   function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcIceAccess, calcSPE, speDose, calcTerrainClass, sensitivity, mulberry32 };
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcIceAccess, calcSPE, speDose, calcTerrainClass, sensitivity, sampleBilinear, mulberry32 };
 })(typeof window !== 'undefined' ? window : module.exports);
