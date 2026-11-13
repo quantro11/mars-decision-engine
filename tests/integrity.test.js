@@ -62,11 +62,11 @@ assert.deepStrictEqual(dups, [], `Duplicate top-level declarations: ${JSON.strin
 
 // 6. Accessibility, light/high-contrast theme, modular size, & design-system consistency
 assert.ok(/<canvas[^>]+id=["']map["'][^>]+role=["']img["'][^>]+tabindex=["']0["'][^>]+aria-label=/.test(html), 'map canvas must be keyboard accessible');
-assert.ok(html.includes('class="skip-link"') && html.includes('id="sr-status"') && html.includes('id="btn-theme"'), 'skip-link, sr-status live region, and theme switcher present');
+assert.ok(html.includes('class="skip-link"') && html.includes('id="sr-status"') && html.includes('id="btn-theme"') && html.includes('id="btn-lang"') && html.includes('id="btn-dl-geojson"'), 'skip-link, sr-status live region, language/theme switchers, and GeoJSON export present');
 assert.ok((html.match(/aria-modal=["']true["']/g) || []).length === 2, 'both modals must declare aria-modal="true"');
 assert.ok(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').split(/\r?\n/).length <= 450, 'web/app.js coordinator stays compact (<= 450 lines)');
-assert.ok(fs.existsSync(path.join(ROOT, 'CONTRIBUTING.md')), 'CONTRIBUTING.md exists');
-for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/panels.js', 'ui/overlays.js', 'ui/map2d.js', 'ui/layers.js', 'app.js']) {
+assert.ok(fs.existsSync(path.join(ROOT, 'CONTRIBUTING.md')) && fs.existsSync(path.join(ROOT, 'docs/yarisma_raporu_tr.md')), 'CONTRIBUTING.md and competition guide exist');
+for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/panels.js', 'ui/overlays.js', 'ui/map2d.js', 'ui/layers.js', 'app.js']) {
   const src = fs.readFileSync(path.join(WEB, f), 'utf8');
   assert.ok(!/style=/.test(src), `Inline HTML style= attribute found in web/${f} (strict style-src 'self' violation)`);
   for (const hex of ['#38bdf8', '#a3e635', '#f97316']) {

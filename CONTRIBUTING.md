@@ -13,7 +13,7 @@ flowchart LR
     APP -->|"Scoring & A* RPC (HTTP)"| W["web/worker.js (Web Worker)"]
     W --> S["web/scoring.js + web/astar.js"]
     APP -->|"file:// sync fallback"| S
-    APP --> UI["web/ui/{panels,map2d,charts,overlays}.js"]
+    APP --> UI["web/ui/{panels,i18n,map2d,charts,overlays}.js"]
     APP --> G3D["web/globe3d.js (WebGL)"]
 ```
 
@@ -27,7 +27,7 @@ flowchart LR
 - **`web/ui/panels.js`**: Accessible candidate cards (`<meter class="crit-meter">`), criteria sliders, ESC-escaped inspector text, and live screen-reader announcements (`#sr-status`).
 - **`web/ui/map2d.js`**: 2D canvas viewport, pointer pan/zoom/pinch, keyboard pan/zoom, graticule, route/region/reticle overlays, and scale bar.
 - **`web/globe3d.js`**: Dependency-free WebGL globe with procedural fallback normal/specular/AO shaders and `webglcontextlost`/`webglcontextrestored` handling.
-- **`web/app.js`**: Application coordinator wiring DOM controls, deep links, theme toggle, modal focus trap, and Worker/fallback dispatch.
+- **`web/app.js`**: Application coordinator wiring DOM controls, deep links, TR/EN language switch, GeoJSON/JSON brief exports, theme toggle, modal focus trap, and Worker/fallback dispatch.
 
 ## Dual Delivery (`file://` vs HTTP `dist/`)
 

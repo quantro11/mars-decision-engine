@@ -153,6 +153,41 @@ const htmlOut = BR.renderBriefHTML(payload, FMT);
 assert.ok(!htmlOut.includes('<img src=x'), 'Brief HTML escapes malicious tags');
 assert.ok(htmlOut.includes('&lt;img src=x'), 'Escaped markup rendered safely');
 
+// --- 6b. GIS GeoJSON export (FeatureCollection + antimeridian split) & Bilingual TR/EN i18n
+const I18N = require('../web/ui/i18n.js').MDE_I18N;
+const geo = BR.buildGeoJSON({
+  S: mockS, W, L: L2,
+  flatShare: () => 0.85,
+  cellValues: () => ({ lat: 18, lon: 77, elev: -2500, slope: 2, ice: 0.5, rough: 15, ti: 250 }),
+  blockValues: () => ({ lat: 18, lon: 77, elev: -2500, slope: 2, ice: 0.5, rough: 15, ti: 250 }),
+  nearestRegion: () => ({ distDeg: 0.5, region: { name: 'Jezero Crater', ez: true, lat: 18, lon: 77 } }),
+  SCORING: S, FMT,
+});
+assert.strictEqual(geo.type, 'FeatureCollection', 'GeoJSON root type is FeatureCollection');
+assert.ok(geo.features.some(f => f.properties.feature_type === 'candidate_site' && f.geometry.type === 'Point'));
+assert.ok(geo.features.some(f => f.properties.feature_type === 'selected_site'));
+assert.ok(geo.features.some(f => f.properties.feature_type === 'crisis_station'));
+const routeFeat = geo.features.find(f => f.properties.feature_type === 'astar_safe_route');
+assert.ok(routeFeat && routeFeat.geometry.type === 'MultiLineString', 'Antimeridian-crossing A* route splits cleanly into MultiLineString');
+
+const fakeLbl = { firstChild: { nodeType: 3, nodeValue: 'Slope limit ' } };
+const fakeInp = { closest: () => fakeLbl, parentElement: { querySelector: () => null } };
+const fakeBrand = { textContent: 'Mars Base Decision Engine' };
+const fakeLangBtn = { textContent: 'TR', title: '', setAttribute() {} };
+const fakeDoc = {
+  documentElement: { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } },
+  querySelector: (sel) => (sel === '.brand-name' ? fakeBrand : sel === '#maxslope' ? fakeInp : sel === '#btn-lang' ? fakeLangBtn : null),
+  querySelectorAll: () => [],
+};
+I18N.setLang('tr', fakeDoc);
+assert.strictEqual(I18N.t('mode.score'), 'Saha seçimi');
+assert.strictEqual(fakeBrand.textContent, 'Mars Üs Karar Motoru');
+assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Eğim sınırı ');
+I18N.setLang('en', fakeDoc);
+assert.strictEqual(I18N.t('mode.score'), 'Site selection');
+assert.strictEqual(fakeBrand.textContent, 'Mars Base Decision Engine');
+assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Slope limit ');
+
 // --- 7. Habitability API DOM controller, key visibility toggle, & XSS safety
 (async () => {
   const store = { nasa_api_key: 'SECRET_1234' };

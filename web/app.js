@@ -10,25 +10,35 @@
   const OVERLAYS = window.MDE_OVERLAYS;
   const { escHtml } = FMT;
   const { initHabitabilityAPI, renderHabitability } = window.MDE_HAB;
-  const { buildBriefPayload, renderBriefHTML, downloadBriefJSON } = window.MDE_BRIEF;
+  const { buildBriefPayload, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON } = window.MDE_BRIEF;
+  const I18N = window.MDE_I18N;
+  const t = (k) => (I18N && I18N.t(k)) || k;
   const META = window.LAYER_META;
   const W = META.width, H = META.height;
-  const OVERLAY_NAMES = {
-    score: 'SUITABILITY SCORE', ice: 'SWIM 2.0 SUBSURFACE ICE', slope: 'MOLA 90TH-PCT SLOPE',
-    elev: 'MOLA MEGDR ELEVATION', ti: 'TES THERMAL INERTIA', dust: 'TES DUST ABUNDANCE',
-    rad: 'GCR DOSE (MSL/RAD-ANCHORED)', cave: 'CAVE CANDIDATE PROXIMITY (UNCONFIRMED)', none: 'NASA VIKING MDIM 2.1 OPTICAL',
-  };
+  const globeCanvas = $('#globe');
+  const globe = (window.GLOBE3D && globeCanvas) ? window.GLOBE3D.createGlobe(globeCanvas) : null;
+  let viewport = null, panels = null;
 
-  // ------------------------------------------------------------ theme
+  // ------------------------------------------------------------ theme & language
   function applyTheme(theme) {
     const light = theme === 'light';
     document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
     const btn = $('#btn-theme');
-    if (btn) { btn.setAttribute('aria-pressed', String(light)); btn.textContent = light ? 'Dark theme' : 'Light theme'; }
+    if (btn) { btn.setAttribute('aria-pressed', String(light)); btn.textContent = light ? t('themeDark') : t('themeLight'); }
     try { localStorage.setItem('mde_theme', light ? 'light' : 'dark'); } catch (e) { /* storage disabled */ }
+  }
+  function applyLang(lang) {
+    if (!I18N) return;
+    I18N.setLang(lang);
+    applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+    updateHudLayer();
+    if ($('#hud-proj')) $('#hud-proj').textContent = t(S.viewMode === '3d' ? 'proj3d' : 'proj2d');
+    setHudHint(t(S.viewMode === '3d' ? 'hudHint3d' : 'hudHint2d'), false);
+    if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
   }
   try { applyTheme(localStorage.getItem('mde_theme') || 'dark'); } catch (e) { applyTheme('dark'); }
   on('#btn-theme', 'onclick', () => applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'));
+  on('#btn-lang', 'onclick', () => applyLang(I18N && I18N.getLang() === 'tr' ? 'en' : 'tr'));
 
   // ------------------------------------------------------------ state & core services
   const S = {
@@ -40,10 +50,6 @@
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20, ms: 0 },
     crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0, regolith: 1.5 },
   };
-
-  const globeCanvas = $('#globe');
-  const globe = (window.GLOBE3D && globeCanvas) ? window.GLOBE3D.createGlobe(globeCanvas) : null;
-  let viewport = null, panels = null;
 
   const layers = window.MDE_LAYERS.createLayerStore({
     META, SCORING, REGIONS, ASTAR,
@@ -220,7 +226,7 @@
     },
   });
 
-  function updateHudLayer() { if ($('#hud-layer')) $('#hud-layer').textContent = `Overlay · ${(OVERLAY_NAMES[S.overlay] || S.overlay).toLowerCase()}`; }
+  function updateHudLayer() { if ($('#hud-layer')) $('#hud-layer').textContent = `${t('overlayPrefix')} · ${t('ov.' + S.overlay).toLowerCase()}`; }
   function setHudHint(text, isWarn) { const el = $('#hud-hint'); if (el) { el.textContent = text; el.classList.toggle('warn', !!isWarn); } }
   function renderLegend() { if ($('#legend')) $('#legend').innerHTML = OVERLAYS.renderLegendHTML(S.overlay); }
 
@@ -232,13 +238,13 @@
     globe.state.onContextLost = () => setHudHint('WebGL context lost — restoring 3D globe…', true);
     globe.state.onContextRestored = () => {
       viewport.markOverlayDirty(); viewport.buildOverlay();
-      setHudHint(S.viewMode === '3d' ? 'Drag to orbit · scroll to zoom · click to inspect' : 'Drag to pan · scroll to zoom · click to inspect', false);
+      setHudHint(t(S.viewMode === '3d' ? 'hudHint3d' : 'hudHint2d'), false);
       viewport.schedule3D();
     };
   }
 
   function setViewMode(vm) {
-    if (vm === '3d' && !globe) { setHudHint('3D globe unavailable (WebGL disabled) — staying in 2D map view', true); return; }
+    if (vm === '3d' && !globe) { setHudHint(t('hudNoWebgl'), true); return; }
     S.viewMode = vm;
     document.querySelectorAll('.view-btn').forEach(b => {
       const active = b.dataset.view === vm;
@@ -247,8 +253,8 @@
     });
     if (globeCanvas) globeCanvas.classList.toggle('hidden', vm !== '3d');
     if ($('#globe-tools')) $('#globe-tools').classList.toggle('hidden', vm !== '3d');
-    if ($('#hud-proj')) $('#hud-proj').textContent = vm === '3d' ? 'Globe · MOLA relief' : 'Map · equirectangular';
-    setHudHint(vm === '3d' ? 'Drag to orbit · scroll to zoom · click to inspect' : 'Drag to pan · scroll to zoom · click to inspect', false);
+    if ($('#hud-proj')) $('#hud-proj').textContent = t(vm === '3d' ? 'proj3d' : 'proj2d');
+    setHudHint(t(vm === '3d' ? 'hudHint3d' : 'hudHint2d'), false);
     if (vm === '3d' && globe) {
       const target = S.selected || S.candidates[0];
       if (target) globe.flyTo(L.latOfRow(target.y), L.lonOfCol(target.x));
@@ -361,7 +367,8 @@
     if (lastFocusedEl && typeof lastFocusedEl.focus === 'function') lastFocusedEl.focus();
     lastFocusedEl = null;
   }
-  const getBriefPayload = () => buildBriefPayload({ S, W, L, META, flatShare: layers.flatShare, cellValues: layers.cellValues, blockValues: layers.blockValues, nearestRegion: layers.nearestRegion });
+  const getBriefCtx = () => ({ S, W, L, META, flatShare: layers.flatShare, cellValues: layers.cellValues, blockValues: layers.blockValues, nearestRegion: layers.nearestRegion });
+  const getBriefPayload = () => buildBriefPayload(getBriefCtx());
   on('#btn-about', 'onclick', () => openModal($('#about'), '#about-close', $('#btn-about')));
   on('#about-close', 'onclick', () => closeModal($('#about')));
   on('#about', 'onclick', (e) => { if (e.target.id === 'about') closeModal($('#about')); });
@@ -369,23 +376,20 @@
   on('#brief-close', 'onclick', () => closeModal($('#brief-modal')));
   on('#brief-modal', 'onclick', (e) => { if (e.target.id === 'brief-modal') closeModal($('#brief-modal')); });
   on('#btn-dl-json', 'onclick', () => downloadBriefJSON(getBriefPayload()));
+  on('#btn-dl-geojson', 'onclick', () => downloadBriefGeoJSON(getBriefCtx()));
   on('#btn-print-brief', 'onclick', () => window.print());
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closeModal($('#about')); closeModal($('#brief-modal')); return; }
     if (e.key === 'Tab' && activeModal && !activeModal.classList.contains('hidden')) {
       const f = [...activeModal.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
-      if (!f.length) return;
-      if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
-      else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+      if (f.length && e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (f.length && !e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
     }
   });
-
   function syncRanges(root) { root.querySelectorAll('input[type=range]').forEach(r => r.style.setProperty('--p', ((r.value - r.min) / (r.max - r.min) * 100) + '%')); }
   document.addEventListener('input', (e) => { if (e.target.type === 'range') syncRanges(e.target.parentElement); });
   new MutationObserver(() => syncRanges(document)).observe(document.body, { childList: true, subtree: true });
   syncRanges(document);
-
-  // ------------------------------------------------------------ boot & deep links
   function applyDemoLink() {
     const q = new URLSearchParams(location.search);
     const find = (n) => n && REGIONS.find(r => r.name.toLowerCase().includes(n.toLowerCase()));
@@ -408,7 +412,8 @@
     }
   }
 
-  panels.buildPresets(); panels.buildSliders(); renderLegend(); panels.renderRoute();
+  if (I18N && I18N.getLang() === 'tr') applyLang('tr'); else { panels.buildPresets(); panels.buildSliders(); panels.renderRoute(); }
+  renderLegend();
   initHabitabilityAPI({ onLiveUpdate: () => { if (S.mode === 'crisis') panels.runCrisis(); } });
 
   layers.ensureFileDataBundle().then(() => {

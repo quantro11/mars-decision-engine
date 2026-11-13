@@ -54,7 +54,7 @@ node tests/ui.test.js          # UI modules, SVG legends, Web Worker RPC, biline
 node tests/integrity.test.js   # DOM ID sync, metadata sync, strict zero-inline CSP, accessibility & asset hygiene
 python tests/test_pipeline.py  # data pipeline unit checks
 node tests/e2e.test.js         # headless Chromium E2E (HTTP + Web Worker + SwiftShader WebGL + strict CSP + file://)
-node tools/build.js            # builds dist/ (33 files, 22.81 MB) excluding 25.63 MB file://-only layers_data.js
+node tools/build.js            # builds dist/ (34 files, 22.84 MB) excluding 25.63 MB file://-only layers_data.js
 node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
 
@@ -69,10 +69,10 @@ Verifies suitability transfer functions, preset & geometric-mean aggregation beh
 CONTRIBUTING.md  Architecture, dual delivery, testing & strict CSP guide
 data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py, caves.py, build_5km.py
 web/             index.html, style.css, app.js, worker.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, caves.js, layers/meta.js, layers_data.js
-web/ui/          layers.js, panels.js, map2d.js, format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js
+web/ui/          layers.js, i18n.js, panels.js, map2d.js, format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js
 tools/           validate.js, build.js, hls2015_ez_sites.json   Validation report, HTTP dist/ builder, 39 HLS-2015 sites
 tests/           scoring.test.js, ui.test.js, integrity.test.js, test_pipeline.py, e2e.test.js
-docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical spec, validation, citations, pitch & PDF master guide
+docs/            methodology.md, validation.md, pitch.md, yarisma_raporu_tr.md, guide/   Mathematical spec, validation, citations, pitch & competition report
 ```
 
 ## Primary Data Sources & Citations

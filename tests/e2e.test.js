@@ -352,20 +352,30 @@ async function runHttpE2E(browserPath, securityHeaders) {
     })()`), 'dust-storm crisis power model');
     assert(crisisRes.hasSvg && crisisRes.summary.length > 10, 'Crisis summary & chart should render');
 
-    // 5. Test Export Mission Brief modal open & Escape close
+    // 5. Test Export Mission Brief modal open (including GeoJSON export) & Escape close
     await evalJS(`document.getElementById('btn-export').click()`);
     await waitFor(() => evalJS(`(() => {
       const m = document.getElementById('brief-modal');
-      return m && !m.classList.contains('hidden');
-    })()`), 'mission brief modal open');
+      return m && !m.classList.contains('hidden') && !!document.getElementById('btn-dl-geojson');
+    })()`), 'mission brief modal open with GeoJSON export');
+    await evalJS(`document.getElementById('btn-dl-geojson').click()`);
     await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     await waitFor(() => evalJS(`document.getElementById('brief-modal').classList.contains('hidden')`), 'mission brief modal Escape close');
 
-    // 6. Test High-Contrast Light/Dark Theme toggle
+    // 6. Test High-Contrast Light/Dark Theme toggle + Live TR/EN language switch
     await evalJS(`document.getElementById('btn-theme').click()`);
     const theme = await evalJS(`document.documentElement.getAttribute('data-theme')`);
     assert.strictEqual(theme, 'light', 'Clicking #btn-theme should toggle data-theme="light"');
     await evalJS(`document.getElementById('btn-theme').click()`);
+
+    await evalJS(`document.getElementById('btn-lang').click()`);
+    const trState = await evalJS(`({ lang: document.documentElement.getAttribute('lang'), modeLabel: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent, slopeLead: document.querySelector('#maxslope').closest('label').firstChild.nodeValue })`);
+    assert.strictEqual(trState.lang, 'tr', 'Clicking #btn-lang should set html lang="tr"');
+    assert.strictEqual(trState.modeLabel, 'Saha seçimi', 'Turkish mode button label rendered');
+    assert.strictEqual(trState.slopeLead, 'Eğim sınırı ', 'Turkish slider label preserved without clobbering input');
+    await evalJS(`document.getElementById('btn-lang').click()`);
+    const enLabel = await evalJS(`document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent`);
+    assert.strictEqual(enLabel, 'Site selection', 'Second #btn-lang click reverts cleanly back to English');
 
     // 7. Verify zero CSP violations, zero page errors, zero console errors
     const violations = await evalJS(`window.__cspViolations || []`);

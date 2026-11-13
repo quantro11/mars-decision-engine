@@ -47,6 +47,7 @@
         <option value="">Go to a region…</option>
       </select>
     </div>
+    <button id="btn-lang" class="btn-spec" type="button" aria-pressed="false" title="Switch interface to Turkish (Türkçe)">TR</button>
     <button id="btn-theme" class="btn-spec" type="button" aria-pressed="false" title="Toggle high-contrast light/dark theme">Light theme</button>
     <button id="btn-export" class="btn-spec" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="brief-modal" title="Export the current analysis as a brief (JSON / printable)">Export brief</button>
     <button id="btn-about" class="btn-spec" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">Method</button>
@@ -312,6 +313,12 @@
       <li><b>Ice coverage.</b> SWIM maps ±60° latitude consistency only (datasets agree vs. concentration/yield); outside ±60°, ice is unknown and scored zero.</li>
       <li><b>Not modelled.</b> Local topographic horizon shadowing, active array-cleaning cycles, and propellant boil-off.</li>
     </ul>
+
+    <h3>8 · Validation benchmark &amp; terrestrial dual-use</h3>
+    <ul>
+      <li><b>Orbital benchmark (9 landers + 39 HLS-2015 zones).</b> Against 200 random-longitude draws per ±5° latitude band, the 9 historical Mars landers rank at the <b>90th percentile</b> (<code>p &lt; 0.005</code>, weighted sum; <b>89th</b> geometric mean) and all 39 NASA HLS-2015 Exploration Zones rank at the <b>71st percentile</b> (<code>p &lt; 0.005</code>, both sum and geometric mean).</li>
+      <li><b>Earth GIS &amp; disaster dual-use.</b> The same constraint-veto MCDA kernel, antimeridian-aware A* slope router, and solar-battery attenuation engine apply directly to Earth emergency base siting, search-and-rescue rover routing, and post-disaster microgrid sizing when fed terrestrial DEM/DSM rasters; standard GeoJSON export connects directly to QGIS and Leaflet.</li>
+    </ul>
   </div>
 </div>
 
@@ -324,6 +331,7 @@
       </div>
       <div class="brief-actions">
         <button id="btn-dl-json" class="btn-spec">Download JSON</button>
+        <button id="btn-dl-geojson" class="btn-spec">Download GeoJSON</button>
         <button id="btn-print-brief" class="btn-spec">Print / PDF</button>
         <button class="modal-close" id="brief-close" aria-label="Close">Close</button>
       </div>
@@ -345,6 +353,7 @@
 <script src="ui/markers.js"></script>
 <script src="ui/overlays.js"></script>
 <script src="ui/layers.js"></script>
+<script src="ui/i18n.js"></script>
 <script src="ui/panels.js"></script>
 <script src="ui/map2d.js"></script>
 <script src="ui/habitability.js"></script>
