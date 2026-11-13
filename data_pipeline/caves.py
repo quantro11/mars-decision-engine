@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(HERE, "raw")
 WEB = os.path.join(HERE, "..", "web")
 LAYERS = os.path.join(WEB, "layers")
-W, H, R = 2048, 1024, 3389.5
+R = 3389.5
 KM_PER_LEVEL = 4
 
 
@@ -54,7 +54,7 @@ def load_catalog():
     return out
 
 
-def distance_grid(caves):
+def distance_grid(caves, W, H):
     lat = np.radians(90 - (np.arange(H) + 0.5) * 180 / H)[:, None]
     lon = np.radians(-180 + (np.arange(W) + 0.5) * 360 / W)[None, :]
     best = np.full((H, W), np.inf, np.float32)
@@ -71,7 +71,9 @@ def main():
     with open(os.path.join(WEB, "caves.js"), "w", encoding="utf-8") as f:
         f.write("// Mars Global Cave Candidate Catalog v1 (Cushing 2017, USGS/PDS). Candidates, not confirmed caves.\n")
         f.write("// [lat, lonE, type, diameter_m]\nwindow.CAVES = " + json.dumps([[round(a, 4), round(b, 4), t, d] for a, b, t, d in caves]) + ";\n")
-    d = distance_grid(caves)
+    meta0 = json.load(open(os.path.join(LAYERS, "meta.json"), encoding="utf-8"))
+    W, H = meta0["width"], meta0["height"]
+    d = distance_grid(caves, W, H)
     enc = np.clip(np.round(d / KM_PER_LEVEL), 0, 255).astype(np.uint8)
     im = Image.fromarray(enc, mode="L"); im.save(os.path.join(LAYERS, "cave.png"), optimize=True)
     buf = io.BytesIO(); im.save(buf, format="PNG", optimize=True)

@@ -78,7 +78,7 @@
   const F = {
     // Lower is better: thick atmosphere for parachutes / retro-propulsion margin.
     elev(h_m) { return ramp(h_m, -2000, 2000); },
-    // 90th-percentile slope inside the ~10 km cell.
+    // 90th-percentile slope inside the ~5 km cell (computed at 2.3 km baseline).
     slope(deg) { return ramp(deg, 5, 15); },
     // SWIM ice consistency -1..1 -> 0..1. null = outside SWIM coverage (|lat| > 60).
     ice(c) { return c === null ? 0 : Math.max(0, Math.min(1, (c + 1) / 2)); },

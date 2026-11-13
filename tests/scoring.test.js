@@ -105,8 +105,9 @@ assert.strictEqual(res2.freezeSol, null, 'fission-powered base stays warm');
 const sim = T.simulate({ ...cold, consumption: 100, sols: 120 });
 assert.ok(sim.rows[100].dustLoss < sim.rows[10].dustLoss, 'dust accumulates even without a storm');
 
-// --- Interplanetary Survival Guide: Emergency Safe Havens on traverse
-assert.ok(Array.isArray(safe.stats.safeHavens), 'safe havens list returned');
+// --- Candidate rest stops on traverse (terrain only)
+assert.ok(Array.isArray(safe.stats.safeHavens), 'rest-stop list returned');
+assert.ok(safe.stats.safeHavens.every(h => h.km >= 200), 'no rest stop at the start point');
 
 // --- SPE: one attenuation law for atmosphere, regolith and basalt (design-basis event, labelled as assumption)
 const speLow = S.calcSPE(-6000, 0), speHigh = S.calcSPE(1500, 0);

@@ -1,4 +1,4 @@
-// Multi-hazard A* path planning on the 2048x1024 grid (8-connected, longitude wraps).
+// Multi-hazard A* path planning on the layer grid (4096x2048 at present) (8-connected, longitude wraps).
 // Accounts for MOLA 90th-pct slope, sub-cell terrain roughness (sigma), and TES low-TI dust traps.
 // cost(a->b) = distance(a,b) * (1 + k * (slope_b + roughPenalty_b + dustPenalty_b)) ; slope_b > maxSlope => impassable
 (function (global) {
@@ -36,7 +36,8 @@
     for (let y = 0; y < H; y++) kmCol[y] = Math.max(0.05, (2 * Math.PI * MARS_R / W) * Math.cos(L.latOfRow(y) * Math.PI / 180));
 
     // search window: symmetric bounding box with margin (wraps in x), allocated at window size
-    const margin = opts.marginPx ?? 160;
+    const margin = opts.marginPx ?? Math.round(W * 0.078);                       // ~28 deg of longitude, scales with grid width
+    const maxExpand = Math.max(2e5, Math.round(1.5e6 * (W * H) / 2097152));      // expansion budget scales with cell count
     let dxBox = Math.abs(gx - sx); const wrap = dxBox > W / 2; if (wrap) dxBox = W - dxBox;
     const y0 = Math.max(0, Math.min(sy, gy) - margin), y1 = Math.min(H - 1, Math.max(sy, gy) + margin);
     const subH = y1 - y0 + 1;
@@ -66,7 +67,7 @@
       if (closed[loc]) continue;
       closed[loc] = 1; expanded++;
       if (loc === goalLoc) break;
-      if (expanded > 1.5e6) return { ok: false, reason: 'search limit' };
+      if (expanded > maxExpand) return { ok: false, reason: 'search limit' };
       const ly = (loc / subW) | 0, ox = loc - ly * subW;
       for (const [dx, dy] of N) {
         const nly = ly + dy; if (nly < 0 || nly >= subH) continue;
@@ -117,10 +118,11 @@
       profile.push({ km, elev: L.meta.elev.offset + L.elev[n] * L.meta.elev.scale, slope: s, rough: r, ti });
     }
 
-    // Emergency Safe Havens / Natural Shelter Camps along traverse (Interplanetary Survival Guide)
+    // Candidate rest stops along the traverse: flat (<= 4 deg), smooth (sigma <= 35 m), firm (TI >= 160) cells at >= 200 km spacing.
+    // Terrain suitability only - no shelter from radiation or dust is implied.
     // Identifies low-slope, smooth-bearing plains suitable for emergency dust-storm / radiation encampment
     const safeHavens = [];
-    let lastHavenKm = -250;
+    let lastHavenKm = 0;                       // first stop at least 200 km from the start
     for (let i = 0; i < profile.length; i++) {
       const q = profile[i];
       if (q.km - lastHavenKm >= 200 && q.slope <= 4.0 && q.rough <= 35 && (q.ti === null || q.ti >= 160)) {
@@ -128,7 +130,7 @@
           km: Math.round(q.km),
           elev: Math.round(q.elev),
           slope: q.slope.toFixed(1),
-          name: `Haven #${safeHavens.length + 1}`,
+          name: `Stop #${safeHavens.length + 1}`,
           type: 'Smooth Basin / Natural Shelter'
         });
         lastHavenKm = q.km;

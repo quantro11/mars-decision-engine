@@ -43,6 +43,7 @@ pip install numpy pillow tifffile imagecodecs
 python preprocess.py                                      # -> web/layers_data.js + web/layers/*.png + meta.json
 python download_mola16.py                                 # 16-bit MOLA, every 5th row via HTTP range (~425 MB of 2.1 GB)
 python mola16.py                                          # rebuild elev / slope / rough from 16-bit data
+python build_5km.py                                       # shipped build: full 4096x2048 layer set (16-bit MOLA, SWIM, TES, caves)
 ```
 
 ## Automated Unit Tests & Validation
@@ -55,7 +56,7 @@ python tests/test_pipeline.py  # data pipeline unit checks
 node tools/validate.js         # validation against real landers + HLS-2015 zones -> docs/validation.md
 ```
 
-**Validation result:** the nine successful Mars landers rank in the **89th percentile** of their own latitude band under Landing safety (random: 50th, p < 0.005; partly circular, see notes), and all 39 NASA HLS-2015 candidate sites rank in the **72nd percentile** under the Balanced preset (random: 48th, p < 0.005). Both hold under geometric-mean scoring. See [`docs/validation.md`](docs/validation.md).
+**Validation result:** the nine successful Mars landers rank in the **90th percentile** of their own latitude band under Landing safety (random: 50th, p < 0.005; partly circular, see notes), and all 39 NASA HLS-2015 candidate sites rank in the **71st percentile** under the Balanced preset (random: 49th, p < 0.005). Both hold under geometric-mean scoring. See [`docs/validation.md`](docs/validation.md).
 
 Verifies suitability transfer functions, preset & geometric-mean aggregation behaviour, NASA HLS-2015 hard constraint vetoes, >= 75%-valid candidate extraction, Monte Carlo weight sensitivity, windowed multi-hazard A* obstacle & dust-trap avoidance, candidate rest stops, Opportunity-calibrated dust-storm attenuation, waste-heat/deficit thermal balance, MSL-RAD GCR & unified design-basis SPE shielding, seasonal $L_s$ insolation, SWIM ice-access classification, regional terrain class, XSS-escaped Mission Brief & Live API rendering, and CSP/accessibility integrity.
 
@@ -63,7 +64,7 @@ Verifies suitability transfer functions, preset & geometric-mean aggregation beh
 
 ```
 .github/         workflows/test.yml                 CI test runner (Node 20 + Python 3.12)
-data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py, caves.py
+data_pipeline/   download.ps1, download_tes.py, download_viking.py, preprocess.py, download_mola16.py, mola16.py, caves.py, build_5km.py
 web/             index.html, style.css, app.js, globe3d.js, live_api.js, scoring.js, astar.js, storm.js, regions.js, layers/meta.js, layers_data.js, caves.js
 web/ui/          format.js, charts.js, markers.js, overlays.js, habitability.js, brief.js   Modular UI helpers
 tools/           validate.js, hls2015_ez_sites.json   validation report generator + the 39 HLS-2015 sites
@@ -73,7 +74,7 @@ docs/            methodology.md, validation.md, pitch.md, guide/   Mathematical 
 
 ## Primary Data Sources & Citations
 
-* **MGS MOLA Elevation** — 16-bit MOLA MEGDR mosaic (USGS Astrogeology `Mars_MGS_MOLA_DEM_mosaic_global_463m`, int16 metres), sampled to 9216×4608 (~2.3 km/px) with HTTP range requests, used for elevation, 90th-percentile slope and sub-cell roughness; delivered at 2048×1024 (~10.3 km/px). Matches published landing-site elevations within 10 m.
+* **MGS MOLA Elevation** — 16-bit MOLA MEGDR mosaic (USGS Astrogeology `Mars_MGS_MOLA_DEM_mosaic_global_463m`, int16 metres), sampled to 9216×4608 (~2.3 km/px) with HTTP range requests, used for elevation, 90th-percentile slope and sub-cell roughness; delivered at 4096×2048 (~5.2 km/px). Matches published landing-site elevations within 10 m.
 * **NASA Viking Orbiter MDIM 2.1 Optical Mosaic** — Global colorized optical mosaic (`Mars_Viking_MDIM21_ClrMosaic_global_232m`, NASA Mars Trek / USGS), 4096×2048 px.
 * **SWIM 2.0 Subsurface Water Ice** — Subsurface Water Ice Mapping composite consistency maps at 0–1 m, 1–5 m, and >5 m depth (Planetary Science Institute / NASA, `swim.psi.edu`), 3 km/px, ±60° latitude.
 * **MGS TES Thermal Inertia & Dust Abundance** — Mars Global Surveyor Thermal Emission Spectrometer (Christensen et al.; Bandfield 2002) via ASU JMARS WMS (`TES_Thermal_Inertia_numeric`, `TES_Dust_numeric`).

@@ -1,5 +1,5 @@
 // Hardware-accelerated WebGL 3D Planetary Globe Engine for Mars Base Decision Engine.
-// Uses real NASA MGS MOLA DEM (2048x1024) for 3D vertex displacement & per-pixel normal mapping,
+// Uses real NASA MGS MOLA DEM (grid size from layers/meta.js, currently 4096x2048) for 3D vertex displacement & per-pixel normal mapping,
 // composites live decision overlays (Score, SWIM 2.0 Ice, Slope, Elev, TES TI, Dust),
 // and provides exact 3D-to-2D projection & raycast unprojection for full interactive parity.
 (function (global) {
@@ -46,6 +46,7 @@
     uniform sampler2D u_baseTex;
     uniform sampler2D u_elevTex;
     uniform sampler2D u_ovTex;
+    uniform vec2 u_texel;
     uniform float u_opacity;
     uniform float u_showOv;
     uniform float u_relief;
@@ -62,7 +63,7 @@
       vec3 T = normalize(vec3(cos(lon), 0.0, -sin(lon)));
       vec3 B = normalize(cross(N, T));
 
-      vec2 texel = vec2(1.0 / 2048.0, 1.0 / 1024.0);
+      vec2 texel = u_texel;
       float hL = texture2D(u_elevTex, v_uv - vec2(texel.x, 0.0)).r;
       float hR = texture2D(u_elevTex, v_uv + vec2(texel.x, 0.0)).r;
       float hU = texture2D(u_elevTex, v_uv - vec2(0.0, texel.y)).r;
@@ -360,6 +361,7 @@
           baseTex: gl.getUniformLocation(progGlobe, 'u_baseTex'),
           elevTex: gl.getUniformLocation(progGlobe, 'u_elevTex'),
           ovTex: gl.getUniformLocation(progGlobe, 'u_ovTex'),
+          texel: gl.getUniformLocation(progGlobe, 'u_texel'),
           mvp: gl.getUniformLocation(progGlobe, 'u_mvp'),
           relief: gl.getUniformLocation(progGlobe, 'u_relief'),
           opacity: gl.getUniformLocation(progGlobe, 'u_opacity'),
@@ -390,8 +392,8 @@
       sunLight: true,
       sunAngle: 0.45,
       elevData: null,
-      W: 2048,
-      H: 1024,
+      W: 4096,
+      H: 2048,
       onContextLost: null,
       onContextRestored: null,
     };
@@ -671,6 +673,7 @@
       const mvp = buildMVP();
       gl.uniformMatrix4fv(res.uGlobe.mvp, false, mvp);
       gl.uniform1f(res.uGlobe.relief, getReliefScale());
+      gl.uniform2f(res.uGlobe.texel, 1 / state.W, 1 / state.H);
       gl.uniform1f(res.uGlobe.opacity, opts.opacity ?? 0.7);
       gl.uniform1f(res.uGlobe.showOv, opts.showOverlay ? 1.0 : 0.0);
       gl.uniform1f(res.uGlobe.lighting, state.sunLight ? 1.0 : 0.0);

@@ -4,8 +4,8 @@ All numbers shown in the app can be traced to this document.
 
 ## 1. Grid
 
-Simple cylindrical, 2048 × 1024 px, lon −180…180 °E, lat 90…−90 (IAU-2000 volumetric mean radius $R = 3389.5\text{ km}$). One pixel = 0.1758° ≈ 10.4 km at the equator.
-Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m vertical resolution), sampled to 9216 × 4608 (≈ 2.3 km/px) and aggregated into the output grid (each output cell = 4.5 × 4.5 source px, evaluated as 81 equally weighted samples).
+Simple cylindrical, 4096 × 2048 px, lon −180…180 °E, lat 90…−90 (IAU-2000 volumetric mean radius $R = 3389.5\text{ km}$). One pixel = 0.0879° ≈ 5.2 km at the equator.
+Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m vertical resolution), sampled to 9216 × 4608 (≈ 2.3 km/px) and aggregated into the output grid (each output cell = 2.25 × 2.25 source px, evaluated as 81 equally weighted samples).
 
 ## 2. Layers
 
@@ -15,8 +15,8 @@ Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m v
 | Slope `s` (°) | derived | `atan(|∇h|)` with metre-per-pixel scaled by `cos(lat)`; computed on the 16-bit 2.3 km grid; output = 90th percentile of the 81 samples in each cell (a pessimistic, safety-oriented statistic) |
 | Roughness `r` (m) | derived | standard deviation of the 81 16-bit elevation samples in each cell |
 | Ice `c` (−1…1) | SWIM 2.0 composite ice consistency (0–1 m, 1–5 m, > 5 m) | box-resampled from 7200 × 2400 (3 km/px); rows outside ±60° = no data |
-| Thermal inertia `I` (tiu) | MGS TES (Christensen et al.; Putzig/Mellon) via ASU JMARS WMS | 2048 × 1024 numeric VICAR (`J m⁻² K⁻¹ s⁻½`) |
-| Dust abundance `d` (0…1) | MGS TES surface dust fraction (Bandfield 2002) via ASU JMARS WMS | 2048 × 1024 numeric VICAR |
+| Thermal inertia `I` (tiu) | MGS TES (Christensen et al.; Putzig/Mellon) via ASU JMARS WMS | 2048 × 1024 numeric VICAR (`J m⁻² K⁻¹ s⁻½`), upsampled 2× to the 4096 grid (effective ≈ 10 km) |
+| Dust abundance `d` (0…1) | MGS TES surface dust fraction (Bandfield 2002) via ASU JMARS WMS | 2048 × 1024 numeric VICAR, upsampled 2× (effective ≈ 10 km) |
 | Optical basemap | NASA Viking Orbiter MDIM 2.1 global mosaic | 4096 × 2048 colour mosaic + MOLA directional hillshade |
 | Latitude | — | row centre |
 
@@ -29,7 +29,7 @@ Elevation, slope and roughness come from the **16-bit** MOLA MEGDR mosaic (1 m v
 | Elevation | `ramp(h, −2000, 2000)` | Entry-descent-landing needs atmosphere: NASA HLS workshop requires ≤ +2 km; every successful lander sat below −1 km except Viking 2 (−4.5 km lower still) |
 | Slope | `ramp(s, 5, 15)` | ≤ 5° landing ellipse, ≤ 15° rover traverse (MER/MSL planning limits; Perseverance static tip-over ≈ 45°, operational ≈ 30°, planning ≤ 15–20°) |
 | Ice | `(c + 1) / 2`, 0 if unknown | SWIM consistency: +1 = all datasets agree ice is present |
-| Roughness | `ramp(r, 30, 250)` | elevation σ inside a 10 km cell: < 30 m plains, > 250 m heavily cratered / mountainous |
+| Roughness | `ramp(r, 30, 250)` | elevation σ inside a 5 km cell: < 30 m plains, > 250 m heavily cratered / mountainous. Thresholds were set for 10 km cells; at 5 km, σ is ≈ 0.6× smaller (median 25 → 14 m), so the criterion is somewhat more lenient than before |
 | Thermal inertia | `<= 0.3*I/100` below 100; rises to 1 at 150; 1 for 150-400; `ramp(I, 400, 700)` above; 0.5 if no data | I < 100: thick fine dust - low bearing strength, panel dust loading, EDL radar ambiguity (MER site-selection rule: I > 100-150). 150-400: sand / duricrust, diggable. > 500: rock / bedrock - hazard, hard to excavate |
 | Latitude | `(cos φ − cos 50°) / (1 − cos 50°)`, clipped to 0…1 | mean annual insolation ∝ cos φ; NASA HLS limit ±50° (thermal + solar) |
 | Radiation (GCR) | `ramp(D_GCR(h), 200, 290)` | annual surface cosmic-ray dose from atmospheric column shielding (1 at ≤ 200 mSv/yr on Hellas floor → 0 at ≥ 290 mSv/yr above +2 km) |
@@ -55,15 +55,15 @@ Radiation is derived from elevation (§9), so "low ground" is rewarded twice for
 
 ## 5. Candidate extraction & Monte Carlo sensitivity
 
-Mean score per 2° × 2° block (11 × 11 px). A block is only eligible if **≥ 75 % of its cells pass the hard constraints**, so a high mean cannot hide vetoed ground.
+Mean score per 2° × 2° block (23 × 23 px). A block is only eligible if **≥ 75 % of its cells pass the hard constraints**, so a high mean cannot hide vetoed ground.
 Greedy non-maximum suppression with 800 km minimum separation; the five best blocks are named after the nearest entry of a 46-region gazetteer.
 Each card shows the block mean, the **share of cells whose 90th-percentile slope is ≤ 5°** (the landing limit), and the ice-access class (§8).
 
 For robustness testing (`sensitivity`), every weight is perturbed independently by a uniform factor in `[1 − spread, 1 + spread]` (default ±20%) across 30 deterministic PRNG runs (`mulberry32`), reporting the fraction of runs where each Top-5 candidate remains in the Top-5 (within 400 km).
 
-## 6. Multi-hazard route planner (A*) & Emergency Safe Havens
+## 6. Multi-hazard route planner (A*) & rest stops
 
-A* on the 2048 × 1024 grid, 8-connected, longitude wrapping, search window = bounding box ± 160 px.
+A* on the 4096 × 2048 grid, 8-connected, longitude wrapping, search window = bounding box ± 320 px (≈ 28°, scales with grid width); expansion budget 6 × 10⁶ cells.
 Edge cost integrates slope, sub-cell roughness ($r > 50\text{ m}$), and TES low-TI fine-dust sinkage ($I < 100\text{ tiu}$, e.g. Spirit-like Troy dust traps):
 
 ```
@@ -74,8 +74,10 @@ where `k` = 0.3 default, and `s_b > s_max` (15° default) is strictly impassable
 Heuristic = haversine distance (admissible, Mars radius 3389.5 km).
 Reported: distance, max / mean slope, km on > 10° terrain, km across low-TI dust (< 100 tiu), mean sub-cell roughness (σ), travel time at user-set speed (default 20 km/sol — representing a crewed pressurised rover), and elevation profile.
 
-**Emergency Safe Havens along Traverse:**
-For crew survival during multi-sol traverses, the pathfinder identifies natural encampment shelters where slope $\le 4.0^\circ$, sub-cell roughness $\le 35\text{ m}$, and firm bearing capacity ($I \ge 160\text{ tiu}$) provide safe parking and topography protection against localized dust winds.
+**Candidate rest stops along the traverse:**
+Every ≥ 200 km along the safe route (never at the start point), the first cell with slope ≤ 4°, sub-cell roughness ≤ 35 m and firm ground (TES I ≥ 160 tiu)
+is marked as a candidate rest stop: terrain that is flat and firm enough to park a pressurised rover. This is a terrain statement only — MOLA and TES cannot
+tell whether a site offers any shelter from radiation or dust, so none is implied.
 
 ## 7. Dust-storm, habitat heating & energy model
 
@@ -149,15 +151,15 @@ Certifying a landing ellipse always requires HiRISE / CTX imagery; every candida
 
 See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.js`; runs in CI).
 
-* **Test 1 — landers:** the nine successful landers rank in the **89th percentile** of their latitude band under Landing safety (random = 50, p < 0.005).
+* **Test 1 — landers:** the nine successful landers rank in the **90th percentile** of their latitude band under Landing safety (random = 50, p < 0.005).
   Partly circular: those sites were chosen with MOLA slope / elevation, so this shows the score reproduces engineering practice.
-* **Test 2 — NASA HLS-2015 candidate sites (all 39 USGS-mosaicked sites):** **72nd percentile** under Balanced (random = 48, p < 0.005). The workshop
+* **Test 2 — NASA HLS-2015 candidate sites (all 39 USGS-mosaicked sites):** **71st percentile** under Balanced (random = 49, p < 0.005). The workshop
   weighed science, resources and engineering independently of this formula. An earlier version used only 14 hand-picked gazetteer zones (54th percentile).
-* Both results hold under the geometric-mean aggregation (87 and 71).
+* Both results hold under the geometric-mean aggregation (89 and 71).
 
 ## 13. Known limitations & Operational Mitigations
 
-1. 10 km/px cells cannot see boulders or small craters; the engine only reports a regional terrain class and links each candidate to HiRISE/CTX in NASA Mars Trek.
+1. 5 km/px cells (TES layers ≈ 10 km) cannot see boulders or small craters; the engine only reports a regional terrain class and links each candidate to HiRISE/CTX in NASA Mars Trek.
 2. Slopes are computed at 2.3 km baselines (16-bit MOLA); slopes over shorter baselines (a lander footprint) are higher. Use the HiRISE/CTX link for ellipse-scale checks.
 3. TES thermal inertia is a ~3 km binned product; dust abundance is informational only (28 % gaps).
 4. SWIM coverage ends at ±60°.

@@ -30,6 +30,14 @@ class TestDataPipeline(unittest.TestCase):
         self.assertEqual(mola16.ELEV_MAX_M, 21230.0)
         self.assertEqual((mola16.OUT_W, mola16.OUT_H), (2048, 1024))
 
+    def test_build_5km_matches_shipped_meta(self):
+        import json
+        meta = json.load(open(os.path.join("web", "layers", "meta.json"), encoding="utf-8"))
+        src = open(os.path.join("data_pipeline", "build_5km.py"), encoding="utf-8").read()
+        self.assertIn("OUT_W, OUT_H = %d, %d" % (meta["width"], meta["height"]), src)
+        self.assertAlmostEqual(meta["deg_per_px"], 360 / meta["width"])
+        self.assertIn("cave", meta)
+
     def test_mola16_slope_and_reduce_with_numpy(self):
         try:
             import numpy as np

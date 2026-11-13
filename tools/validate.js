@@ -132,7 +132,7 @@ ${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
 * Earlier versions used only the ${REGIONS.filter((r) => r.ez && Math.abs(r.lat) <= 50).length} zones present in the app's gazetteer, a hand-picked subset biased toward rough terrain;
   that subset scores ${mean(REGIONS.filter((r) => r.ez && Math.abs(r.lat) <= 50).map((r) => bandPercentile(scoreBal, r.lat, r.lon, 5))).toFixed(0)} on average. The full list is the less biased sample.
 * Site positions are the centres of the USGS CTX mosaic footprints, an approximation of each ~100 km-radius Exploration Zone.
-* Limitations: 9 landers and ${EZ.length} zones are small samples; site coordinates are point locations evaluated on a 10 km grid.
+* Limitations: 9 landers and ${EZ.length} zones are small samples; site coordinates are point locations evaluated on a ~5 km grid.
 `;
 const targetPath = path.join(ROOT, 'docs/validation.md');
 const prevMd = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8').replace(/\r\n/g, '\n') : '';

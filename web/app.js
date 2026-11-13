@@ -67,12 +67,12 @@
       };
       im.onerror = () => {
         if (!im.src.includes('layers/')) {
-          im.src = 'layers/' + key + '.png';
+          im.src = 'layers/' + key + (key === 'base' ? '.jpg' : '.png');
         } else {
           rej(new Error('Failed to load layer ' + key));
         }
       };
-      im.src = (window.LAYER_DATA && window.LAYER_DATA[key]) ? window.LAYER_DATA[key] : ('layers/' + key + '.png');
+      im.src = (window.LAYER_DATA && window.LAYER_DATA[key]) ? window.LAYER_DATA[key] : ('layers/' + key + (key === 'base' ? '.jpg' : '.png'));
     });
     return decodeInflight[key];
   }
