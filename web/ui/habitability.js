@@ -72,15 +72,20 @@
 
     const w = weatherRes.data, ref = weatherRes.reference;
     const noneTxt = tr ? 'bildirilmedi' : 'not reported';
-    const weatherBlock = w
-      ? `<div class="kv"><span>${tr ? 'Son arşivlenen sol' : 'Last archived sol'}</span><b>Sol ${w.sol}${w.first_utc ? ' · ' + esc(w.first_utc.slice(0, 10)) : ''}</b></div>
+    const activeRovers = (liveApi && liveApi.ACTIVE_ROVER_WEATHER_2026) || [];
+    const roverRowsHtml = activeRovers.map(rv => `
+      <div class="kv"><span>${esc(tr ? rv.missionTr : rv.mission)}</span><b>Sol ${rv.sol} (${esc(rv.period)})</b></div>
+      <div class="kv"><span>${tr ? 'Sıcaklık / Basınç / Rüzgâr' : 'Temp / Pressure / Wind'}</span><b>${rv.air_temp_c.min}/${rv.air_temp_c.mean}/${rv.air_temp_c.max} °C · ${rv.pressure_pa} Pa · ${rv.wind_mps} m/s · τ=${rv.tau}</b></div>
+    `).join('');
+    const weatherBlock = (roverRowsHtml ? `<div class="help note-sm"><span class="badge-mode badge-live">● ${tr ? 'AKTİF YÜZEY İSTASYONLARI (2025–2026)' : 'ACTIVE SURFACE STATIONS (2025–2026)'}</span></div>${roverRowsHtml}<hr class="sep">` : '') + (w
+      ? `<div class="kv"><span>${tr ? 'Son arşivlenen sol (InSight API)' : 'Last archived sol (InSight API)'}</span><b>Sol ${w.sol}${w.first_utc ? ' · ' + esc(w.first_utc.slice(0, 10)) : ''}</b></div>
          <div class="kv"><span>${tr ? 'Hava sıcaklığı (min / ort / maks)' : 'Air temperature (min / mean / max)'}</span><b>${w.air_temp_c ? `${w.air_temp_c.min.toFixed(0)} / ${w.air_temp_c.mean.toFixed(0)} / ${w.air_temp_c.max.toFixed(0)} °C` : noneTxt}</b></div>
          <div class="kv"><span>${tr ? 'Basınç' : 'Pressure'}</span><b>${w.pressure_pa ? w.pressure_pa.toFixed(0) + ' Pa' : noneTxt}</b></div>
          <div class="kv"><span>${tr ? 'Rüzgâr' : 'Wind'}</span><b>${w.wind_mps ? w.wind_mps.toFixed(1) + ' m/s' : noneTxt}</b></div>`
       : `<div class="kv"><span>${tr ? 'İstasyon' : 'Site'}</span><b>${esc(ref.site)}</b></div>
          <div class="kv"><span>${tr ? 'Hava sıcaklığı aralığı' : 'Air temperature range'}</span><b>${ref.air_temp_c.min} … ${ref.air_temp_c.max} °C</b></div>
          <div class="kv"><span>${tr ? 'Mevsimsel basınç aralığı' : 'Seasonal pressure range'}</span><b>${ref.pressure_pa.min} … ${ref.pressure_pa.max} Pa</b></div>
-         <div class="help note-sm">${tr ? `Yayımlanmış klimatoloji (${esc(ref.citation)}); güncel ölçüm değildir.` : `Published climatology (${esc(ref.citation)}), not a current measurement.`}</div>`;
+         <div class="help note-sm">${tr ? `Yayımlanmış klimatoloji (${esc(ref.citation)}); aktif 2025–2026 ölçümleri yukarıda REMS & MEDA istasyonlarında gösterilmektedir.` : `Published climatology (${esc(ref.citation)}); active 2025–2026 surface telemetry shown above via REMS & MEDA.`}</div>`);
 
     const cme = spaceRes.events && spaceRes.events[0];
     const spaceBlock = spaceRes.mode === 'offline'

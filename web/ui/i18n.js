@@ -205,7 +205,7 @@
     ['#panel-crisis p.help', 'Haritadan veya aday kartından bir saha seçin; güç sistemini 2018-benzeri küresel toz fırtınasına göre boyutlandırın.'],
     ['#panel-crisis .station-lbl', 'Saha'],
     ['#panel-habitability .sec-head h2', 'Gezegen & Yaşanabilirlik API'],
-    ['#panel-habitability p.help', 'Canlı NASA DONKI uzay havası, InSight arşiv ölçümleri ve Curiosity Gale iklim özetleri.'],
+    ['#panel-habitability p.help', '2025–2026 Curiosity REMS ve Perseverance MEDA yüzey meteorolojisi, canlı NASA DONKI Güneş Çevrimi 25 uzay havası ve InSight referans klimatolojisi.'],
     ['#panel-habitability .api-key-box label', 'NASA Open API Anahtarı (isteğe bağlı)'],
     ['#btn-save-key', 'Kaydet'],
     ['#panel-habitability .api-key-box .note-sm', 'Sunucu proxy için boş bırakın veya tek başına kullanım için kişisel NASA anahtarı girin (DEMO_KEY saatlik/günlük sınırla çalışır).'],

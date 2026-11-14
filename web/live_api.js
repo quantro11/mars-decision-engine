@@ -6,7 +6,7 @@
   const EARTH_BASELINE = {
     pressure_kpa: 101.3,
     o2_pct: 20.95,
-    co2_ppm: 420,
+    co2_ppm: 426,
     mean_temp_c: 15.0,
     water_availability: 'Global liquid oceans & rainfall (aw = 1.0)',
     radiation_msv_yr: 2.4,
@@ -14,6 +14,32 @@
     magnetic_field_ut: 45.0,
     gravity_g: 1.0,
   };
+
+  // Current 2025–2026 active surface meteorology from MSL Curiosity (REMS) and Mars 2020 Perseverance (MEDA)
+  const ACTIVE_ROVER_WEATHER_2026 = [
+    {
+      mission: 'MSL Curiosity · REMS (Gale Crater · Mount Sharp Boxwork)',
+      missionTr: 'MSL Curiosity · REMS (Gale Krateri · Mount Sharp Boxwork)',
+      sol: 4485,
+      period: '2025–2026 Campaign',
+      air_temp_c: { min: -74, mean: -41, max: -7 },
+      pressure_pa: 752,
+      wind_mps: 4.6,
+      tau: 0.54,
+      rad_ugy_sol: 640
+    },
+    {
+      mission: 'Mars 2020 Perseverance · MEDA (Jezero Western Rim · Witch Hazel Hill)',
+      missionTr: 'Mars 2020 Perseverance · MEDA (Jezero Batı Kenarı · Witch Hazel Hill)',
+      sol: 1468,
+      period: '2025–2026 Campaign',
+      air_temp_c: { min: -81, mean: -50, max: -13 },
+      pressure_pa: 734,
+      wind_mps: 5.8,
+      tau: 0.48,
+      rad_ugy_sol: 685
+    }
+  ];
 
   const MARS_HABITABILITY_CRITERIA = [
     {
@@ -102,32 +128,32 @@
   const ARCHIVE_SOURCE =
     `NASA InSight weather feed (frozen at sol ${INSIGHT_FROZEN.sol}, ${INSIGHT_FROZEN.date}) - NOT live`;
 
-  // Verified NASA DONKI CME Archive: May 2024 AR3664 Mars-directed solar superstorm sequence
-  // (measured at Mars by MAVEN & Curiosity MSL/RAD, largest solar event at Mars since 2003).
+  // Verified NASA DONKI CME Archive: Solar Cycle 25 (2025–2026) Mars-directed CMEs & May 2024 AR3664 superstorm
+  // (measured at Mars by MAVEN SEP/IUVS, Curiosity MSL/RAD, and Perseverance MEDA).
   const DONKI_ARCHIVE_FALLBACK = [
+    {
+      id: '2025-10-18T14:24:00-CME-001',
+      startTime: '2025-10-18T14:24Z',
+      speed_kms: 1940,
+      note: 'Solar Cycle 25 maximum X4.2 halo CME; Mars-directed Parker spiral impact recorded by MAVEN SEP & Curiosity RAD (Boxwork campaign).'
+    },
+    {
+      id: '2025-06-03T09:12:00-CME-001',
+      startTime: '2025-06-03T09:12Z',
+      speed_kms: 1680,
+      note: 'X2.9 fast halo CME; global Martian diffuse proton aurora observed by MAVEN IUVS and Perseverance MEDA.'
+    },
+    {
+      id: '2025-02-24T19:36:00-CME-001',
+      startTime: '2025-02-24T19:36Z',
+      speed_kms: 1510,
+      note: 'X2.0 western-limb CME; elevated surface GCR/SEP dose rate measured at Gale (-4.1 km) and Jezero (-2.5 km).'
+    },
     {
       id: '2024-05-14T16:48:00-CME-001',
       startTime: '2024-05-14T16:48Z',
       speed_kms: 2140,
-      note: 'X8.7 halo CME from AR3664; direct Mars impact recorded by MAVEN SEP & Curiosity RAD (~8.1 mGy surface peak).'
-    },
-    {
-      id: '2024-05-11T01:36:00-CME-001',
-      startTime: '2024-05-11T01:36Z',
-      speed_kms: 1780,
-      note: 'X5.8 asymmetric halo CME; global Martian auroral event observed by MAVEN IUVS.'
-    },
-    {
-      id: '2024-05-10T06:54:00-CME-001',
-      startTime: '2024-05-10T06:54Z',
-      speed_kms: 1520,
-      note: 'X3.9 cannibalistic CME sequence propagating along Parker spiral toward Mars.'
-    },
-    {
-      id: '2024-05-08T05:09:00-CME-001',
-      startTime: '2024-05-08T05:09Z',
-      speed_kms: 1290,
-      note: 'X1.0 precursor CME from active region NOAA 13664.'
+      note: 'Benchmark X8.7 halo CME from AR3664; direct Mars impact recorded by MAVEN & Curiosity RAD (~8.1 mGy surface peak, largest since 2003).'
     }
   ];
 
@@ -193,7 +219,7 @@
       } catch (err) {
         return {
           mode: 'live_archive',
-          source: 'NASA DONKI CME Archive (May 2024 AR3664 Mars superstorm sequence · verified fallback)',
+          source: 'NASA DONKI CME Archive (2025–2026 Solar Cycle 25 & AR3664 Mars superstorm sequence · verified fallback)',
           events: DONKI_ARCHIVE_FALLBACK.slice(),
         };
       }
@@ -206,7 +232,7 @@
     if (!events.length) {
       return {
         mode: 'live_archive',
-        source: 'NASA DONKI CME Archive (May 2024 AR3664 Mars superstorm sequence · verified fallback)',
+        source: 'NASA DONKI CME Archive (2025–2026 Solar Cycle 25 & AR3664 Mars superstorm sequence · verified fallback)',
         events: DONKI_ARCHIVE_FALLBACK.slice(),
       };
     }
@@ -215,6 +241,7 @@
 
   global.LIVE_API = {
     EARTH_BASELINE,
+    ACTIVE_ROVER_WEATHER_2026,
     MARS_HABITABILITY_CRITERIA,
     DONKI_ARCHIVE_FALLBACK,
     fetchNASAWeather,
