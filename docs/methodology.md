@@ -64,15 +64,15 @@ For robustness testing (`sensitivity`), every weight is perturbed independently 
 ## 6. Multi-hazard route planner (A*) & rest stops
 
 A* on the 4096 × 2048 grid, 8-connected, longitude wrapping, search window = bounding box ± 320 px (≈ 28°, scales with grid width); expansion budget 6 × 10⁶ cells.
-Edge cost integrates slope, sub-cell roughness ($r > 50\text{ m}$), and TES low-TI fine-dust sinkage ($I < 100\text{ tiu}$, e.g. Spirit-like Troy dust traps):
+Edge cost integrates slope, anisotropic directional grade ($\Delta z / \Delta s$: uphill climb traction penalty, steep downhill braking $>10\%$, and cross-slope lateral roll), sub-cell roughness ($r > 50\text{ m}$), and TES low-TI fine-dust sinkage ($I < 100\text{ tiu}$, e.g. Spirit-like Troy dust traps):
 
 ```
-cost(a → b) = d · [ 1 + k · (s_b + max(0, (r_b − 50)/25) + 80 · max(0, 1 − I_b/100)) ]
+cost(a → b) = d · [ 1 + k · (s_b + P_grade(Δz/Δs, s_b) + max(0, (r_b − 50)/25) + 80 · max(0, 1 − I_b/100)) ]
 ```
 
 where `k` = 0.3 default, and `s_b > s_max` (15° default) is strictly impassable.
-Heuristic = haversine distance (admissible, Mars radius 3389.5 km).
-Reported: distance, max / mean slope, km on > 10° terrain, km across low-TI dust (< 100 tiu), mean sub-cell roughness (σ), travel time at user-set speed (default 20 km/sol — representing a crewed pressurised rover), and elevation profile.
+Heuristic = haversine distance (admissible, Mars radius 3389.5 km); direct comparison chord follows spherical great-circle `slerp` geodesics.
+Reported: distance, max / mean slope, total ascent/descent (`totalAscentM` / `totalDescentM`), max uphill grade, mean cross-slope, km on > 10° terrain, km across low-TI dust (< 100 tiu), mean sub-cell roughness (σ), travel time at user-set speed (default 20 km/sol — representing a crewed pressurised rover), and elevation profile.
 
 **Candidate rest stops along the traverse:**
 Every ≥ 200 km along the safe route (never at the start point), the first cell with slope ≤ 4°, sub-cell roughness ≤ 35 m and firm ground (TES I ≥ 160 tiu)
@@ -94,7 +94,7 @@ battery(t+1)     = clamp(battery(t) + E_solar + E_nuclear − consumption − he
 * `exp(−0.35 (τ − 0.5))`: empirical, fitted so τ ≈ 10.8 gives ≈ 3 % of clear-sky output (Opportunity, June 2018: ≈ 650 → ≈ 22 Wh/sol).
 * **Panel dust:** output decreases by 0.28 %/sol (order of the MER Opportunity average) and 3× that while τ is elevated, floor 35 %. Wind cleaning events are **not** modelled (conservative); a "dust cleaning" option keeps panels clean.
 * **Heating:** the heat loss is charged to the energy budget only beyond what the electrical load already dissipates. When generation plus battery cannot cover the loss, the interior relaxes toward the ambient mean in proportion to the heat deficit (1.5-sol time constant) and recovers the same way. "Below 0 °C" is reported.
-* `T_mean(φ, Ls)` comes from radiative balance with the same insolation model: `T = ((1 − A)·Q_eff / (ε σ))^¼`, A = 0.25 (TES global bolometric albedo), ε = 0.95, `Q_eff = ½ Q(φ, Ls) + ½ Q̄(φ)` (the annual-mean half stands in for seasonal thermal lag), floor 148 K (CO₂ frost). Gives ≈ −49 °C at the equator (REMS / InSight ground temperatures are in the −50s), −88 °C in Viking 2's northern winter, −58 °C in its summer. Day/night offsets (+28 / −36 °C) are typical diurnal amplitudes. Habitat UA = 0.09 kW/K is a design parameter, not a property of Mars.
+* `T_mean(φ, Ls, I, h, τ)` comes from radiative balance with the same insolation model: `T = ((1 − A)·Q_eff / (ε σ))^¼`, A = 0.25 (TES global bolometric albedo), ε = 0.95, `Q_eff = ½ Q(φ, Ls) + ½ Q̄(φ)` (the annual-mean half stands in for seasonal thermal lag), floor 148 K (CO₂ frost), coupled to local MGS TES thermal inertia `I` (damping diurnal amplitude over bedrock vs. loose dust), MOLA elevation `h` (atmospheric IR greenhouse offset), and dust-storm optical depth `τ` (which cools daytime peaks via solar extinction while warming nocturnal lows by up to +16 K via suspended-dust thermal IR back-radiation, matching Viking/Curiosity REMS observations). Habitat UA = 0.09 kW/K is a design parameter, not a property of Mars.
 * **Fission power:** 10 kWe is the *design target* of NASA's Kilopower / Fission Surface Power concept. The 2018 KRUSTY ground test demonstrated a ~1 kWe prototype; 10 kWe units have not flown.
 
 ## 8. Ice access (replaces an earlier "ISRU yield" estimate)
@@ -115,12 +115,12 @@ The criterion therefore has **weight 0 in every preset**; users can raise it to 
 ## 9. Atmospheric column & GCR surface radiation model
 
 ```
-Σ(h)          = 16.4 · exp(−h / 11100)                                        [g/cm²]
+Σ(h, Ls)      = 16.4 · f_CO2(Ls) · exp(−h / 11100)                            [g/cm²]
 Ω(θ)          = max(0.75, cos²(θ / 2) − 0.002 · θ_deg)                        [topographic sky-view factor]
-D_GCR(h, θ)   = 0.64 · exp(−(Σ(h) − 24.6) / 60) · 365.25 · Ω(θ)               [mSv/yr]
+D_GCR(h,θ,Ls) = 0.64 · exp(−(Σ(h, Ls) − 24.6) / 60) · 365.25 · Ω(θ)           [mSv/yr]
 ```
 
-* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4400\text{ m}$, $\Sigma \approx 24.4\text{ g/cm}^2 \Rightarrow 0.64\text{ mSv/day} \approx 234\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $0.64 \pm 0.12\text{ mSv/day}$), with local horizon sky-view geometric shielding $\Omega(\theta)$ reducing isotropic cosmic-ray flux next to sloped scarps and canyon walls.
+* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4400\text{ m}$, $\Sigma \approx 24.4\text{ g/cm}^2 \Rightarrow 0.64\text{ mSv/day} \approx 234\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $0.64 \pm 0.12\text{ mSv/day}$), with local horizon sky-view geometric shielding $\Omega(\theta)$ and the Viking/MSL REMS two-harmonic seasonal $\text{CO}_2$ polar cap condensation/sublimation cycle $f_{\text{CO}_2}(L_s)$ ($\pm 12\%$ global pressure modulation).
 * Because surface cosmic-ray protection answers a distinct crew life-support question beyond atmospheric EDL braking, `rad` is exposed both as a suitability criterion slider (0.05 preset weight), a dedicated global map layer (`Radiation`), and explicit column/dose telemetry in the site inspector, traverse planner, and Mission Brief.
 
 ## 10. Solar particle event (SPE) shielding — design-basis assumption

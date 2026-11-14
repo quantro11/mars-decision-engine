@@ -20,6 +20,7 @@
     './ui/overlays.js',
     './ui/layers.js',
     './ui/i18n.js',
+    './ui/eva_zones.js',
     './ui/eva.js',
     './ui/panels.js',
     './ui/map2d.js',

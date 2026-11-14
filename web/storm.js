@@ -73,21 +73,28 @@
     if (!annualQ.has(k)) { let q = 0; for (let l = 0; l < 360; l += 5) q += insolationTOA(k, l) / 72; annualQ.set(k, q); }
     return annualQ.get(k);
   }
-  function surfaceTempC(lat, ls, ti, elev) {
+  function surfaceTempC(lat, ls, ti, elev, tau) {
     const qa = annualMeanQ(lat);
     const qNow = (ls === undefined || ls === null) ? null : insolationTOA(lat, ls);
     const q = qNow === null ? qa : 0.5 * qNow + 0.5 * qa;
     // polar night: the surface sits at the CO2 frost point (seasonal cap)
     const lapseK = (elev !== undefined && elev !== null) ? -0.0005 * elev : 0;
     const tK = qNow === 0 ? T_FROST : Math.max(T_FROST, Math.pow((1 - ALBEDO) * q / (EMISS * SIGMA), 0.25) + lapseK);
-    const mean = tK - 273.15;
+    const baseMean = tK - 273.15;
     const ampScale = (ti !== undefined && ti !== null)
       ? Math.max(0.55, Math.min(1.60, Math.sqrt(220 / Math.max(40, ti))))
       : 1.0;
+    // Dust-storm infrared greenhouse effect (Viking / REMS / InSight TWINS): suspended dust cools daytime peak
+    // while trapping thermal IR at night, damping diurnal amplitude and warming nocturnal surface temperatures.
+    const tauExcess = (tau !== undefined && tau !== null && tau > 0.5) ? (tau - 0.5) : 0;
+    const tauDamp = tauExcess > 0 ? Math.exp(-0.22 * tauExcess) : 1.0;
+    const irNightWarmK = tauExcess > 0 ? 14.5 * (1 - Math.exp(-0.32 * tauExcess)) : 0;
+    const swDayCoolK = tauExcess > 0 ? -18.0 * (1 - Math.exp(-0.32 * tauExcess)) : 0;
+    const mean = baseMean + 0.5 * (irNightWarmK + swDayCoolK);
     return {
       mean: Math.round(mean * 10) / 10,
-      night: Math.round((mean - 36 * ampScale) * 10) / 10,
-      day: Math.round((mean + 28 * ampScale) * 10) / 10
+      night: Math.round((baseMean - 36 * ampScale * tauDamp + irNightWarmK) * 10) / 10,
+      day: Math.round((baseMean + 28 * ampScale * tauDamp + swDayCoolK) * 10) / 10
     };
   }
 
@@ -95,8 +102,8 @@
   // All electrical power used inside the habitat ends up as heat, so heaters only cover the shortfall
   // (see simulate: heater energy = max(0, loss - electrical load)).
   const UA_KW_PER_K = 0.090;
-  function thermalDemandKw(lat, ls, ti, elev) {
-    const t = surfaceTempC(lat, ls, ti, elev);
+  function thermalDemandKw(lat, ls, ti, elev, tau) {
+    const t = surfaceTempC(lat, ls, ti, elev, tau);
     return Math.round(UA_KW_PER_K * Math.max(0, 20.0 - t.mean) * 10) / 10;
   }
 
@@ -123,8 +130,8 @@
     for (let sol = 0; sol < cfg.sols; sol++) {
       const tau = tauAt(sol, cfg.storm);
       const lsSol = (ls0 === undefined || ls0 === null) ? null : (ls0 + sol * LS_PER_SOL + 360) % 360;
-      const sTemp = surfaceTempC(cfg.lat, lsSol, cfg.ti, cfg.elev);
-      const lossKwh = thermalDemandKw(cfg.lat, lsSol, cfg.ti, cfg.elev) * SOL_H;
+      const sTemp = surfaceTempC(cfg.lat, lsSol, cfg.ti, cfg.elev, tau);
+      const lossKwh = thermalDemandKw(cfg.lat, lsSol, cfg.ti, cfg.elev, tau) * SOL_H;
       // Electrical load is dissipated inside the habitat; heaters only make up the remainder.
       const heaterKwh = Math.max(0, lossKwh - cfg.consumption);
 

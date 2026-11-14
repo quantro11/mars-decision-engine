@@ -74,6 +74,8 @@
       if (loc === goalLoc) break;
       if (expanded > maxExpand) return { ok: false, reason: 'search limit' };
       const ly = (loc / subW) | 0, ox = loc - ly * subW;
+      const cy = y0 + ly, cx = (xMin + ox) % W;
+      const curElev = L.elev ? (L.meta.elev.offset + L.elev[cy * W + cx] * L.meta.elev.scale) : 0;
       for (const [dx, dy] of N) {
         const nly = ly + dy; if (nly < 0 || nly >= subH) continue;
         const nox = (ox + dx + W) % W; if (nox >= subW) continue;
@@ -87,7 +89,15 @@
         if (hasRough) { const r = L.rough[m] * rScale; if (r > 50) rPen = (r - 50) / 25; }
         if (hasTi) { const tiRaw = L.ti[m]; if (tiRaw > 0) { const ti = tiRaw * tiScale; if (ti < 100) dPen = 80 * (1 - ti / 100); } }
         const dist = Math.hypot(dx * kmCol[ny], dy * kmRow);
-        const c = gScore[loc] + dist * (1 + k * (s + rPen + dPen));
+        // Anisotropic directional grade (uphill traction vs downhill braking vs lateral cross-slope roll)
+        const nextElev = L.elev ? (L.meta.elev.offset + L.elev[m] * L.meta.elev.scale) : 0;
+        const dhM = nextElev - curElev;
+        const longGradeDeg = dist > 0.01 ? (Math.atan2(dhM, dist * 1000) * 180) / Math.PI : 0;
+        const upPen = longGradeDeg > 0 ? 0.55 * longGradeDeg : 0;
+        const dnPen = longGradeDeg < -5 ? 0.22 * (-longGradeDeg - 5) : 0;
+        const crossSlopeDeg = Math.sqrt(Math.max(0, s * s - longGradeDeg * longGradeDeg));
+        const crossPen = 0.20 * crossSlopeDeg;
+        const c = gScore[loc] + dist * (1 + k * (s + upPen + dnPen + crossPen + rPen + dPen));
         if (c < gScore[mLoc]) { gScore[mLoc] = c; came[mLoc] = loc; heap.push(mLoc, c + haversineKm(L.latOfRow(ny), L.lonOfCol(nx), glat, glon)); }
       }
     }
@@ -163,6 +173,7 @@
     const iceScale = (L.meta.ice && L.meta.ice.scale) || 0.01;
     const iceOff = (L.meta.ice && L.meta.ice.offset) || -1.28;
     let km = 0, maxS = 0, sumS = 0, hazardKm = 0, dustKm = 0, sumR = 0;
+    let totalAscentM = 0, totalDescentM = 0, maxUphillDeg = 0, sumCrossS = 0;
     let radWeightedKm = 0;
     const profile = [];
     for (let i = 0; i < path.length; i++) {
@@ -185,6 +196,12 @@
         if (s > 10) hazardKm += d;
         if (ti !== null && ti < 100) dustKm += d;
         radWeightedKm += d * radMsvYr;
+        const dh = elev - profile[i - 1].elev;
+        if (dh > 0) totalAscentM += dh;
+        else totalDescentM += -dh;
+        const longG = d > 0.01 ? (Math.atan2(dh, d * 1000) * 180) / Math.PI : 0;
+        if (longG > maxUphillDeg) maxUphillDeg = longG;
+        sumCrossS += Math.sqrt(Math.max(0, s * s - longG * longG));
       }
       profile.push({ km, x, y, elev, slope: s, rough: r, ti, ice, radMsvYr });
     }
@@ -324,6 +341,9 @@
 
     return {
       km, maxSlope: maxS, meanSlope: meanS, hazardKm, dustKm,
+      totalAscentM: Math.round(totalAscentM), totalDescentM: Math.round(totalDescentM),
+      maxUphillDeg: +maxUphillDeg.toFixed(1),
+      meanCrossSlope: +(sumCrossS / Math.max(1, path.length - 1)).toFixed(1),
       meanRough: meanR, profile, safeHavens,
       scienceWaypoints, scienceScore, evaStats,
     };

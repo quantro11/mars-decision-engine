@@ -15,6 +15,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const S = require(path.join(ROOT, 'web/scoring.js')).SCORING;
+const EVA = require(path.join(ROOT, 'web/ui/eva.js')).MDE_EVA;
 
 // ---- minimal PNG decoder: 8-bit greyscale, non-interlaced (what preprocess.py writes)
 function decodePNG(file) {
@@ -92,6 +93,16 @@ const scoreLandGeo = S.scoreMap(L, S.PRESETS.landing.w, false, new Float32Array(
 const scoreBalGeo = S.scoreMap(L, S.PRESETS.balanced.w, true, new Float32Array(W * H), 'geo');
 const t1geo = mean(LANDERS.map(([, la, lo]) => bandPercentile(scoreLandGeo, la, lo, 5)));
 const t2geo = mean(EZ.map((r) => bandPercentile(scoreBalGeo, r.lat, r.lon, 5)));
+
+// Test 3: Phase 2 Tactical Surface Traverse (Perseverance Sol 0-420 & Curiosity Gale Boxwork)
+// and Partial-Gravity (Lunar 1/6g vs Martian 0.38g) Pandolf Bioenergetics Validation
+const t3 = EVA.validatePhase2Benchmarks(L, S);
+if (!t3.allPass) {
+  throw new Error('Phase 2 benchmark validation failed: ' + JSON.stringify(t3.checks));
+}
+const t3Trav = t3.checks.filter((c) => c.detourRatio !== undefined);
+const t3Bio = t3.checks.find((c) => c.id === 'apollo_xemu_bioenergetics_benchmark');
+
 const fmtP = (p) => (p === 0 ? '< 0.005' : p.toFixed(3));
 const md = `# Validation
 
@@ -121,6 +132,18 @@ ${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
 |---|---|---|
 | 1 — landers | ${mean(t1.map((t) => t.p)).toFixed(0)} | ${t1geo.toFixed(0)} |
 | 2 — HLS-2015 sites | ${mean(t2.map((t) => t.p)).toFixed(0)} | ${t2geo.toFixed(0)} |
+
+## Test 3 — Phase 2 Tactical Surface Traverse & Partial-Gravity Bioenergetics Validation
+
+Couples the 1 km × 1 km (10 m/cell) Phase 2 micro-DEM directly to the shipped 4096 × 2048 MOLA/TES rasters (\`L.elev\`, \`L.slope\`, \`L.rough\`, \`L.ti\`) and benchmarks AutoNav pathfinding, MGL skyline pose lock, and Pandolf-Santee partial-gravity locomotion against published rover and Apollo/xEMU telemetry:
+
+| Surface Traverse Benchmark | Published Reference | Direct Chord | AutoNav Safe Route | Detour Ratio | Safe Hits vs Naive Orbital Hits | MGL Pose Error (vs VO Drift) | Status |
+|---|---|---|---|---|---|---|---|
+${t3Trav.map((c) => `| ${c.mission} | ${c.reference} | ${c.directDistM} m | ${c.safeDistM} m | ${c.detourRatio.toFixed(2)}× | ${c.safeHazardHits} vs ${c.orbitalHazardHits} hits | ±${c.mglPoseErrorM} m (VO ${c.voDriftPct}%) | ${c.pass ? 'PASS' : 'FAIL'} |`).join('\n')}
+
+| Bioenergetics Benchmark (${t3Bio.reference}) | Lunar 1/6g (1.62 m/s²) | Martian 0.38g Nominal (3.71 m/s², η=1.15) | Martian 0.38g +10% Sand Grade (η=1.65) | Status |
+|---|---|---|---|---|
+| ${t3Bio.mission} | ${t3Bio.lunar16gW} W (ref 195–290 W) | ${t3Bio.mars038gNomW} W (ref 290–390 W) | ${t3Bio.mars038gSandUpW} W (ref 430–650 W) | ${t3Bio.pass ? 'PASS' : 'FAIL'} |
 
 ## How to read this
 

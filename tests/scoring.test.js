@@ -224,6 +224,35 @@ assert.ok(bioHeavy.metabolicW > bioLight.metabolicW && bioHeavy.walkbackRadiusM 
 const gcHighLat = A.straight(L, 10, 4, 60, 4);
 assert.ok(gcHighLat.ok && gcHighLat.path.some(idx => Math.floor(idx / W) < 4), 'ASTAR.straight follows spherical great-circle arc poleward at high latitude');
 
+// ---------------------------------------------------------------- Anisotropic A*, Dust-Storm IR Greenhouse, Seasonal CO2 Pressure & Phase 2 Benchmarks
+// 1. Seasonal CO2 polar cap condensation/sublimation shifts atmospheric column & GCR dose across Ls
+const colMin = S.atmoColumnGcm2(-4000, 148); // Late southern winter minimum
+const colMax = S.atmoColumnGcm2(-4000, 250); // Perihelion CO2 sublimation maximum
+assert.ok(colMax > colMin * 1.12 && S.radDose(-4000, 0, 250) < S.radDose(-4000, 0, 148), 'Seasonal CO2 cycle modulates atmospheric column and GCR dose between Ls=148 and Ls=250');
+
+// 2. Dust storm optical depth tau warms nighttime low (IR greenhouse) and cools daytime peak
+const tClear = T.surfaceTempC(18.4, 250, 220, -2500, 0.5);
+const tStorm = T.surfaceTempC(18.4, 250, 220, -2500, 9.5);
+assert.ok(tStorm.night > tClear.night + 8 && tStorm.day < tClear.day - 8 && (tStorm.day - tStorm.night) < (tClear.day - tClear.night), 'High dust optical depth warms nocturnal low (IR greenhouse) and damps diurnal swing');
+
+// 3. Anisotropic A* directional grade cost & ascent/descent telemetry
+const Lgrade = {
+  width: 30, height: 15, meta: L.meta,
+  elev: new Uint8Array(30 * 15), slope: new Uint8Array(30 * 15).fill(24),
+  rough: new Uint8Array(30 * 15).fill(5), ti: new Uint8Array(30 * 15).fill(60),
+  latOfRow: (y) => 90 - (y + 0.5) * 180 / 15, lonOfCol: (x) => -180 + (x + 0.5) * 360 / 30,
+};
+for (let y = 0; y < 15; y++) for (let x = 0; x < 30; x++) Lgrade.elev[y * 30 + x] = 40 + x * 4;
+const rUp = A.plan(Lgrade, 2, 7, 20, 7, { maxSlope: 15, slopePenalty: 0.3 });
+const rDn = A.plan(Lgrade, 20, 7, 2, 7, { maxSlope: 15, slopePenalty: 0.3 });
+assert.ok(rUp.ok && rDn.ok && rUp.stats.totalAscentM > 5000 && rDn.stats.totalDescentM > 5000, 'ASTAR.plan reports directional totalAscentM and totalDescentM');
+
+// 4. Phase 2 buildLocalGrid couples to orbital rasters & validatePhase2Benchmarks passes all rover/Apollo checks
+const gCoupled = EVA.buildLocalGrid(EVA.ZONES.jezero_delta, L);
+assert.ok(gCoupled.N === 100 && gCoupled.slope.length === 10000 && gCoupled.elev[0] !== 0, 'EVA.buildLocalGrid couples 1 km micro-DEM to orbital rasters and 2D finite-difference slopes');
+const p2Bench = EVA.validatePhase2Benchmarks(L, S);
+assert.ok(p2Bench.allPass && p2Bench.checks.length === 3, 'EVA.validatePhase2Benchmarks passes Perseverance Sol 0-420, Curiosity Boxwork, and Apollo/xEMU bioenergetics checks');
+
 (async () => {
   const fail = async () => { throw new Error('net down'); };
   const w = await Live.fetchNASAWeather('DEMO_KEY', fail);

@@ -14,14 +14,20 @@
     return 1 - (x - x0) / (x1 - x0);
   }
 
-  // Atmospheric column mass sigma(h) = 16.4 g/cm2 * exp(-h / 11.1 km) (610 Pa datum, g = 3.71, scale height 11.1 km).
-  // Surface GCR dose D = 0.64 mSv/day * exp(-(sigma - 24.6) / 60) * 365.25, anchored on MSL Curiosity RAD at Gale Crater
+  // Atmospheric column mass sigma(h, Ls) = 16.4 g/cm2 * f_P(Ls) * exp(-h / 11.1 km) (610 Pa datum, g = 3.71, scale height 11.1 km).
+  // Includes optional Viking/MSL REMS two-harmonic seasonal CO2 polar cap condensation/sublimation cycle (+-12% column shift).
+  // Surface GCR dose D = 0.64 mSv/day * exp(-(sigma - 24.6) / 60) * 365.25 * Omega(slope), anchored on MSL Curiosity RAD at Gale Crater
   // (Hassler et al. 2014, Science 343: 0.64 +- 0.12 mSv/day at -4.4 km, sigma ~ 24.6 g/cm2).
-  function atmoColumnGcm2(h_m) {
-    return 16.4 * Math.exp(-h_m / 11100);
+  function atmoColumnGcm2(h_m, ls = null) {
+    let fSeason = 1.0;
+    if (ls !== null && ls !== undefined) {
+      const phi = ((ls - 255) * Math.PI) / 180;
+      fSeason = 1.0 + 0.092 * Math.cos(phi) + 0.038 * Math.cos(2 * phi);
+    }
+    return 16.4 * fSeason * Math.exp(-h_m / 11100);
   }
-  function radDose(h_m, slopeDeg = 0) {
-    const sigma = atmoColumnGcm2(h_m);
+  function radDose(h_m, slopeDeg = 0, ls = null) {
+    const sigma = atmoColumnGcm2(h_m, ls);
     const sDeg = Math.min(45, Math.max(0, slopeDeg || 0));
     const skyView = 1 - 0.5 * (1 - Math.cos(sDeg * Math.PI / 180));
     const geomFactor = Math.max(0.75, skyView - sDeg * 0.002);
@@ -260,27 +266,31 @@
   // Budgets: 850 g primary O2, 960 Wh battery, 4.2 L LCVG sublimator cooling water, 8.0 h nominal EVA window.
   const MARS_G = 3.71;
   function calcPandolfMars(opts = {}) {
+    const gLocal = opts.gravityMps2 ?? MARS_G;
     const slopeDeg = Math.max(0, opts.slopeDeg || 0);
     const speedKmh = Math.max(0.5, opts.speedKmh || 2.4);
     const loadKg = Math.max(0, opts.loadKg ?? 15);
     const buddyMode = opts.buddyMode || 'buddy';
     const durationH = Math.max(0.2, opts.durationH ?? 6.0);
+    const ascentM = Math.max(0, opts.ascentM || 0);
     const ti = opts.ti !== undefined ? opts.ti : 215;
     const sandFrac = Math.max(0, Math.min(1, opts.sandFrac ?? (ti !== null && ti < 100 ? (100 - ti) / 100 : 0)));
     const vMps = Math.max(0.25, speedKmh / 3.6);
     const bodyKg = 80, suitKg = 82;
     const effLoadKg = buddyMode === 'rover_eva' ? loadKg * 0.55 : loadKg * 0.90;
-    const effMassMars = (bodyKg + suitKg + effLoadKg) * (MARS_G / 9.81);
+    const effMassLocal = (bodyKg + suitKg + effLoadKg) * (gLocal / 9.81);
     const effGradePct = opts.gradePct !== undefined && opts.gradePct !== null
       ? opts.gradePct
       : Math.tan((slopeDeg * 0.48) * Math.PI / 180) * 100;
-    const terrainEta = 1.32 + sandFrac * 0.85;
+    const terrainEta = opts.terrainEta !== undefined ? opts.terrainEta : (1.32 + sandFrac * 0.85);
     const suitJointWorkW = 115;
-    const loadWorkW = effLoadKg * 2.8 + 2.5 * effMassMars * Math.pow(effLoadKg / bodyKg, 2);
-    const pandolfW = 1.5 * bodyKg * (MARS_G / 9.81) +
+    const climbWorkW = ascentM > 0 ? ((bodyKg + suitKg + effLoadKg) * gLocal * ascentM) / (durationH * 3600 * 0.25) : 0;
+    const loadWorkW = effLoadKg * 2.8 + 2.5 * effMassLocal * Math.pow(effLoadKg / bodyKg, 2);
+    const pandolfW = 1.5 * bodyKg * (gLocal / 9.81) +
                      loadWorkW +
-                     terrainEta * effMassMars * (1.5 * vMps * vMps + 0.35 * vMps * effGradePct) +
-                     suitJointWorkW;
+                     terrainEta * effMassLocal * (1.5 * vMps * vMps + 0.35 * vMps * effGradePct) +
+                     suitJointWorkW +
+                     climbWorkW;
     const metabolicW = Math.round(Math.max(190, Math.min(680, pandolfW)));
     const metabolicKcalH = Math.round(metabolicW * 0.8598);
     const totalKcal = Math.round(metabolicKcalH * durationH);
