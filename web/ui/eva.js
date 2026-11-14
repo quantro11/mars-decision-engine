@@ -38,6 +38,10 @@
   }
   const getI18N = () => global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
   const isTr = () => { const m = getI18N(); return !!(m && m.getLang && m.getLang() === 'tr'); };
+  // All EN/TR copy lives in ui/i18n.js (STRINGS.en / STRINGS.tr, 'eva.*' keys).
+  // L(flag, key, args) picks the TR text when flag is truthy, else EN, filling {0}, {1}, ... from args.
+  const getI18NStrict = () => getI18N() || (typeof require === 'function' ? require('./i18n.js').MDE_I18N : null);
+  const L = (flag, key, args) => getI18NStrict().pick(flag, key, args);
   const getScoring = () => global.SCORING ||
     (typeof globalThis !== 'undefined' && globalThis.SCORING) ||
     (typeof require === 'function' ? require('../scoring.js').SCORING : null);
@@ -109,28 +113,26 @@
       if (sl) sl.value = String(state.scanStep);
       const lbl = $('#eva-scan-step-v');
       if (lbl && sim) {
-        lbl.textContent = tr
-          ? `Adım ${state.scanStep}/8 · %${sim.navStack.autonav.assimilatedPct}`
-          : `Step ${state.scanStep}/8 · ${sim.navStack.autonav.assimilatedPct}%`;
+        lbl.textContent = L(tr, 'eva.step8', [state.scanStep, sim.navStack.autonav.assimilatedPct]);
       }
       const mglBtn = $('#btn-eva-mgl');
       if (mglBtn) {
         mglBtn.textContent = state.mglLocked
-          ? (tr ? 'MGL Ufuk Kilidi: AÇIK' : 'MGL Pose Lock: ON')
-          : (tr ? 'MGL Ufuk Kilidi: KAPALI (VO Kayması)' : 'MGL Pose Lock: OFF (VO Drift)');
+          ? (L(tr, 'eva.mglPoseLockOn'))
+          : (L(tr, 'eva.mglPoseLockOffVo'));
       }
       const speBtn = $('#btn-eva-spe');
       if (speBtn) {
         speBtn.textContent = state.speAlert
-          ? (tr ? 'SPE 30dk Kaçış: AKTİF' : 'SPE 30m Escape: ACTIVE')
-          : (tr ? 'SPE Fırtına Kaçışı (30dk)' : 'SPE 30m Escape Sim');
+          ? (L(tr, 'eva.spe30mEscapeActive'))
+          : (L(tr, 'eva.spe30mEscapeSim'));
         speBtn.classList.toggle('active', state.speAlert);
       }
       const cwWrap = $('#eva-custom-weights');
       if (cwWrap) cwWrap.classList.toggle('hidden', state.scoreMode !== 'custom');
       const playBtn = $('#btn-eva-play');
       if (playBtn) {
-        playBtn.textContent = state.playing ? (tr ? 'Duraklat' : 'Pause') : (tr ? 'Otomatik Tara' : 'Auto-Scan');
+        playBtn.textContent = state.playing ? (L(tr, 'eva.pause')) : (L(tr, 'eva.autoScan'));
       }
     }
 
@@ -183,7 +185,7 @@
       if (btn) {
         const tr = isTr();
         btn.classList.remove('playing');
-        btn.textContent = tr ? '▶ POV Yürüyüş Sekansını Oynat' : '▶ Play POV Walk Sequence';
+        btn.textContent = L(tr, 'eva.playPovWalkSequence');
       }
     }
 
@@ -262,10 +264,10 @@
         : `VO DRIFT (±${sim.navStack.mgl.mglCorrectedErrorM}m)`;
       const flareTxt = state.flareAdvisory
         ? `${esc(state.flareAdvisory.classType)} (${esc(state.flareAdvisory.evaAdvisory)})`
-        : (tr ? 'Senkronize ediliyor…' : 'Syncing DONKI…');
+        : (L(tr, 'eva.syncingDonki'));
       const playLabel = state.povPlaying
-        ? (tr ? '⏸ POV Akışını Duraklat' : '⏸ Pause POV Stream')
-        : (tr ? '▶ POV Yürüyüş Sekansını Oynat' : '▶ Play POV Walk Sequence');
+        ? (L(tr, 'eva.pausePovStream'))
+        : (L(tr, 'eva.playPovWalkSequence'));
 
       body.innerHTML = `
         <div class="hud-visor-frame">
@@ -283,42 +285,42 @@
             <div class="hud-visor-vignette" aria-hidden="true"></div>
           </div>
           <div class="hud-cam-status-bar">
-            <span id="hud-cam-meta">${tr ? 'NASA Mars Rover Kamera Akışı bağlanıyor…' : 'Connecting NASA Mars Rover Camera feed…'}</span>
+            <span id="hud-cam-meta">${L(tr, 'eva.connectingNasaMarsRoverCamera')}</span>
             <div class="hud-pov-controls">
-              <button type="button" id="hud-btn-pov-prev" class="ghost" aria-label="${tr ? 'Önceki kare' : 'Previous POV frame'}">&#9664;</button>
+              <button type="button" id="hud-btn-pov-prev" class="ghost" aria-label="${L(tr, 'eva.previousPovFrame')}">&#9664;</button>
               <button type="button" id="hud-btn-pov-play" class="btn-pov-play${state.povPlaying ? ' playing' : ''}">${playLabel}</button>
-              <button type="button" id="hud-btn-pov-next" class="ghost" aria-label="${tr ? 'Sonraki kare' : 'Next POV frame'}">&#9654;</button>
+              <button type="button" id="hud-btn-pov-next" class="ghost" aria-label="${L(tr, 'eva.nextPovFrame')}">&#9654;</button>
             </div>
           </div>
           <div class="hud-rad-banner ${sim.withinWalkback && sim.returnReserveProtected ? 'ok' : 'warn'}">
             <span><b>MSL-RAD DOSE:</b> ${(zone.radMsvYr / 365.25).toFixed(2)}±0.12 mSv/sol (${sim.radDoseUsv}±${sim.radDoseUncUsv} uSv)</span>
             <span><b>WALKBACK LIMIT:</b> ${sim.walkbackRadiusM} m · <b>LIVE ETA:</b> ${sim.realTimeTracking.traveledDistM}/${sim.safeDistM}m · Base ${sim.realTimeTracking.etaReturnBaseMin} min</span>
-            <span><b>RETURN RSV:</b> ${sim.returnReserveProtected ? (tr ? 'KORUNDU' : 'PROTECTED') : (tr ? 'KRİTİK' : 'LOW')}</span>
+            <span><b>RETURN RSV:</b> ${sim.returnReserveProtected ? (L(tr, 'eva.protected')) : (L(tr, 'eva.low'))}</span>
           </div>
         </div>
         <div class="hud-Action-row">
           <div class="hud-wp-tabs">${wpTabs}</div>
           <div class="hud-action-btns">
-            <button type="button" id="hud-btn-laser" class="btn-spec">${state.laserOn ? (tr ? 'LIBS Lazer: AÇIK' : 'LIBS Laser: ON') : (tr ? 'LIBS Lazer: KAPALI' : 'LIBS Laser: OFF')}</button>
-            <button type="button" id="hud-btn-sample" class="btn-spec">${tr ? `+${wp.sampleKg} kg Kaya Numunesi Al` : `Collect +${wp.sampleKg} kg Rock Sample`}</button>
+            <button type="button" id="hud-btn-laser" class="btn-spec">${state.laserOn ? (L(tr, 'eva.libsLaserOn')) : (L(tr, 'eva.libsLaserOff'))}</button>
+            <button type="button" id="hud-btn-sample" class="btn-spec">${L(tr, 'eva.collectKgRockSample', [wp.sampleKg])}</button>
           </div>
         </div>
         <div class="hud-telemetry-grid">
           <div class="live-card">
-            <div class="sec-head"><h2>${tr ? 'Hedef Kaya & Mineraloji (Mastcam / PIXL)' : 'Target Lithology & Mineralogy (Mastcam / PIXL)'}</h2></div>
-            <div class="kv"><span>${tr ? 'Koordinat & Tarih' : 'Coordinates & Obs Date'}</span><b>${wp.lat ?? zone.lat}°N, ${wp.lon ?? zone.lon}°E · ${esc(wp.obsDate || 'PDS')}</b></div>
-            <div class="kv"><span>${tr ? 'NASA Veri Kaynağı' : 'NASA Dataset'}</span><b>${esc(wp.datasetId || wp.cam)}</b></div>
-            <div class="kv"><span>${tr ? 'Kaya Türü' : 'Lithology'}</span><b>${esc(tr ? (wp.rockTypeTr || wp.rockType) : wp.rockType)}</b></div>
-            <div class="kv"><span>${tr ? 'Mineral Fazı' : 'Mineral Phase'}</span><b>${esc(tr ? (wp.mineralogyTr || wp.mineralogy) : wp.mineralogy)}</b></div>
-            <div class="kv"><span>${tr ? 'Astrobiyoloji & ISRU' : 'Astrobiology & ISRU'}</span><b>${esc(tr ? (wp.astrobioTr || wp.astrobio) : wp.astrobio)}</b></div>
+            <div class="sec-head"><h2>${L(tr, 'eva.targetLithologyMineralogyMastcamPixl')}</h2></div>
+            <div class="kv"><span>${L(tr, 'eva.coordinatesObsDate')}</span><b>${wp.lat ?? zone.lat}°N, ${wp.lon ?? zone.lon}°E · ${esc(wp.obsDate || 'PDS')}</b></div>
+            <div class="kv"><span>${L(tr, 'eva.nasaDataset')}</span><b>${esc(wp.datasetId || wp.cam)}</b></div>
+            <div class="kv"><span>${L(tr, 'eva.lithology')}</span><b>${esc(tr ? (wp.rockTypeTr || wp.rockType) : wp.rockType)}</b></div>
+            <div class="kv"><span>${L(tr, 'eva.mineralPhase')}</span><b>${esc(tr ? (wp.mineralogyTr || wp.mineralogy) : wp.mineralogy)}</b></div>
+            <div class="kv"><span>${L(tr, 'eva.astrobiologyIsru')}</span><b>${esc(tr ? (wp.astrobioTr || wp.astrobio) : wp.astrobio)}</b></div>
             ${renderSpectralSVG(wp)}
           </div>
           <div class="live-card">
-            <div class="sec-head"><h2>${tr ? 'Kimyasal Oksit Analizi & Görev Senkronu' : 'Chemical Composition & Mission Sync'}</h2></div>
+            <div class="sec-head"><h2>${L(tr, 'eva.chemicalCompositionMissionSync')}</h2></div>
             <div class="hud-chem-grid">${chemRows}</div>
-            <div class="kv mt-sm"><span>${tr ? 'Toplam EVA Enerji & Süre' : 'Cumulative EVA Energy & Time'}</span><b>${sim.totalKcal} kcal (${sim.totalEvaH} h · +${sim.ascentM}m/-${sim.descentM}m)</b></div>
-            <div class="kv"><span>${tr ? 'Otomatik Alternatif Rota' : 'AutoNav Reroute'}</span><b>${sim.safeDistM} m (0 risk) vs ${sim.orbitalDistM} m (${sim.orbitalHazardHits} iptal)</b></div>
-            <div class="kv"><span>${tr ? 'Dönüş Durumu' : 'Return Status'}</span><b class="${sim.returnReserveProtected ? 'ok' : 'warn'}">${esc(tr ? sim.completionReport.returnStatusTr : sim.completionReport.returnStatus)}</b></div>
+            <div class="kv mt-sm"><span>${L(tr, 'eva.cumulativeEvaEnergyTime')}</span><b>${sim.totalKcal} kcal (${sim.totalEvaH} h · +${sim.ascentM}m/-${sim.descentM}m)</b></div>
+            <div class="kv"><span>${L(tr, 'eva.autonavReroute')}</span><b>${sim.safeDistM} m (0 risk) vs ${sim.orbitalDistM} m (${sim.orbitalHazardHits} iptal)</b></div>
+            <div class="kv"><span>${L(tr, 'eva.returnStatus')}</span><b class="${sim.returnReserveProtected ? 'ok' : 'warn'}">${esc(tr ? sim.completionReport.returnStatusTr : sim.completionReport.returnStatus)}</b></div>
           </div>
         </div>`;
 
@@ -339,7 +341,7 @@
           const roverTitle = rover === 'perseverance' ? 'Perseverance' : 'Curiosity';
           const solTag = f.sol !== null && f.sol !== undefined ? `Sol ${f.sol}` : (f.earthDate || 'Archive');
           if (camMeta) {
-            camMeta.textContent = `● ${roverTitle} ${f.camera} · ${solTag} · ${tr ? 'Kare' : 'Frame'} ${idx + 1}/${frames.length} · ${povRes.source}`;
+            camMeta.textContent = `● ${roverTitle} ${f.camera} · ${solTag} · ${L(tr, 'eva.frame')} ${idx + 1}/${frames.length} · ${povRes.source}`;
           }
           if (povImg && f.imgUrl) {
             povImg.onload = () => {
@@ -398,9 +400,7 @@
           });
         }
         if (camMeta) {
-          camMeta.textContent = tr
-            ? `● SENTETİK VİZÖR · ${rover.toUpperCase()} ${cameraHint} · Kare ${(Math.abs(state.povFrameIdx) % 6) + 1}/6`
-            : `● PROCEDURAL VISOR · ${rover.toUpperCase()} ${cameraHint} · Frame ${(Math.abs(state.povFrameIdx) % 6) + 1}/6`;
+          camMeta.textContent = L(tr, 'eva.proceduralVisorFrame6', [rover.toUpperCase(), cameraHint, (Math.abs(state.povFrameIdx) % 6) + 1]);
         }
       }
 
@@ -456,7 +456,7 @@
           }
           state.povPlaying = true;
           btnPovPlay.classList.add('playing');
-          btnPovPlay.textContent = tr ? '⏸ POV Akışını Duraklat' : '⏸ Pause POV Stream';
+          btnPovPlay.textContent = L(tr, 'eva.pausePovStream');
           state.povFrameIdx++;
           applyPovFrame(activePov());
           if (typeof setInterval === 'function') {
@@ -520,7 +520,7 @@
         ? sim.discrepancies.map(d =>
             `<div class="kv"><span>${esc(tr ? (d.titleTr || d.title) : d.title)}</span><b>${esc(d.delta)}</b></div>`
           ).join('')
-        : `<div class="help note-sm">${tr ? 'Adım 0: Yalnızca ham uydu öncülü mevcut. Yüzey doğrulaması için taramayı başlatın.' : 'Step 0: Coarse Orbital Prior only. Step or Auto-Scan to assimilate live surface sensors.'}</div>`;
+        : `<div class="help note-sm">${L(tr, 'eva.step0CoarseOrbitalPrior')}</div>`;
 
       const wpCards = zone.waypoints.map((wp, idx) => {
         const active = idx === state.activeWpIdx;
@@ -535,20 +535,20 @@
         </div>`;
       }).join('');
 
-      const hazLbl = (c) => c === 1 ? (tr ? 'Kaya Kümesi' : 'Boulders') : (c === 2 ? (tr ? 'Dik Yamaç' : 'Steep Scarp') : (c === 3 ? (tr ? 'Gevşek Kum/Toz' : 'Drift Sand') : (tr ? 'Temiz Zemin' : 'Clear Ground')));
+      const hazLbl = (c) => c === 1 ? (L(tr, 'eva.boulders')) : (c === 2 ? (L(tr, 'eva.steepScarp')) : (c === 3 ? (L(tr, 'eva.driftSand')) : (L(tr, 'eva.clearGround'))));
       const probeHTML = sim.spotProbe ? `
         <div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? 'Canlı AutoNav Nokta Sondajı (Harita Tıklaması)' : 'Live AutoNav Spot Probe (Canvas Click)'}</h2><span class="badge-mode badge-live">${sim.spotProbe.compositeScore}/100</span></div>
-          <div class="kv"><span>${tr ? 'Yerel Hücre / Koordinat' : 'Local Metric Coords'}</span><b>(${sim.spotProbe.xMeters} m, ${sim.spotProbe.yMeters} m)</b></div>
-          <div class="kv"><span>${tr ? 'Eğim / Termal Atalet' : 'Slope / Thermal Inertia'}</span><b>${sim.spotProbe.slope}° · TI ${sim.spotProbe.ti} tiu</b></div>
-          <div class="kv"><span>${tr ? 'Zemin Sınıfı / GCR' : 'Surface Class / GCR'}</span><b>${esc(hazLbl(sim.spotProbe.hazardClass))} · ${sim.spotProbe.radMsvYr} mSv/${tr ? 'yıl' : 'yr'}</b></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.liveAutonavSpotProbeCanvas')}</h2><span class="badge-mode badge-live">${sim.spotProbe.compositeScore}/100</span></div>
+          <div class="kv"><span>${L(tr, 'eva.localMetricCoords')}</span><b>(${sim.spotProbe.xMeters} m, ${sim.spotProbe.yMeters} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.slopeThermalInertia')}</span><b>${sim.spotProbe.slope}° · TI ${sim.spotProbe.ti} tiu</b></div>
+          <div class="kv"><span>${L(tr, 'eva.surfaceClassGcr')}</span><b>${esc(hazLbl(sim.spotProbe.hazardClass))} · ${sim.spotProbe.radMsvYr} mSv/${L(tr, 'eva.yr')}</b></div>
         </div>` : '';
 
       const speTimeShown = sim.speAlert ? sim.speTimeToShelterMin : sim.speWorstCaseMin;
       const losOk = sim.commsLos && sim.commsLos.losClear;
       const losText = losOk
-        ? (tr ? `Açık VHF Görüş (+${sim.commsLos.linkMarginDb} dB)` : `Direct VHF LoS (+${sim.commsLos.linkMarginDb} dB)`)
-        : (tr ? `Arazi Gölgesi (${sim.commsLos.occludedSteps} adım → Röle)` : `Terrain Occluded (${sim.commsLos.occludedSteps} blk → Relay)`);
+        ? (L(tr, 'eva.directVhfLosDb', [sim.commsLos.linkMarginDb]))
+        : (L(tr, 'eva.terrainOccludedBlkRelay', [sim.commsLos.occludedSteps]));
       const dtm = sim.dtmMetadata || zone.dtmMetadata || {};
       const rt = sim.realTimeTracking;
       const rr = sim.rerouteExplanation;
@@ -557,93 +557,93 @@
       const cr = sim.completionReport;
       const restSummary = rt.evaRestStops.length
         ? rt.evaRestStops.map(r => `${r.id}@${r.atDistM}m (${r.durationMin}m)`).join(', ')
-        : (tr ? 'Gerekmez (<600m)' : 'None (<600m)');
+        : (L(tr, 'eva.none600m'));
 
       out.innerHTML = `
         <div class="eva-zone-banner">
           <div class="eva-zone-title"><b>${esc(tr ? (zone.nameTr || zone.name) : zone.name)}</b></div>
           <div class="help note-sm">${esc(zone.hiRiseId)}</div>
-          <div class="kv mt-sm"><span>${tr ? 'HiRISE DTM Ürünü & Çözünürlük' : 'HiRISE DTM Product & Post Spacing'}</span><b>${esc(dtm.productId || 'DTEEC_PDS')} · ${dtm.truePostSpacingM || 1.0} m/post -> 10 m/cell</b></div>
-          <div class="kv"><span>${tr ? 'Stereo İşleme Yöntemi' : 'Stereo Processing Method'}</span><b>${esc(dtm.method || 'SOCET SET Photogrammetric Stereo')}</b></div>
+          <div class="kv mt-sm"><span>${L(tr, 'eva.hiriseDtmProductPostSpacing')}</span><b>${esc(dtm.productId || 'DTEEC_PDS')} · ${dtm.truePostSpacingM || 1.0} m/post -> 10 m/cell</b></div>
+          <div class="kv"><span>${L(tr, 'eva.stereoProcessingMethod')}</span><b>${esc(dtm.method || 'SOCET SET Photogrammetric Stereo')}</b></div>
           <p class="help note-sm">${esc(tr ? (dtm.coverageNoteTr || dtm.coverageNote || zone.summaryTr) : (dtm.coverageNote || zone.summary))}</p>
           <p class="help note-sm">${esc(tr ? sim.scaleSeparationNoteTr : sim.scaleSeparationNote)}</p>
         </div>
         <div class="row">
-          <button type="button" id="btn-eva-demo" class="btn-spec btn-full">${tr ? '▶ Jüri Sunum Demosu (Tam Marswalk Senaryosu · Çevrimdışı Hazır)' : '▶ Run Jury Marswalk Demo (Full End-to-End Offline Scenario)'}</button>
+          <button type="button" id="btn-eva-demo" class="btn-spec btn-full">${L(tr, 'eva.runJuryMarswalkDemoFull')}</button>
         </div>
         <div class="eva-canvas-wrap">
           <canvas id="eva-local-canvas" class="eva-local-canvas" width="420" height="320" role="img" aria-label="1 km by 1 km xGDS 5-domain surface assimilation map; click terrain to probe and expand scan"></canvas>
         </div>
-        <div class="help note-sm">${tr ? 'İpucu: Haritada herhangi bir noktaya tıklayarak anlık AutoNav sondajı yapın ve tarama alanını genişletin.' : 'Tip: Click any point on the local DEM to dispatch an AutoNav spot scan probe, or click a WP circle for HUD.'}</div>
+        <div class="help note-sm">${L(tr, 'eva.tipClickAnyPointOn')}</div>
         <div class="row">
-          <button type="button" id="btn-open-hud" class="btn-spec btn-full">${tr ? `Kask Vizörü (HUD) & Yüzey Kamerasını Aç (${activeWp.id})` : `Open Helmet Visor HUD & Ground POV (${activeWp.id})`}</button>
+          <button type="button" id="btn-open-hud" class="btn-spec btn-full">${L(tr, 'eva.openHelmetVisorHudGround', [activeWp.id])}</button>
         </div>
         <div class="row">
-          <button type="button" id="btn-eva-expand" class="ghost btn-full">${state.centerExpanded ? (tr ? '⤡ Küresel Uydu Haritasına Dön' : '⤡ Restore Global Orbital Map') : (tr ? '⤢ 1 km Taktik Haritayı Merkez Ekranda Büyüt' : '⤢ Maximize 1 km Tactical Map in Center Viewport')}</button>
+          <button type="button" id="btn-eva-expand" class="ghost btn-full">${state.centerExpanded ? (L(tr, 'eva.restoreGlobalOrbitalMap')) : (L(tr, 'eva.maximize1KmTacticalMap'))}</button>
         </div>
         ${probeHTML}
         <div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? '1. Gerçek Zamanlı Astronot Rota Takibi' : '1. Real-Time Astronaut Route Tracking'}</h2><span class="badge-mode badge-live">${rt.progressPct}%</span></div>
-          <div class="kv"><span>${tr ? 'Anlık Astronot Konumu' : 'Live Astronaut Position'}</span><b>${rt.astronautLat}°N, ${rt.astronautLon}°E (${rt.astronautXMeters}m, ${rt.astronautYMeters}m)</b></div>
-          <div class="kv"><span>${tr ? 'Yürünen / Kalan Mesafe' : 'Distance Walked / Remaining'}</span><b>${rt.traveledDistM} m / ${rt.remainDistM} m (Toplam ${sim.safeDistM} m)</b></div>
-          <div class="kv"><span>${tr ? 'Aktif Segment & Sonraki Durak ETA' : 'Active Leg & Next WP ETA'}</span><b>${esc(rt.activeLegLabel)} · ${rt.distToNextWpM} m (${rt.etaNextWpMin} ${tr ? 'dk' : 'min'})</b></div>
-          <div class="kv"><span>${tr ? 'Üsse Tahmini Varış (ETA) & Dönüş Noktası' : 'Base Return ETA & Turnaround'}</span><b class="ok">${rt.etaReturnBaseMin} ${tr ? 'dk' : 'min'} · Turnaround @ ${rt.turnaroundDistM} m</b></div>
-          <div class="kv"><span>${tr ? 'Astronot Dinlenme Durakları (~600m)' : 'Astronot Micro-Rest Stops (~600m)'}</span><b>${esc(restSummary)}</b></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.1RealTimeAstronautRoute')}</h2><span class="badge-mode badge-live">${rt.progressPct}%</span></div>
+          <div class="kv"><span>${L(tr, 'eva.liveAstronautPosition')}</span><b>${rt.astronautLat}°N, ${rt.astronautLon}°E (${rt.astronautXMeters}m, ${rt.astronautYMeters}m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.distanceWalkedRemaining')}</span><b>${rt.traveledDistM} m / ${rt.remainDistM} m (Toplam ${sim.safeDistM} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.activeLegNextWpEta')}</span><b>${esc(rt.activeLegLabel)} · ${rt.distToNextWpM} m (${rt.etaNextWpMin} ${L(tr, 'eva.min')})</b></div>
+          <div class="kv"><span>${L(tr, 'eva.baseReturnEtaTurnaround')}</span><b class="ok">${rt.etaReturnBaseMin} ${L(tr, 'eva.min')} · Turnaround @ ${rt.turnaroundDistM} m</b></div>
+          <div class="kv"><span>${L(tr, 'eva.astronotMicroRestStops600m')}</span><b>${esc(restSummary)}</b></div>
         </div>
         <div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? '2–3. Dinamik Tehlike Algılama & Otomatik Alternatif Rota' : '2–3. Dynamic Hazard Detection & Auto-Reroute'}</h2><span class="badge-mode badge-live">0 HITS</span></div>
-          <div class="kv"><span>${tr ? 'Önceki / Ham Uydu Rotası' : 'Previous / Naive Orbital Route'}</span><b class="bad">${esc(tr ? rr.cancelledRouteStatusTr : rr.cancelledRouteStatus)} (${rr.cancelledHazardHits} risk)</b></div>
-          <div class="kv"><span>${tr ? 'Yeni AutoNav A* Rotası' : 'New AutoNav A* Safe Route'}</span><b class="ok">${esc(tr ? rr.newRouteStatusTr : rr.newRouteStatus)} (${sim.safeDistM} m)</b></div>
-          <div class="kv"><span>${tr ? 'Yükselti Profili (Tırmanış / İniş / Eğim)' : 'Elevation Profile (Ascent / Descent / Max Slope)'}</span><b>+${sim.ascentM} m / -${sim.descentM} m · Max ${sim.maxSafeSlope}°</b></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.23DynamicHazardDetection')}</h2><span class="badge-mode badge-live">0 HITS</span></div>
+          <div class="kv"><span>${L(tr, 'eva.previousNaiveOrbitalRoute')}</span><b class="bad">${esc(tr ? rr.cancelledRouteStatusTr : rr.cancelledRouteStatus)} (${rr.cancelledHazardHits} risk)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.newAutonavASafeRoute')}</span><b class="ok">${esc(tr ? rr.newRouteStatusTr : rr.newRouteStatus)} (${sim.safeDistM} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.elevationProfileAscentDescentMax')}</span><b>+${sim.ascentM} m / -${sim.descentM} m · Max ${sim.maxSafeSlope}°</b></div>
           <p class="help note-sm">${esc(tr ? rr.reasonTr : rr.reasonEn)}</p>
         </div>
         <div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? 'TRN + AutoNav + MGL Konum & Güven Kazancı' : 'TRN + AutoNav + MGL Localization & Confidence'}</h2></div>
-          <div class="kv"><span>${tr ? 'TRN İniş Hassasiyeti' : 'TRN Touchdown'}</span><b class="ok">${sim.navStack.trn.touchdownErrorM} m (${tr ? 'uydu' : 'vs'} ${sim.navStack.trn.landingErrorEllipseOrbitalM} m)</b></div>
-          <div class="kv"><span>${tr ? 'AutoNav Sindirim Alanı' : 'AutoNav Assimilation'}</span><b>%${sim.navStack.autonav.assimilatedPct} (${sim.navStack.autonav.hazardsMapped} ${tr ? 'engel hücresi' : 'hazard cells'})</b></div>
-          <div class="kv"><span>${tr ? 'MGL Ufuk Kilidi' : 'MGL Horizon Lock'}</span><b class="${sim.navStack.mgl.locked ? 'ok' : 'warn'}">±${sim.navStack.mgl.mglCorrectedErrorM} m (VO ±${sim.navStack.mgl.uncorrectedOdometryDriftM} m)</b></div>
-          <div class="kv"><span>${tr ? 'VHF Telsiz Görüş Hattı (LoS)' : 'VHF Radio Line-of-Sight'}</span><b class="${losOk ? 'ok' : 'warn'}">${esc(losText)}</b></div>
-          <div class="kv"><span>${tr ? 'Uydu Öncülü -> Canlı xGDS Güveni' : 'Orbital Prior -> Live xGDS Confidence'}</span><b class="ok">${sim.orbitalConfidencePct}% -> ${sim.assimilatedConfidencePct}%</b></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.trnAutonavMglLocalizationConfidence')}</h2></div>
+          <div class="kv"><span>${L(tr, 'eva.trnTouchdown')}</span><b class="ok">${sim.navStack.trn.touchdownErrorM} m (${L(tr, 'eva.vs')} ${sim.navStack.trn.landingErrorEllipseOrbitalM} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.autonavAssimilation')}</span><b>%${sim.navStack.autonav.assimilatedPct} (${sim.navStack.autonav.hazardsMapped} ${L(tr, 'eva.hazardCells')})</b></div>
+          <div class="kv"><span>${L(tr, 'eva.mglHorizonLock')}</span><b class="${sim.navStack.mgl.locked ? 'ok' : 'warn'}">±${sim.navStack.mgl.mglCorrectedErrorM} m (VO ±${sim.navStack.mgl.uncorrectedOdometryDriftM} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.vhfRadioLineOfSight')}</span><b class="${losOk ? 'ok' : 'warn'}">${esc(losText)}</b></div>
+          <div class="kv"><span>${L(tr, 'eva.orbitalPriorLiveXgdsConfidence')}</span><b class="ok">${sim.orbitalConfidencePct}% -> ${sim.assimilatedConfidencePct}%</b></div>
         </div>
-        <div class="sec-head"><h2>${tr ? 'xGDS 5-Alanlı Canlı Puanlama' : 'xGDS 5-Domain Dynamic Scoring'}</h2><span class="badge-mode badge-live">${sim.domainScores.composite}/100</span></div>
+        <div class="sec-head"><h2>${L(tr, 'eva.xgds5DomainDynamicScoring')}</h2><span class="badge-mode badge-live">${sim.domainScores.composite}/100</span></div>
         <div class="hls-checks">${domainRows}</div>
-        <div class="sec-head"><h2>${tr ? 'Uydu Öncülü vs Sahada Tespit Edilen Farklar (Δt Drift)' : 'Orbital Prior vs In-Situ Discrepancies (Δt Drift)'}</h2></div>
+        <div class="sec-head"><h2>${L(tr, 'eva.orbitalPriorVsInSitu')}</h2></div>
         ${discRows}
         <div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? '4. Astronot Yaşam Destek (PLSS) & Dönüş Rezervi' : '4. Astronaut Life Support (PLSS) & Return Reserve'}</h2></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.4AstronautLifeSupportPlss')}</h2></div>
           <div class="hls-checks">
-            <div class="hls-check"><span class="hint">${tr ? 'O2 Rezervi' : 'O2 Reserve'}</span><b class="${sim.o2RemainPct >= sim.returnReserveO2Pct ? 'ok' : 'warn'}">${sim.o2RemainPct}% (${tr ? 'Tüketim' : 'Used'} ${sim.o2UsedPct}%)</b></div>
-            <div class="hls-check"><span class="hint">${tr ? 'CO2 Filtre (RCA)' : 'CO2 Scrubber'}</span><b class="${sim.co2ScrubberRemainPct >= 25 ? 'ok' : 'warn'}">${sim.co2ScrubberRemainPct}% (${sim.co2ProducedG}g)</b></div>
-            <div class="hls-check"><span class="hint">${tr ? 'Batarya' : 'Suit Battery'}</span><b class="${sim.battRemainPct >= 30 ? 'ok' : 'warn'}">${sim.battRemainPct}%</b></div>
-            <div class="hls-check"><span class="hint">${tr ? 'Soğutma H2O' : 'Cooling H2O'}</span><b class="${sim.waterRemainPct >= 30 ? 'ok' : 'warn'}">${sim.waterUsedL} L (${sim.waterRemainPct}%)</b></div>
+            <div class="hls-check"><span class="hint">${L(tr, 'eva.o2Reserve')}</span><b class="${sim.o2RemainPct >= sim.returnReserveO2Pct ? 'ok' : 'warn'}">${sim.o2RemainPct}% (${L(tr, 'eva.used')} ${sim.o2UsedPct}%)</b></div>
+            <div class="hls-check"><span class="hint">${L(tr, 'eva.co2Scrubber')}</span><b class="${sim.co2ScrubberRemainPct >= 25 ? 'ok' : 'warn'}">${sim.co2ScrubberRemainPct}% (${sim.co2ProducedG}g)</b></div>
+            <div class="hls-check"><span class="hint">${L(tr, 'eva.suitBattery')}</span><b class="${sim.battRemainPct >= 30 ? 'ok' : 'warn'}">${sim.battRemainPct}%</b></div>
+            <div class="hls-check"><span class="hint">${L(tr, 'eva.coolingH2o')}</span><b class="${sim.waterRemainPct >= 30 ? 'ok' : 'warn'}">${sim.waterUsedL} L (${sim.waterRemainPct}%)</b></div>
           </div>
-          <div class="kv"><span>${tr ? 'Dönüş + 30dk Acil Durum O2 Rezervi' : 'Return + 30m Emergency O2 Reserve'}</span><b class="${sim.returnReserveProtected ? 'ok' : 'bad'}">%${sim.returnReserveO2Pct} (${sim.returnReserveProtected ? (tr ? 'KORUNDU' : 'PROTECTED') : (tr ? 'RİSKLİ' : 'BREACHED')})</b></div>
-          <div class="kv"><span>${tr ? 'Metabolik Yük & Yürüyüş Hızı' : 'Metabolic Rate & Effective Pace'}</span><b>${sim.metabolicKcalH} kcal/${tr ? 'sa' : 'h'} (${sim.metabolicW} W) · ${sim.effSpeedKmh} km/h</b></div>
-          <div class="kv"><span>${tr ? 'Walkback Güvenli Geri Dönüş' : 'Walkback Safety Limit'}</span><b class="${sim.withinWalkback ? 'ok' : 'warn'}">${sim.walkbackRadiusM} m (${tr ? 'Azami' : 'Max'} ${sim.maxRadiusFromBaseM} m)</b></div>
-          <div class="kv"><span>${tr ? 'SPE Sığınağa Acil Kaçış Süresi (≤30 dk)' : 'SPE Storm Time-to-Shelter (≤30m)'}</span><b class="${sim.speWithin30Min ? 'ok' : 'bad'}">${speTimeShown} ${tr ? 'dk' : 'min'} (${sim.speReturnDistM} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.return30mEmergencyO2Reserve')}</span><b class="${sim.returnReserveProtected ? 'ok' : 'bad'}">%${sim.returnReserveO2Pct} (${sim.returnReserveProtected ? (L(tr, 'eva.protected')) : (L(tr, 'eva.breached'))})</b></div>
+          <div class="kv"><span>${L(tr, 'eva.metabolicRateEffectivePace')}</span><b>${sim.metabolicKcalH} kcal/${L(tr, 'eva.h')} (${sim.metabolicW} W) · ${sim.effSpeedKmh} km/h</b></div>
+          <div class="kv"><span>${L(tr, 'eva.walkbackSafetyLimit')}</span><b class="${sim.withinWalkback ? 'ok' : 'warn'}">${sim.walkbackRadiusM} m (${L(tr, 'eva.max')} ${sim.maxRadiusFromBaseM} m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.speStormTimeToShelter')}</span><b class="${sim.speWithin30Min ? 'ok' : 'bad'}">${speTimeShown} ${L(tr, 'eva.min')} (${sim.speReturnDistM} m)</b></div>
           <p class="help note-sm">${esc(tr ? ls.xemuArchitectureNoteTr : ls.xemuArchitectureNote)}</p>
         </div>
         <div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? '5. Çevresel Koşullar & Operasyonel Sınırlar' : '5. Environmental Conditions & Operational Limits'}</h2></div>
-          <div class="kv"><span>${tr ? 'Yüzey Sıcaklığı & Giysi Isıtıcı Yükü' : 'Ambient Surface Temp & Suit Heater'}</span><b>${env.ambientTempC} °C · +${env.coldHeaterW} W</b></div>
-          <div class="kv"><span>${tr ? 'Toz Optik Derinliği (τ) & Görüş Mesafesi' : 'Dust Optical Depth (τ) & Visibility'}</span><b>τ=${env.tau} · ${env.visibilityM} m (${Math.round(env.envSpeedFactor * 100)}% pace)</b></div>
-          <div class="kv"><span>${tr ? 'Radyasyon Dozu & Gale Belirsizlik Aralığı' : 'Radiation Dose & Gale Uncertainty Band'}</span><b>${sim.radDoseUsv} ± ${sim.radDoseUncUsv} µSv (${sim.radBand.nominal} ± ${sim.radBand.uncMsvYr} mSv/yr · ±18.8%)</b></div>
-          <div class="kv"><span>${tr ? 'Operasyonel Eğim Sınırı (Zemine Bağlı)' : 'Operational Slope Limit (Soil-Coupled)'}</span><b>${sim.maxSlope}° -> Etkin ${sim.slopeLimitInfo.effectiveMaxDeg}° (${esc(sim.slopeLimitInfo.soilClass)})</b></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.5EnvironmentalConditionsOperationalLimits')}</h2></div>
+          <div class="kv"><span>${L(tr, 'eva.ambientSurfaceTempSuitHeater')}</span><b>${env.ambientTempC} °C · +${env.coldHeaterW} W</b></div>
+          <div class="kv"><span>${L(tr, 'eva.dustOpticalDepthVisibility')}</span><b>τ=${env.tau} · ${env.visibilityM} m (${Math.round(env.envSpeedFactor * 100)}% pace)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.radiationDoseGaleUncertaintyBand')}</span><b>${sim.radDoseUsv} ± ${sim.radDoseUncUsv} µSv (${sim.radBand.nominal} ± ${sim.radBand.uncMsvYr} mSv/yr · ±18.8%)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.operationalSlopeLimitSoilCoupled')}</span><b>${sim.maxSlope}° -> Etkin ${sim.slopeLimitInfo.effectiveMaxDeg}° (${esc(sim.slopeLimitInfo.soilClass)})</b></div>
           <p class="help note-sm">${esc(sim.slopeLimitInfo.note)}</p>
         </div>
         ${sim.dustMl ? `<div class="eva-drift-card">
-          <div class="sec-head"><h2>${tr ? 'PIML 1-dk Toz & Vorteks Tahmini (MEDA/TWINS)' : 'PIML 1-min Vortex & Dust Nowcast (MEDA/TWINS)'}</h2><span class="badge-mode badge-live">ACC ${sim.dustMl.overallAccuracyPct}% · AUC ${sim.dustMl.overallRocAuc}</span></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.piml1MinVortexDust')}</h2><span class="badge-mode badge-live">ACC ${sim.dustMl.overallAccuracyPct}% · AUC ${sim.dustMl.overallRocAuc}</span></div>
           ${sim.dustMl.horizons.slice(0, 3).map(h => `<div class="kv"><span>${esc(tr ? h.horizonTr : h.horizonEn)} <small>(${esc(h.keyMetric)})</small></span><b class="${h.cls}">${h.probPct}% · ${esc(tr ? h.statusTr : h.statusEn)}</b></div>`).join('')}
         </div>` : ''}
         <div class="eva-drift-card" id="eva-completion-report">
-          <div class="sec-head"><h2>${tr ? '6. Görev Tamamlanma Raporu (Mission Completion)' : '6. Mission Completion Report'}</h2><span class="badge-mode badge-live">${esc(cr.missionStatus)}</span></div>
-          <div class="kv"><span>${tr ? 'Yürüyüş Süresi & Toplam Mesafe' : 'Walk Duration & Total Distance'}</span><b>${cr.durationH} ${tr ? 'saat' : 'h'} · ${cr.distanceM} m (+${cr.ascentM}m / -${cr.descentM}m)</b></div>
-          <div class="kv"><span>${tr ? 'Tüketilen Kaynaklar (O2 / CO2 / Bat / H2O)' : 'Consumed Resources (O2 / CO2 / Batt / H2O)'}</span><b>${cr.consumed.o2G}g O2 (${cr.consumed.o2Pct}%) · ${cr.consumed.co2G}g CO2 (${cr.consumed.co2ScrubberPct}%) · ${cr.consumed.battPct}% Bat · ${cr.consumed.waterL}L H2O</b></div>
-          <div class="kv"><span>${tr ? 'Karşılaşılan & Aşılan Tehlikeler' : 'Hazards Encountered & Bypassed'}</span><b>${cr.hazardsEncounteredAndBypassed} (${cr.reroutesExecuted} A* reroute)</b></div>
-          <div class="kv"><span>${tr ? 'Toplanan Bilimsel Numune' : 'Collected Science Samples'}</span><b>${cr.samplesCollectedKg} kg (${cr.waypointsVisited} POI)</b></div>
-          <div class="kv"><span>${tr ? 'Dönüş Durumu' : 'Return Status'}</span><b class="${sim.returnReserveProtected && sim.withinWalkback ? 'ok' : 'warn'}">${esc(tr ? cr.returnStatusTr : cr.returnStatus)}</b></div>
+          <div class="sec-head"><h2>${L(tr, 'eva.6MissionCompletionReport')}</h2><span class="badge-mode badge-live">${esc(cr.missionStatus)}</span></div>
+          <div class="kv"><span>${L(tr, 'eva.walkDurationTotalDistance')}</span><b>${cr.durationH} ${L(tr, 'eva.h2')} · ${cr.distanceM} m (+${cr.ascentM}m / -${cr.descentM}m)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.consumedResourcesO2Co2Batt')}</span><b>${cr.consumed.o2G}g O2 (${cr.consumed.o2Pct}%) · ${cr.consumed.co2G}g CO2 (${cr.consumed.co2ScrubberPct}%) · ${cr.consumed.battPct}% Bat · ${cr.consumed.waterL}L H2O</b></div>
+          <div class="kv"><span>${L(tr, 'eva.hazardsEncounteredBypassed')}</span><b>${cr.hazardsEncounteredAndBypassed} (${cr.reroutesExecuted} A* reroute)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.collectedScienceSamples')}</span><b>${cr.samplesCollectedKg} kg (${cr.waypointsVisited} POI)</b></div>
+          <div class="kv"><span>${L(tr, 'eva.returnStatus')}</span><b class="${sim.returnReserveProtected && sim.withinWalkback ? 'ok' : 'warn'}">${esc(tr ? cr.returnStatusTr : cr.returnStatus)}</b></div>
         </div>
-        <div class="sec-head"><h2>${tr ? 'Bilimsel Hedef Noktaları (Science Waypoints)' : 'Science Waypoints (Click for HUD)'}</h2></div>
+        <div class="sec-head"><h2>${L(tr, 'eva.scienceWaypointsClickForHud')}</h2></div>
         <div class="eva-wp-list">${wpCards}</div>`;
 
       const localCanvas = out.querySelector('#eva-local-canvas');

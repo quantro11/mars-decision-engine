@@ -5,8 +5,12 @@
 (function (global) {
   'use strict';
 
+  const PLANET = (global.PLANET_PROFILES ||
+    (typeof globalThis !== 'undefined' && globalThis.PLANET_PROFILES) ||
+    (typeof require === 'function' ? require('../planet_profiles.js').PLANET_PROFILES : null)).get();
+
   // Suit / planet constants (NASA SP-2010-3407 xEMU reference architecture, Mars-adapted)
-  const MARS_G = 3.71; // m/s^2 (0.378 g_Earth)
+  const MARS_G = PLANET.gravityMs2.value; // m/s^2 (0.378 g_Earth)
   const SUIT_O2_CAP_G = 850; // Primary usable metabolic O2 (g) per astronaut suit
   const SUIT_BATT_CAP_WH = 960; // PLSS Li-Ion battery capacity (Wh)
   const SUIT_WATER_CAP_L = 3.8; // LCVG feedwater sublimator tank capacity (L)
@@ -1253,8 +1257,8 @@
         });
       } else if (b.id === 'apollo_xemu_bioenergetics_benchmark' && sc && typeof sc.calcPandolfMars === 'function') {
         const lunarNom = sc.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 2.0, terrainEta: 1.25, gravityMps2: 1.62 });
-        const marsNom = sc.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 3.8, terrainEta: 1.35, durationH: 2.0, gravityMps2: 3.71 });
-        const marsSandUp = sc.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 9.0, sandFrac: 1.0, durationH: 2.0, gravityMps2: 3.71 });
+        const marsNom = sc.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 3.8, terrainEta: 1.35, durationH: 2.0, gravityMps2: MARS_G });
+        const marsSandUp = sc.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 9.0, sandFrac: 1.0, durationH: 2.0, gravityMps2: MARS_G });
         const passLunar = lunarNom.metabolicW >= b.lunar16gWattsRange[0] && lunarNom.metabolicW <= b.lunar16gWattsRange[1];
         const passMarsNom = marsNom.metabolicW >= b.mars038gNominalWattsRange[0] && marsNom.metabolicW <= b.mars038gNominalWattsRange[1];
         const passMarsSand = marsSandUp.metabolicW >= b.mars038gUphillSandWattsRange[0] && marsSandUp.metabolicW <= b.mars038gUphillSandWattsRange[1] && marsSandUp.metabolicW > marsNom.metabolicW;

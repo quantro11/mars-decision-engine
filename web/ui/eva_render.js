@@ -190,7 +190,11 @@
         ctx.setLineDash([]);
         ctx.fillStyle = '#edf1f7';
         ctx.font = '600 9.5px "IBM Plex Mono", monospace';
-        ctx.fillText(tr ? '! DİNAMİK ENGEL' : '! ANOMALY', dx - dr, dy - dr - 4);
+        const i18n = getI18N();
+        const anomalyTxt = (i18n && typeof i18n.pick === 'function')
+          ? i18n.pick(tr, 'eva.anomalyLabel')
+          : (tr ? '! DİNAMİK ENGEL' : '! ANOMALY');
+        ctx.fillText(anomalyTxt, dx - dr, dy - dr - 4);
         ctx.restore();
       }
     }

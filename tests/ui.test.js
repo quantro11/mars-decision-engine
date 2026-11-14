@@ -365,5 +365,16 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   const fullHtml = BR.renderBriefHTML(payload, FMT);
   assert.ok(fullHtml.includes('DTEEC_') && fullHtml.includes('Mission Completion Report') && fullHtml.includes('Scientific Dataset Traceability'), 'Mission Brief HTML renders HiRISE DTM ID, Completion Report, and Traceability table');
 
+  // --- 10. Centralized i18n dictionary symmetry, pick() helper, & standalone EVA_SIM + PlanetProfile check
+  const enKeys = Object.keys(I18N.STRINGS.en).sort();
+  const trKeys = Object.keys(I18N.STRINGS.tr).sort();
+  assert.deepStrictEqual(enKeys, trKeys, 'STRINGS.en and STRINGS.tr must share identical translation keys');
+  assert.strictEqual(I18N.pick(false, 'pn.nearRegion', ['Gale']), 'near Gale');
+  assert.strictEqual(I18N.pick(true, 'pn.nearRegion', ['Gale']), 'Gale yakını');
+  const EVA_SIM = require('../web/ui/eva_sim.js').MDE_EVA_SIM;
+  const PLANET_ACTIVE = require('../web/planet_profiles.js').PLANET_PROFILES.get();
+  assert.strictEqual(EVA_SIM.MARS_G, PLANET_ACTIVE.gravityMs2.value, 'eva_sim.js reads gravity dynamically from PLANET_PROFILES');
+  assert.ok(typeof EVA_SIM.simulateEVA === 'function' && EVA.SIM === EVA_SIM, 'MDE_EVA exposes decoupled MDE_EVA_SIM engine');
+
   console.log('All UI module / A* window / brief / habitability XSS / markers / WebGL 3D tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });
