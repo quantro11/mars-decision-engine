@@ -145,6 +145,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
   const proc = spawn(browserPath, [
     '--headless=new',
     '--no-sandbox',
+    '--disable-gpu-sandbox',
     '--disable-dev-shm-usage',
     '--disable-background-networking',
     '--user-data-dir=' + tmpDir,
@@ -152,7 +153,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
     '--window-size=1440,900',
     '--enable-webgl',
     '--use-gl=angle',
-    '--use-angle=swiftshader',
+    '--use-angle=swiftshader-webgl',
     '--enable-unsafe-swiftshader',
     'about:blank'
   ], {
