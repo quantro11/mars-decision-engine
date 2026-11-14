@@ -67,6 +67,7 @@
   <aside class="panel left" aria-label="Mission controls">
     <section id="panel-score" class="mode-panel">
       <div class="sec-head"><h2>Mission priority</h2></div>
+      <p class="intro-lead" id="score-intro">Choose a goal to rank landing sites across Mars, or adjust what matters most below.</p>
       <div class="presets" id="presets"></div>
 
       <div class="sec-head"><h2>Criteria weights</h2><span class="hint">normalised to 100 %</span></div>
@@ -85,9 +86,9 @@
 
       <div class="sec-head"><h2>Ice depth</h2><span class="hint">SWIM 2.0</span></div>
       <div class="seg" id="iceband">
-        <button data-band="ice01">0–1 m</button>
-        <button data-band="ice15" class="active">1–5 m</button>
-        <button data-band="ice5">&gt; 5 m</button>
+        <button data-band="ice01" aria-pressed="false">0–1 m</button>
+        <button data-band="ice15" class="active" aria-pressed="true">1–5 m</button>
+        <button data-band="ice5" aria-pressed="false">&gt; 5 m</button>
       </div>
 
       <div class="sec-head"><h2>Weight sensitivity</h2><span class="hint">Monte Carlo</span></div>
@@ -174,15 +175,15 @@
     <section class="layers">
       <div class="sec-head"><h2>Map layer</h2></div>
       <div class="seg seg-grid" id="overlay">
-        <button data-ov="score" class="active">Score</button>
-        <button data-ov="ice">Ice</button>
-        <button data-ov="slope">Slope</button>
-        <button data-ov="elev">Elevation</button>
-        <button data-ov="ti">Thermal</button>
-        <button data-ov="dust">Dust</button>
-        <button data-ov="rad">Radiation</button>
-        <button data-ov="cave">Caves</button>
-        <button data-ov="none">Imagery</button>
+        <button data-ov="score" class="active" aria-pressed="true">Score</button>
+        <button data-ov="ice" aria-pressed="false">Ice</button>
+        <button data-ov="slope" aria-pressed="false">Slope</button>
+        <button data-ov="elev" aria-pressed="false">Elevation</button>
+        <button data-ov="ti" aria-pressed="false">Thermal</button>
+        <button data-ov="dust" aria-pressed="false">Dust</button>
+        <button data-ov="rad" aria-pressed="false">Radiation</button>
+        <button data-ov="cave" aria-pressed="false">Caves</button>
+        <button data-ov="none" aria-pressed="false">Imagery</button>
       </div>
       <label>Layer opacity <span id="opacity-v">45%</span>
         <input type="range" id="opacity" min="0" max="100" value="45"></label>
@@ -205,10 +206,10 @@
       </div>
       <div class="map-controls">
         <div id="globe-tools" class="globe-tools hidden">
-          <button id="btn-ov3d" title="Show the analysis layer on the globe">Overlay off</button>
+          <button id="btn-ov3d" aria-pressed="false" title="Show the analysis layer on the globe">Overlay off</button>
           <button id="btn-relief" title="Vertical exaggeration of the relief">Relief 8×</button>
-          <button id="btn-sun" class="active" title="Directional sunlight">Sun</button>
-          <button id="btn-spin" title="Slow rotation">Spin</button>
+          <button id="btn-sun" class="active" aria-pressed="true" title="Directional sunlight">Sun</button>
+          <button id="btn-spin" aria-pressed="false" title="Slow rotation">Spin</button>
         </div>
         <div class="scale-box" title="Scale at the equator">
           <span id="scale-label">1000 km</span>
@@ -235,12 +236,23 @@
     <div id="loading" class="loading" role="status" aria-live="polite">
       <div class="spinner"></div>
       <div class="loading-title">Preparing Mars</div>
-      <div class="loading-sub">Decoding MOLA relief, SWIM ice and TES thermal layers</div>
+      <div class="loading-sub" id="loading-sub">Loading NASA elevation, underground water ice, and temperature maps…</div>
     </div>
   </section>
 
   <!-- RIGHT -->
   <aside class="panel right" aria-label="Candidates and site details">
+    <section id="welcome-guide" class="welcome-guide" aria-label="Quick start guide">
+      <div class="guide-head">
+        <span class="guide-title" id="guide-title">How to use this map</span>
+        <button id="guide-dismiss" class="guide-close" aria-label="Dismiss guide">Hide</button>
+      </div>
+      <ol class="guide-steps" id="guide-steps">
+        <li><b>Pick a goal</b> on the left — safer landing, near water ice, or balanced.</li>
+        <li><b>Click any bright area</b> on Mars or a ranked card below to inspect it.</li>
+        <li><b>Read the plain summary</b> under <em>Selected location</em> for safety &amp; survival facts.</li>
+      </ol>
+    </section>
     <section id="candidates-sec">
       <div class="sec-head"><h2>Best candidate regions</h2><span class="hint">2°×2° blocks · ≥ 800 km apart</span></div>
       <ol id="candidates" class="cards"></ol>

@@ -97,18 +97,41 @@
     cave: ['0 KM MAĞARA ADAYI', '≥1020 KM'],
   };
 
+  const LEGEND_EXPLAIN = {
+    score: 'Brighter gold shows the strongest overall match for your chosen priorities.',
+    ice: 'Cyan highlights where underground water ice lies closest to the surface.',
+    slope: 'Green indicates flat landing ground; yellow to red warns of steep slopes.',
+    elev: 'Deep blue shows low plains with thicker air for braking; bright peaks are high mountains.',
+    ti: 'Blue shows firm bedrock that supports weight; deep red marks loose surface dust.',
+    dust: 'Darker zones have cleaner skies and solar panels; bright ochre marks heavy dust.',
+    rad: 'Green at lower elevations gives stronger natural atmospheric shielding; magenta is higher exposure.',
+    cave: 'Golden highlights mark regions near mapped lava-tube / skylight candidates.',
+  };
+
+  const LEGEND_EXPLAIN_TR = {
+    score: 'Parlak altın tonlar seçtiğiniz önceliklere en uygun bölgeleri gösterir.',
+    ice: 'Camgöbeği tonlar yüzeye en yakın yeraltı su buzu rezervlerini işaretler.',
+    slope: 'Yeşil düz ve güvenli iniş zeminini; sarı ve kırmızı dik yamaçları gösterir.',
+    elev: 'Koyu mavi iniş frenlemesine elverişli alçak ovaları, açık tonlar yüksek zirveleri gösterir.',
+    ti: 'Mavi ağır yük taşıyabilen sağlam kayayı; koyu kırmızı gevşek tozu belirtir.',
+    dust: 'Koyu bölgeler güneş paneli için daha temiz havayı, açık sarı yoğun tozu gösterir.',
+    rad: 'Alçak rakımdaki yeşil tonlar daha iyi doğal atmosfer koruması sağlar.',
+    cave: 'Altın tonlar haritalanmış mağara ve lav tüneli adaylarına yakın alanları gösterir.',
+  };
+
   function renderLegendHTML(overlay, langArg) {
     const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
     const lang = langArg || (i18n && i18n.getLang ? i18n.getLang() : 'en');
     const lut = LUT[overlay], ends = (lang === 'tr' ? LEGEND_ENDS_TR : LEGEND_ENDS)[overlay];
     if (!lut || !ends) return '';
+    const note = (lang === 'tr' ? LEGEND_EXPLAIN_TR : LEGEND_EXPLAIN)[overlay] || '';
     const gradId = `ov-grad-${overlay}`;
     const stops = [];
     for (let i = 0; i <= 10; i++) {
       const v = Math.round(i * 25.5);
       stops.push(`<stop offset="${i * 10}%" stop-color="rgb(${lut[v * 3]},${lut[v * 3 + 1]},${lut[v * 3 + 2]})"/>`);
     }
-    return `<svg class="bar legend-svg" viewBox="0 0 200 4" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">${stops.join('')}</linearGradient></defs><rect width="200" height="4" rx="2" fill="url(#${gradId})"/></svg><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>`;
+    return `<svg class="bar legend-svg" viewBox="0 0 200 4" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">${stops.join('')}</linearGradient></defs><rect width="200" height="4" rx="2" fill="url(#${gradId})"/></svg><div class="ends"><span>${ends[0]}</span><span>${ends[1]}</span></div>${note ? `<p class="legend-note">${note}</p>` : ''}`;
   }
 
   global.MDE_OVERLAYS = { LUT, LEGEND_ENDS, lerpStops, buildRadLut, fillOverlayBuffer, renderLegendHTML };

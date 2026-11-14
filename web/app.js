@@ -274,7 +274,7 @@
       if ($('#panel-' + k)) $('#panel-' + k).classList.toggle('hidden', k !== m);
     }
     if (m === 'route') S.overlay = 'slope'; else if (m === 'score') S.overlay = 'score';
-    document.querySelectorAll('#overlay button').forEach(b => b.classList.toggle('active', b.dataset.ov === S.overlay));
+    document.querySelectorAll('#overlay button').forEach(b => { const isActive = b.dataset.ov === S.overlay; b.classList.toggle('active', isActive); b.setAttribute('aria-pressed', String(isActive)); });
     updateHudLayer(); viewport.markOverlayDirty(); renderLegend();
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
@@ -290,19 +290,19 @@
     $('#btn-relief').onclick = () => { const v = lvls[(lvls.indexOf(globe.state.exaggeration) + 1) % lvls.length]; globe.state.exaggeration = v; $('#btn-relief').textContent = `${t('relief')} ${v}×`; viewport.draw(); };
   }
   if (globe) {
-    on('#btn-ov3d', 'onclick', () => { S.globeOverlay = !S.globeOverlay; $('#btn-ov3d').classList.toggle('active', S.globeOverlay); $('#btn-ov3d').textContent = t(S.globeOverlay ? 'ovOn' : 'ovOff'); viewport.draw(); });
-    on('#btn-sun', 'onclick', () => { globe.state.sunLight = !globe.state.sunLight; $('#btn-sun').classList.toggle('active', globe.state.sunLight); viewport.draw(); });
-    on('#btn-spin', 'onclick', () => { globe.state.autoSpin = !globe.state.autoSpin; $('#btn-spin').classList.toggle('active', globe.state.autoSpin); if (globe.state.autoSpin) viewport.schedule3D(); });
+    on('#btn-ov3d', 'onclick', () => { S.globeOverlay = !S.globeOverlay; $('#btn-ov3d').classList.toggle('active', S.globeOverlay); $('#btn-ov3d').setAttribute('aria-pressed', String(S.globeOverlay)); $('#btn-ov3d').textContent = t(S.globeOverlay ? 'ovOn' : 'ovOff'); viewport.draw(); });
+    on('#btn-sun', 'onclick', () => { globe.state.sunLight = !globe.state.sunLight; $('#btn-sun').classList.toggle('active', globe.state.sunLight); $('#btn-sun').setAttribute('aria-pressed', String(globe.state.sunLight)); viewport.draw(); });
+    on('#btn-spin', 'onclick', () => { globe.state.autoSpin = !globe.state.autoSpin; $('#btn-spin').classList.toggle('active', globe.state.autoSpin); $('#btn-spin').setAttribute('aria-pressed', String(globe.state.autoSpin)); if (globe.state.autoSpin) viewport.schedule3D(); });
   }
   on('#hard', 'onchange', (e) => { S.hard = e.target.checked; rescore(); });
   on('#agg-geo', 'onchange', (e) => { S.agg = e.target.checked ? 'geo' : 'sum'; rescore(); });
   document.querySelectorAll('#iceband button').forEach(b => b.onclick = async () => {
-    document.querySelectorAll('#iceband button').forEach(x => x.classList.toggle('active', x === b));
+    document.querySelectorAll('#iceband button').forEach(x => { const isActive = x === b; x.classList.toggle('active', isActive); x.setAttribute('aria-pressed', String(isActive)); });
     S.iceBand = b.dataset.band;
     if (!L[S.iceBand]) { await layers.decode(S.iceBand); syncWorkerLayer(S.iceBand); }
     rescore();
   });
-  document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => x.classList.toggle('active', x === b)); S.overlay = b.dataset.ov; updateHudLayer(); viewport.markOverlayDirty(); renderLegend(); viewport.draw(); });
+  document.querySelectorAll('#overlay button').forEach(b => b.onclick = () => { document.querySelectorAll('#overlay button').forEach(x => { const isActive = x === b; x.classList.toggle('active', isActive); x.setAttribute('aria-pressed', String(isActive)); }); S.overlay = b.dataset.ov; updateHudLayer(); viewport.markOverlayDirty(); renderLegend(); viewport.draw(); });
   on('#opacity', 'oninput', (e) => { S.opacity = +e.target.value / 100; if ($('#opacity-v')) $('#opacity-v').textContent = e.target.value + '%'; viewport.draw(); });
   on('#show-regions', 'onchange', (e) => { S.showRegions = e.target.checked; viewport.draw(); });
   on('#show-ez', 'onchange', (e) => { S.showEZ = e.target.checked; viewport.draw(); });
@@ -411,6 +411,8 @@
     }
   }
 
+  try { if (localStorage.getItem('mde_hide_guide') === '1' && $('#welcome-guide')) $('#welcome-guide').classList.add('hidden'); } catch (e) { /* storage disabled */ }
+  on('#guide-dismiss', 'onclick', () => { if ($('#welcome-guide')) $('#welcome-guide').classList.add('hidden'); try { localStorage.setItem('mde_hide_guide', '1'); } catch (e) { /* storage disabled */ } });
   if (I18N && I18N.getLang() === 'tr') applyLang('tr'); else { panels.buildPresets(); panels.buildSliders(); panels.renderRoute(); }
   renderLegend();
   initHabitabilityAPI({ onLiveUpdate: () => { if (S.mode === 'crisis') panels.runCrisis(); } });

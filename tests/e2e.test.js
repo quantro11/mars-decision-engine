@@ -317,7 +317,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
       if (!btn || btn.getAttribute('aria-pressed') !== 'true') return null;
       if (!canvas || canvas.classList.contains('hidden')) return null;
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (!gl || !window.MDE || !window.MDE.globe) return null;
+      if (!gl || gl.isContextLost() || !window.MDE || !window.MDE.globe || window.MDE.globe.state.contextLost) return null;
       return {
         pressed: btn.getAttribute('aria-pressed'),
         renderer: gl.getParameter(gl.RENDERER),
@@ -367,11 +367,33 @@ async function runHttpE2E(browserPath, securityHeaders) {
     await evalJS(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     await waitFor(() => evalJS(`document.getElementById('brief-modal').classList.contains('hidden')`), 'mission brief modal Escape close');
 
-    // 6. Test High-Contrast Light/Dark Theme toggle + Live TR/EN language switch
+    // 6. Test High-Contrast Light/Dark Theme toggle, keyboard card selection, plain-language summary, guide dismiss + TR/EN switch
     await evalJS(`document.getElementById('btn-theme').click()`);
-    const theme = await evalJS(`document.documentElement.getAttribute('data-theme')`);
-    assert.strictEqual(theme, 'light', 'Clicking #btn-theme should toggle data-theme="light"');
+    const themeCheck = await evalJS(`({
+      theme: document.documentElement.getAttribute('data-theme'),
+      hudBg: getComputedStyle(document.querySelector('.map-hud')).backgroundColor,
+    })`);
+    assert.strictEqual(themeCheck.theme, 'light', 'Clicking #btn-theme should toggle data-theme="light"');
+    assert(!themeCheck.hudBg.startsWith('rgba(11, 12, 16') && !themeCheck.hudBg.startsWith('rgb(11, 12, 16'), `Light-theme .map-hud must use light translucent background, got: ${themeCheck.hudBg}`);
     await evalJS(`document.getElementById('btn-theme').click()`);
+
+    // Keyboard activation of a ranked candidate card via Enter key -> active state + plain summary card
+    await evalJS(`(() => {
+      const card = document.querySelectorAll('#candidates .card')[1];
+      card.focus();
+      card.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    })()`);
+    const kbState = await evalJS(`({
+      pressed: document.querySelectorAll('#candidates .card')[1].getAttribute('aria-pressed'),
+      summary: document.querySelector('#detail .plain-verdict') ? document.querySelector('#detail .plain-verdict').textContent : '',
+      checksText: document.querySelector('#detail .hls-checks') ? document.querySelector('#detail .hls-checks').textContent : '',
+    })`);
+    assert.strictEqual(kbState.pressed, 'true', 'Pressing Enter on a candidate card should select it');
+    assert(kbState.summary.includes('Plain summary') && kbState.summary.includes('mSv/yr'), `Plain summary card missing or incomplete: ${kbState.summary}`);
+    assert(kbState.checksText.includes('✓') || kbState.checksText.includes('✕'), 'Constraint check badges must include non-color ✓/✕ indicator');
+
+    await evalJS(`document.getElementById('guide-dismiss').click()`);
+    assert(await evalJS(`document.getElementById('welcome-guide').classList.contains('hidden')`), '#guide-dismiss should hide the quick-start guide');
 
     await evalJS(`document.getElementById('btn-lang').click()`);
     const trState = await evalJS(`({
@@ -381,6 +403,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
       legendText: document.getElementById('legend').textContent,
       saveText: document.getElementById('btn-save-key').textContent,
       aboutHtml: document.getElementById('about-content').textContent,
+      plainTr: document.querySelector('#detail .plain-verdict') ? document.querySelector('#detail .plain-verdict').textContent : '',
     })`);
     assert.strictEqual(trState.lang, 'tr', 'Clicking #btn-lang should set html lang="tr"');
     assert.strictEqual(trState.modeLabel, 'Saha seçimi', 'Turkish mode button label rendered');
@@ -388,6 +411,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert(trState.legendText.includes('ELENDİ/ZAYIF') || trState.legendText.includes('DİK'), `Legend should localize cleanly: ${trState.legendText}`);
     assert.strictEqual(trState.saveText, 'Kaydet', 'Module IV save button localized');
     assert(trState.aboutHtml.includes('Mühendislik Gerekçesi'), '#about-content Method modal translates to Turkish');
+    assert(trState.plainTr.includes('Bir bakışta özet'), `Turkish plain summary card missing: ${trState.plainTr}`);
     await evalJS(`document.getElementById('btn-lang').click()`);
     const enCheck = await evalJS(`({ mode: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent, aboutHtml: document.getElementById('about-content').textContent })`);
     assert.strictEqual(enCheck.mode, 'Site selection', 'Second #btn-lang click reverts cleanly back to English');
@@ -486,6 +510,10 @@ async function runFileProtocolCheck(browserPath) {
     '--headless=new',
     '--no-sandbox',
     '--disable-dev-shm-usage',
+    '--enable-webgl',
+    '--use-gl=angle',
+    '--use-angle=swiftshader-webgl',
+    '--enable-unsafe-swiftshader',
     '--user-data-dir=' + tmpDir,
     '--remote-debugging-pipe',
     'about:blank'

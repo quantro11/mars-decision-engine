@@ -389,6 +389,7 @@
     });
     canvas.addEventListener('webglcontextrestored', () => {
       state.contextLost = false;
+      while (gl.getError() !== gl.NO_ERROR) { /* drain CONTEXT_LOST_WEBGL queued during context loss */ }
       if (!initGL()) return;
       if (lastBaseImg && state.elevData) setLayers(lastBaseImg, state.elevData, state.W, state.H);
       else if (lastBaseImg) setBaseTexture(lastBaseImg);
