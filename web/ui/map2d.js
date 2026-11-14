@@ -321,7 +321,12 @@
       });
       if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
       if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
-      if (global.MDE_EVA && global.MDE_EVA.drawGlobalWalkbackOverlay && (S.mode === 'eva' || S.mode === 'route' || S.selected)) {
+      // Legacy on-foot walkback ring ("EVA WALKBACK 0.80 km"): only meaningful for the legacy
+      // astronaut demo, so draw it only while that collapsed section is open. The new 16 km²
+      // rover analysis has no on-foot mode and the label was being misread as map resolution.
+      const legacyEl = typeof document !== 'undefined' ? document.getElementById('eva-legacy-details') : null;
+      const legacyOpen = !!(legacyEl && legacyEl.open);
+      if (legacyOpen && global.MDE_EVA && global.MDE_EVA.drawGlobalWalkbackOverlay && (S.mode === 'eva' || S.mode === 'route' || S.selected)) {
         global.MDE_EVA.drawGlobalWalkbackOverlay(ctx, projectGrid, L, S, dpr);
       }
     }
