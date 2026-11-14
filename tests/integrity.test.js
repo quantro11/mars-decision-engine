@@ -74,6 +74,25 @@ for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js'
   }
 }
 
+// 6b. Production web metadata/favicon assets & editorial/scientific hygiene
+for (const asset of ['robots.txt', 'sitemap.xml', 'favicon.svg', 'favicon.ico']) {
+  assert.ok(fs.existsSync(path.join(WEB, asset)) && fs.statSync(path.join(WEB, asset)).size > 0, `web/${asset} exists and is non-empty`);
+}
+for (const rel of ['index.html', 'style.css', 'live_api.js', 'ui/i18n.js']) {
+  const txt = fs.readFileSync(path.join(WEB, rel), 'utf8');
+  assert.ok(!/J2000/.test(txt), `Unsupported J2000 starfield claim in web/${rel}`);
+  assert.ok(!/(?:45\+|≥\s*45)\s*L\/sol/.test(txt), `Invented L/sol extraction claim in web/${rel}`);
+  assert.ok(!/empty-reticle/.test(txt), `Orphan empty-reticle selector in web/${rel}`);
+}
+for (const rel of ['globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/charts.js', 'ui/panels.js', 'ui/brief.js', 'ui/i18n.js']) {
+  const txt = fs.readFileSync(path.join(WEB, rel), 'utf8');
+  assert.ok(!/[ \t]+$/m.test(txt), `Trailing whitespace found in web/${rel}`);
+}
+const { SCORING } = require('../web/scoring.js');
+for (const p of Object.values(SCORING.PRESETS)) {
+  assert.ok(!('icon' in p), 'Unused PRESETS icon property removed');
+}
+
 // 7. Vercel deployment security (strict CSP with ZERO 'unsafe-inline' & worker-src 'self') & cache headers
 const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
 const hdrs = (vercel.headers || []).flatMap(h => h.headers || []);

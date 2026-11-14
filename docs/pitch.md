@@ -14,7 +14,7 @@ scored by NASA's own HLS-2015 landing-site rules in both 2D Map and 3D WebGL MOL
 *Click "Landing safety".* "Equatorial lowlands light up — Elysium, Isidis, Chryse."
 *Click "ISRU".* "Watch the optimum migrate north: Arcadia, Utopia, Deuteronilus — exactly the regions NASA's SWIM team flagged for crewed missions.
 The model was never told their names; it found them from data."
-*Point at candidate card & detail panel.* "Each candidate explains human survival: −4 km elevation ✓, 0.9° slope ✓, SWIM ice consistency ✓, plus exact **ISRU Water Yield (L/sol)**, 4-crew life support margin, MSL Curiosity RAD-calibrated GCR radiation dose, and nocturnal surface cold."
+*Point at candidate card & detail panel.* "Each candidate explains human survival: −4 km elevation ✓, 0.9° slope ✓, SWIM ice consistency ✓, plus **SWIM ice-access classification & assumed-10 wt% excavation estimate**, 4-crew life support margin, MSL Curiosity RAD-calibrated GCR radiation dose, and nocturnal surface cold."
 
 **1:15 — Demo 2: multi-hazard rover route & rest stops (35 s)**
 *`?demo=route&from=Jezero&to=Melas`.* "Straight line from Jezero to Valles Marineris: 9 400 km, crosses 30° slopes — that rover is on its side.

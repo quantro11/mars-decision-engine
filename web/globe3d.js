@@ -143,33 +143,30 @@
       return mix(vec3(1.0, 0.65, 0.45), vec3(1.0, 0.42, 0.35), (t - 0.90) / 0.10);             // M Red Dwarf / Supergiant
     }
 
-    // Layered procedural starfield with Airy disc Gaussian PSF and diffraction spikes
+    // Procedural grid starfield with Airy disc PSF and diffraction spikes
     vec3 renderStars(vec2 celUV, float scale, float density, float brightnessMult, bool addSpikes) {
       vec2 sp = celUV * scale;
       vec2 cellId = floor(sp);
       vec2 cellCoord = fract(sp) - 0.5;
       vec3 starsCol = vec3(0.0);
 
-      // 3x3 search to handle stars near cell borders smoothly
+      // 3x3 neighbourhood search prevents clipping near cell borders
       for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
           vec2 neighbor = vec2(float(x), float(y));
           vec2 rnd = hash22(cellId + neighbor);
-          
+
           if (rnd.x > (1.0 - density)) {
             vec2 starPos = neighbor + (rnd - 0.5) * 0.75;
             float dist = length(cellCoord - starPos);
-            
-            // Normalized star peak brightness
+
             float starMag = (rnd.x - (1.0 - density)) / density;
             float peak = pow(starMag, 2.5) * brightnessMult;
 
-            // Airy disc / Gaussian PSF profile
             float core = exp(-dist * dist * 950.0);
             float halo = exp(-dist * 35.0) * 0.15;
             float total = (core + halo) * peak;
 
-            // 4-point cross diffraction spikes for prominent 1st magnitude stars
             if (addSpikes && starMag > 0.82) {
               vec2 dVec = abs(cellCoord - starPos);
               float spikeX = exp(-dVec.x * 2.5) * exp(-dVec.y * 120.0);
@@ -190,65 +187,52 @@
       vec2 p = v_p * aspect;
       float d = length(p);
 
-      // 1. Ray direction in camera space
       float f = 1.0 / tan(u_fov * 0.5);
       vec3 rayCam = normalize(vec3(p.x, p.y, -f));
 
-      // 2. Rotate ray into inertial celestial sphere (Lon & Lat Euler rotation)
+      // Rotate camera ray into the background spherical frame (pitch X, yaw Y)
       float cosLat = cos(u_camAngles.y);
       float sinLat = sin(u_camAngles.y);
       float cosLon = cos(u_camAngles.x);
       float sinLon = sin(u_camAngles.x);
 
-      // Pitch (X-axis)
       vec3 ray1 = vec3(
         rayCam.x,
         rayCam.y * cosLat - rayCam.z * sinLat,
         rayCam.y * sinLat + rayCam.z * cosLat
       );
-      // Yaw (Y-axis)
       vec3 rayCel = vec3(
         ray1.x * cosLon + ray1.z * sinLon,
         ray1.y,
         -ray1.x * sinLon + ray1.z * cosLon
       );
 
-      // Celestial spherical coordinates (Lon [-PI, PI], Lat [-PI/2, PI/2])
       float celLon = atan(rayCel.x, rayCel.z);
       float celLat = asin(clamp(rayCel.y, -0.9999, 0.9999));
-      vec2 celUV = vec2(celLon * 0.1591549, celLat * 0.3183098); // Normalized 0..1 scale
+      vec2 celUV = vec2(celLon * 0.1591549, celLat * 0.3183098);
 
-      // 3. Realistic deep space background gradient
+      // Deep-space backdrop and procedural sinusoidal galactic band
       vec3 col = mix(vec3(0.005, 0.008, 0.016), vec3(0.001, 0.002, 0.005), clamp(d * 0.65, 0.0, 1.0));
-
-      // 4. Milky Way galactic plane diffuse dust band
-      // Galactic plane tilt modeled as sinusoidal latitude ribbon
       float mwPlaneDist = abs(celLat + 0.38 * sin(celLon * 1.25 + 0.65) - 0.12);
       float mwGlow = exp(-mwPlaneDist * mwPlaneDist * 8.5);
       vec3 mwCol = mix(vec3(0.018, 0.024, 0.042), vec3(0.045, 0.042, 0.038), clamp(sin(celLon * 2.0) * 0.5 + 0.5, 0.0, 1.0));
       col += mwCol * mwGlow * 1.8;
 
-      // 5. Multi-tiered celestial starfield (outside Martian planetary disk)
+      // Multi-scale procedural stars outside planetary disc
       if (d > u_sphereScreenR * 0.96) {
-        // Star atmospheric extinction factor as stars approach limb
         float limbDist = d - u_sphereScreenR;
         float starAlpha = smoothstep(-0.02, 0.04, limbDist);
 
         vec3 starfield = vec3(0.0);
-        // Tier A: Micro faint background stars (high density, faint)
         starfield += renderStars(celUV, 420.0, 0.035, 0.55, false);
-        // Tier B: Medium magnitude stars
         starfield += renderStars(celUV, 190.0, 0.025, 1.35, false);
-        // Tier C: Major 1st-magnitude guide stars with diffraction spikes
         starfield += renderStars(celUV, 85.0, 0.012, 3.20, true);
-
-        // Milky Way localized stellar density boost along galactic equator
         starfield += renderStars(celUV + vec2(0.13, 0.47), 310.0, 0.045, 0.85, false) * (mwGlow * 1.4);
 
         col += starfield * starAlpha;
       }
 
-      // 6. Outer Martian atmospheric corona & dust haze limb glow
+      // Outer Martian atmospheric limb glow
       float edge = d - u_sphereScreenR;
       if (edge > -0.04) {
         float glow = exp(-max(0.0, edge) * 18.0 / max(0.2, u_sphereScreenR)) * smoothstep(-0.04, 0.005, edge);

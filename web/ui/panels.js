@@ -154,7 +154,7 @@
       const spe = SCORING.calcSPE(v.elev, 1.5);
       const iceTab = $('#iceband .active') ? $('#iceband .active').textContent : S.iceBand;
       const tr = isTr();
-      const passWord = tr ? 'geçer' : 'pass', vetoWord = tr ? 'veto' : 'veto';
+      const passWord = tr ? 'geçer' : 'pass', vetoWord = 'veto';
       const nc = layers.nearestCave ? layers.nearestCave(v.lat, v.lon) : null;
       const caveStr = nc
         ? `${escHtml(nc.distKm.toFixed(0) + ' km · ' + nc.type + (nc.diameter ? ' · ~' + nc.diameter + ' m' : ''))} <small>(${tr ? 'doğrulanmamış aday' : 'unconfirmed candidate'})</small>`
@@ -227,7 +227,7 @@
         <tr><td>${tr ? 'Düşük-TI Toz (&lt;100 tiu)' : 'Low-TI Dust (&lt;100 tiu)'}</td><td>${(a.dustKm || 0).toFixed(0)} km</td><td>${(b.dustKm || 0).toFixed(0)} km</td></tr>
         <tr><td>${tr ? 'Aday mola noktası' : 'Candidate rest stops'}</td><td>—</td><td><b>${havens.length}</b> (${tr ? 'düz, pürüzsüz, sert' : 'flat, smooth, firm'})</td></tr>
         <tr><td>${tr ? 'Geçiş Süresi' : 'Traverse Duration'}</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
-        <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (tr ? `Doğrudan hat ${a.maxSlope.toFixed(1)}° eğimi aşıyor (sınır ${r.maxSlope}°). Güvenli rota +${(b.km - a.km).toFixed(0)} km ekler.` : `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (limit ${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.`) : (tr ? 'NOMİNAL // Doğrudan hat azami eğim sınırını sağlıyor.' : 'NOMINAL // Direct path satisfies maximum slope constraint.')}</div>
+        <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (tr ? `Doğrudan hat ${a.maxSlope.toFixed(1)}° eğimi aşıyor (sınır ${r.maxSlope}°). Güvenli rota +${(b.km - a.km).toFixed(0)} km ekler.` : `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.`) : (tr ? 'Doğrudan hat azami eğim sınırını sağlıyor.' : 'Direct path satisfies maximum slope constraint.')}</div>
         ${havens.length ? `<div class="help haven-note"><b>${tr ? 'MOLA NOKTALARI (YALNIZCA ARAZİ, SIĞINAK ANLAMI TAŞIMAZ)' : 'REST STOPS (TERRAIN ONLY, NO SHELTER IMPLIED)'}</b>${escHtml(havenStr)}</div>` : ''}
         <div class="hint mt-sm">${tr ? 'Güvenli rota boyunca yükselti profili' : 'Elevation profile along the safe route'} · ${(r.ms || 0).toFixed(0)} ms, ${r.safe.path.length} ${tr ? 'hücre' : 'cells'}</div>${CHARTS.profileSVG(b.profile)}`;
       announce(tr ? `Güvenli rover rotası hesaplandı: ${b.km.toFixed(0)} kilometre, tepe eğim ${b.maxSlope.toFixed(1)} derece.` : `Safe traverse route computed: ${b.km.toFixed(0)} kilometers, peak slope ${b.maxSlope.toFixed(1)} degrees.`, doc);
@@ -280,7 +280,7 @@
         <div class="kv kv-top"><span>${tr ? 'Yüzeyde tasarım SPE dozu' : 'Design-basis SPE on surface'}</span><b>${spe.unshieldedDoseMsv} mSv</b></div>
         <div class="kv"><span>${tr ? `Siperli (${(c.regolith ?? 1.5).toFixed(1)}m regolit)` : `Shielded (${(c.regolith ?? 1.5).toFixed(1)}m regolith)`}</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${escHtml(trDom(spe.survivalStatus))})</b></div>
         <div class="kv"><span>${tr ? '≤ 100 mSv için regolit' : 'Regolith for ≤ 100 mSv'}</span><b>${spe.requiredRegolithM} m</b></div>
-        <div class="help note-sm">${tr ? 'SPE değerleri varsayımsal Ağust-1972 benzeri olayı (~1 Sv / 5 g/cm²) esas alır; anlık tahmin değildir.' : 'SPE figures use an assumed August-1972-class event (~1 Sv behind 5 g/cm²), not a forecast. Largest SPE measured on the surface so far (Sept 2017, MSL/RAD): ~0.4 mGy.'}</div>
+        <div class="help note-sm">${tr ? 'SPE değerleri varsayımsal Ağustos-1972 benzeri olayı (~1 Sv / 5 g/cm²) esas alır; anlık tahmin değildir.' : 'SPE figures use an assumed August-1972-class event (~1 Sv behind 5 g/cm²), not a forecast. Largest SPE measured on the surface so far (Sept 2017, MSL/RAD): ~0.4 mGy.'}</div>
         ${liveCmeRow}
         ${CHARTS.crisisSVG(res.rows, c.batt)}
         <div class="help mt-sm">${tr ? 'Profil: Sol 20 başlangıç · 10-sol artış · 40-sol plato · 30-sol azalış.' : 'Profile: Sol 20 onset · 10-sol ramp · 40-sol plateau · 30-sol decay.'} ${c.kp === 0 && res.blackoutSol !== null ? (tr ? 'Yük ve ısıtmayı ayakta tutmak için fisyon (Kilopower, 10 kWe hedefi) ekleyin.' : 'Add fission power (Kilopower-class, 10 kWe design target) to keep the load and heating running.') : ''}</div>`;

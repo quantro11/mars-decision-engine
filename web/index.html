@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mars Base Decision Engine</title>
 <meta name="description" content="Where should humans land and live on Mars? A decision engine built on real MOLA, SWIM and TES data.">
+<link rel="canonical" href="https://mars-decision-engine.vercel.app/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Mars Base Decision Engine">
+<meta property="og:description" content="Where should humans land and live on Mars? Landing-site, rover traverse, and dust-storm survival planning built on MOLA, SWIM 2.0, TES and Viking datasets.">
+<meta property="og:url" content="https://mars-decision-engine.vercel.app/">
+<meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -34,7 +42,7 @@
     <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-idx">I</span><span class="mode-label">Site selection</span></button>
     <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-idx">II</span><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-idx">III</span><span class="mode-label">Dust-storm power</span></button>
-    <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-idx">IV</span><span class="mode-label">Live habitability</span></button>
+    <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-idx">IV</span><span class="mode-label">Habitability &amp; APIs</span></button>
   </nav>
 
   <div class="topbar-right">
@@ -293,7 +301,7 @@
         <h3>2 · Weighted sum or geometric mean</h3>
         <p>By default each cell scores <code>S = Σ wᵢ·fᵢ</code> with weights normalised to one. With constraints on, cells above +2 km, steeper than 15° or beyond ±50° score zero regardless of weights. Optional <b>No compensation</b> switches to a weighted geometric mean so a near-zero criterion cannot be bought back by others.</p>
         <h3>3 · The globe</h3>
-        <p>A sphere displaced by real MOLA elevation (−8.2 km in Hellas to +21 km on Olympus Mons), lit per pixel from the same raster, and textured with the Viking Orbiter colour mosaic against an astronomical J2000 starfield.</p>
+        <p>A sphere displaced by real MOLA elevation (−8.2 km in Hellas to +21 km on Olympus Mons), lit per pixel from the same raster, and textured with the Viking Orbiter colour mosaic against a procedural galactic starfield.</p>
       </div>
       <div>
         <h3>4 · Route planner</h3>
@@ -314,10 +322,10 @@
       <li><b>Not modelled.</b> Local topographic horizon shadowing, active array-cleaning cycles, and propellant boil-off.</li>
     </ul>
 
-    <h3>8 · Validation benchmark &amp; terrestrial dual-use</h3>
+    <h3>8 · Validation benchmark &amp; terrestrial portability</h3>
     <ul>
       <li><b>Orbital benchmark (9 landers + 39 HLS-2015 zones).</b> Against 200 random-longitude draws per ±5° latitude band, the 9 historical Mars landers rank at the <b>90th percentile</b> (<code>p &lt; 0.005</code>, weighted sum; <b>89th</b> geometric mean) and all 39 NASA HLS-2015 Exploration Zones rank at the <b>71st percentile</b> (<code>p &lt; 0.005</code>, both sum and geometric mean).</li>
-      <li><b>Earth GIS &amp; disaster dual-use.</b> The same constraint-veto MCDA kernel, antimeridian-aware A* slope router, and solar-battery attenuation engine apply directly to Earth emergency base siting, search-and-rescue rover routing, and post-disaster microgrid sizing when fed terrestrial DEM/DSM rasters; standard GeoJSON export connects directly to QGIS and Leaflet.</li>
+      <li><b>Terrestrial DEM portability.</b> The same constraint-veto MCDA kernel, antimeridian-aware A* slope router, and solar-battery attenuation engine work cleanly on terrestrial elevation rasters for emergency base siting, search-and-rescue routing, and off-grid microgrid sizing; GeoJSON exports load directly into QGIS and Leaflet.</li>
     </ul>
     </div>
   </div>

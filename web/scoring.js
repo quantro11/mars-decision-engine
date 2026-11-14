@@ -107,9 +107,9 @@
   ];
 
   const PRESETS = {
-    landing:  { name: 'Landing safety',          icon: '🛬', w: { elev: 0.25, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15, rad: 0.05, cave: 0 } },
-    isru:     { name: 'ISRU / sustainability',   icon: '💧', w: { elev: 0.10, slope: 0.15, ice: 0.40, rough: 0.10, lat: 0.10, ti: 0.10, rad: 0.05, cave: 0 } },
-    balanced: { name: 'Balanced crewed mission', icon: '⚖️', w: { elev: 0.15, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15, rad: 0.05, cave: 0 } },
+    landing:  { name: 'Landing safety',          w: { elev: 0.25, slope: 0.25, ice: 0.05, rough: 0.15, lat: 0.10, ti: 0.15, rad: 0.05, cave: 0 } },
+    isru:     { name: 'ISRU / sustainability',   w: { elev: 0.10, slope: 0.15, ice: 0.40, rough: 0.10, lat: 0.10, ti: 0.10, rad: 0.05, cave: 0 } },
+    balanced: { name: 'Balanced crewed mission', w: { elev: 0.15, slope: 0.20, ice: 0.25, rough: 0.10, lat: 0.10, ti: 0.15, rad: 0.05, cave: 0 } },
   };
 
   const HARD = { elevMax: 2000, slopeMax: 15, latMax: 50 };

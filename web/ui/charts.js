@@ -28,9 +28,9 @@
     let db = '', dt = '';
     rows.forEach((r, i) => { db += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yb(r.batt).toFixed(1); dt += (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Yt(r.tau).toFixed(1); });
     const areaB = `${db}L${X(n - 1).toFixed(1)},${h - 18}L${X(0).toFixed(1)},${h - 18}Z`;
-      const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
-      const tr = !!(i18n && i18n.getLang && i18n.getLang() === 'tr');
-      return `<svg class="chart" viewBox="0 0 ${w} ${h}">
+    const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+    const tr = !!(i18n && i18n.getLang && i18n.getLang() === 'tr');
+    return `<svg class="chart" viewBox="0 0 ${w} ${h}">
       <line x1="${pad}" y1="12" x2="${w - 8}" y2="12" stroke="rgba(236,231,223,.08)" stroke-dasharray="2 2"/>
       <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
       <path d="${areaB}" fill="rgba(127,155,179,.14)"/>

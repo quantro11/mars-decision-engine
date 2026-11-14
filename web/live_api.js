@@ -42,7 +42,7 @@
       earth: 'Abundant surface liquid water (aw = 1.0)',
       mars: 'Dry surface; permafrost & subsurface ice (aw ~ 0.001)',
       deficit: 'Liquid water boils instantly on surface at 0°C',
-      eclss: 'SWIM 2.0 permafrost thermal well (ISRU 45+ L/sol extraction).'
+      eclss: 'Closed-loop ECLSS water recovery + subsurface permafrost mining in SWIM 2.0 zones (yield depends on local concentration).'
     },
     {
       marker: 'Radiation Exposure',

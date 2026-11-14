@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mars-decision-engine.vercel.app/sitemap.xml

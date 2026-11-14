@@ -139,6 +139,8 @@ assert.strictEqual(S.topCandidates(blk, 16, 16, 1, 16, 4).length, 0, 'half-vetoe
 const Live = require('../web/live_api.js').LIVE_API;
 assert.ok(Live.EARTH_BASELINE.pressure_kpa === 101.3);
 assert.ok(Live.MARS_HABITABILITY_CRITERIA.length === 6, '6 vital biosphere habitability markers defined');
+const waterCrit = Live.MARS_HABITABILITY_CRITERIA.find(c => /Water/i.test(c.marker));
+assert.ok(waterCrit && /SWIM 2\.0/.test(waterCrit.eclss) && !/\bL\/sol\b/.test(waterCrit.eclss), 'Habitability water marker references SWIM 2.0 without invented L/sol claim');
 
 // --- UI helper modules (pure, extracted from app.js)
 const FMT = require('../web/ui/format.js').MDE_FMT, CH = require('../web/ui/charts.js').MDE_CHARTS;

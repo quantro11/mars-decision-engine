@@ -9,7 +9,7 @@
       'mode.score': 'Site selection',
       'mode.route': 'Rover route',
       'mode.crisis': 'Dust-storm power',
-      'mode.habitability': 'Live habitability',
+      'mode.habitability': 'Habitability & APIs',
       'view.2d': 'Map',
       'view.3d': 'Globe',
       flytoDefault: 'Go to a region…',
@@ -76,7 +76,7 @@
       'mode.score': 'Saha seçimi',
       'mode.route': 'Rover rotası',
       'mode.crisis': 'Toz fırtınası gücü',
-      'mode.habitability': 'Canlı yaşanabilirlik',
+      'mode.habitability': 'Yaşanabilirlik & API',
       'view.2d': 'Harita',
       'view.3d': '3B Küre',
       flytoDefault: 'Bir bölgeye git…',
@@ -146,7 +146,7 @@
     ['.mode-btn[data-mode="score"] .mode-label', 'Saha seçimi'],
     ['.mode-btn[data-mode="route"] .mode-label', 'Rover rotası'],
     ['.mode-btn[data-mode="crisis"] .mode-label', 'Toz fırtınası gücü'],
-    ['.mode-btn[data-mode="habitability"] .mode-label', 'Canlı yaşanabilirlik'],
+    ['.mode-btn[data-mode="habitability"] .mode-label', 'Yaşanabilirlik & API'],
     ['#btn-2d', 'Harita'],
     ['#btn-3d', '3B Küre'],
     ['#flyto option[value=""]', 'Bir bölgeye git…'],
@@ -249,7 +249,7 @@
         <h3>2 · Ağırlıklı toplam veya geometrik ortalama</h3>
         <p>Varsayılan modda her hücre <code>S = Σ wᵢ·fᵢ</code> formülüyle skorlanır. Kısıtlar aktifken +2 km üstü, 15°’den dik veya ±50° dışı hücreler ağırlıktan bağımsız sıfır puan alır. Opsiyonel <b>Telafisiz</b> modu ağırlıklı geometrik ortalamaya geçer; zayıf tek bir kriter yüksek buzla telafi edilemez.</p>
         <h3>3 · 3B Küre Motoru</h3>
-        <p>Gerçek MOLA rakım verisiyle (Hellas −8.2 km … Olympus +21 km) şekillendirilmiş, piksel bazlı ışıklandırılmış ve J2000 yıldız alanı önünde Viking Orbiter renkli mozaiğiyle kaplanmış bağımlılıksız WebGL küresi.</p>
+        <p>Gerçek MOLA rakım verisiyle (Hellas −8.2 km … Olympus +21 km) şekillendirilmiş, piksel bazlı ışıklandırılmış ve prosedürel galaktik yıldız alanı önünde Viking Orbiter renkli mozaiğiyle kaplanmış bağımlılıksız WebGL küresi.</p>
       </div>
       <div>
         <h3>4 · Çoklu tehlike rota planlayıcı (A*)</h3>
@@ -267,10 +267,10 @@
       <li><b>Buz kapsamı:</b> SWIM yalnızca ±60° arası tutarlılık haritalar; derişim veya kazı verimi ölçmez, ±60° dışı sıfır sayılır.</li>
       <li><b>Modellenmeyenler:</b> Yerel ufuk gölgelemesi, aktif panel temizliği ve kriyojenik yakıt buharlaşması.</li>
     </ul>
-    <h3>8 · İstatistiksel doğrulama ve Dünya–Mars çift kullanım (Dual-Use)</h3>
+    <h3>8 · İstatistiksel doğrulama ve karasal DEM taşınabilirliği</h3>
     <ul class="spec-list">
       <li><b>Yörünge doğrulaması (9 iniş aracı + 39 HLS-2015 bölgesi):</b> ±5° enlem bantları içinde 200 rastgele boylam çekimine karşı tarihsel 9 Mars iniş aracı ortalama <b>90. yüzdelikte</b> (<code>p &lt; 0.005</code>; geometrik <b>89.</b>) ve tüm 39 NASA HLS-2015 keşif bölgesi ortalama <b>71. yüzdelikte</b> (<code>p &lt; 0.005</code>, toplam &amp; geometrik) yer alır.</li>
-      <li><b>Dünya CBS ve afet yönetimi uyarlaması:</b> Kısıt-veto ÇKKV çekirdeği, eğim/toz cezalı A* rota planlayıcısı ve güneş-batarya modeli karasal DEM verileriyle afet sonrası geçici yaşam alanı seçimi, arama-kurtarma aracı rotalaması ve mikro-şebeke boyutlandırmada doğrudan çalışır; GeoJSON çıktısı QGIS/Leaflet ile uyumludur.</li>
+      <li><b>Karasal DEM taşınabilirliği:</b> Kısıt-veto ÇKKV çekirdeği, eğim/toz cezalı A* rota planlayıcısı ve güneş-batarya modeli karasal yükseklik verileriyle geçici yaşam alanı seçimi, arama-kurtarma aracı rotalaması ve şebeke-dışı mikro-şebeke boyutlandırmada doğrudan çalışır; GeoJSON çıktısı QGIS/Leaflet ile uyumludur.</li>
     </ul>`;
 
   const DOMAIN_TR = {
@@ -302,7 +302,7 @@
     'Atmospheric Pressure': { marker: 'Atmosfer Basıncı', earth: '101.3 kPa', mars: '~0.65–0.90 kPa', deficit: 'Armstrong sınırı (6.3 kPa) altı; sıvılar kaynar', eclss: 'Tam basınçlı uzay giysisi ve 82 kPa habitat kabuğu.' },
     'Oxygen Partial Pressure': { marker: 'Oksijen Kısmi Basıncı', earth: '21.2 kPa (%20.95 O₂)', mars: '<0.001 kPa (%95.3 CO₂)', deficit: 'Anoksik atmosfer (<15 sn içinde hipoksi)', eclss: 'MOXIE / Katı Oksit Elektrolizi (SOXE) ile sürekli O₂.' },
     'Thermal Environment': { marker: 'Termal Ortam', earth: '+15°C ort (−50°C … +50°C)', mars: '−55°C ort (−125°C gece … +15°C gündüz)', deficit: 'Aşırı hipotermi / elektronik ve batarya donması', eclss: 'Aerojel MLI yalıtım + 10 kWe Kilopower atık ısısı.' },
-    'Water Activity (aw)': { marker: 'Su Aktivitesi (aw)', earth: 'Yüzeyde bol sıvı su (aw = 1.0)', mars: 'Kuru yüzey; yeraltı buzu (aw ~ 0.001)', deficit: 'Sıvı su 0°C’de bile yüzeyde hızla süblimleşir', eclss: 'SWIM 2.0 permafrost termal kuyusu (ISRU ≥45 L/sol).' },
+    'Water Activity (aw)': { marker: 'Su Aktivitesi (aw)', earth: 'Yüzeyde bol sıvı su (aw = 1.0)', mars: 'Kuru yüzey; yeraltı buzu (aw ~ 0.001)', deficit: 'Sıvı su 0°C’de bile yüzeyde hızla süblimleşir', eclss: 'Kapalı döngü ECLSS su geri kazanımı + SWIM 2.0 bölgelerinde yeraltı permafrost kazısı (verim yerel derişime bağlıdır).' },
     'Radiation Exposure': { marker: 'Radyasyon Maruziyeti', earth: '2.4 mSv/yıl (manyetosfer + 1033 g/cm² hava)', mars: '230–300 mSv/yıl GCR + akut CME güneş fırtınaları', deficit: 'Dünya arka planının ~100 katı; ölümcül akut CME riski', eclss: '2.2 m regolit siperi veya >3.5 m bazalt lav tüpü.' },
     'Solar UV & Ozone Shielding': { marker: 'Güneş UV ve Ozon Kalkanı', earth: 'Stratosferik ozon UVC’nin %99’unu tutar', mars: 'Korunmasız güneş UVC radyasyon akısı', deficit: 'DNA parçalayıcı biyolojik sterilizan yüzey ışınımı', eclss: 'Altın kaplı polikarbonat vizör ve opak kabuk.' },
   };
@@ -376,6 +376,10 @@
     const btnTog = doc.querySelector('#btn-toggle-key');
     const inpKey = doc.querySelector('#nasa-api-key');
     if (btnTog && inpKey) btnTog.textContent = t(inpKey.type === 'text' ? 'apiHide' : 'apiShow', lang);
+    if (inpKey) {
+      if (inpKey._mdeEnPh === undefined) inpKey._mdeEnPh = inpKey.placeholder || '';
+      inpKey.placeholder = lang === 'tr' ? 'boş = sunucu proxy kullan' : inpKey._mdeEnPh;
+    }
 
     const apiSt = doc.querySelector('#live-api-status');
     if (apiSt && (!global.MDE_LIVE_STATE || apiSt.textContent.includes('Ready to query') || apiSt.textContent.includes('sorgusuna hazır'))) {
