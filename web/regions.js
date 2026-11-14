@@ -1,6 +1,6 @@
 // Named Mars regions used to label candidates and as demo bookmarks.
 // lat / lon in degrees, lon east, -180..180. ez = proposed Exploration Zone at the
-// 2015 NASA Human Landing Sites workshop (https://www.nasa.gov/mars-exploration-zones).
+// 2015 NASA Human Landing Sites workshop (https://www.nasa.gov/journeytomars/mars-exploration-zones).
 window.REGIONS = [
   { name: 'Jezero Crater (Perseverance)', lat: 18.4,  lon: 77.6,   ez: true,  mission: 'Mars 2020' },
   { name: 'Gale Crater (Curiosity)',      lat: -5.4,  lon: 137.8,  ez: true,  mission: 'MSL' },

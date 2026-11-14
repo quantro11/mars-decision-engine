@@ -24,7 +24,8 @@
     const keyInput = $('#nasa-api-key');
     if (!keyInput) return;
 
-    const savedKey = (storage && storage.getItem('nasa_api_key')) || 'DEMO_KEY';
+    // No silent DEMO_KEY default: empty means "use the same-origin proxy".
+    const savedKey = (storage && storage.getItem('nasa_api_key')) || '';
     keyInput.value = savedKey;
 
     const btnToggle = $('#btn-toggle-key');
@@ -40,10 +41,12 @@
     const btnSave = $('#btn-save-key');
     if (btnSave) {
       btnSave.onclick = () => {
-        const val = keyInput.value.trim() || 'DEMO_KEY';
-        if (storage) storage.setItem('nasa_api_key', val);
+        const val = keyInput.value.trim();
+        if (storage) { if (val) storage.setItem('nasa_api_key', val); else storage.removeItem('nasa_api_key'); }
         const st = $('#live-api-status');
-        if (st) st.textContent = `${t('apiSaved', 'Saved NASA API Key')}: ` + (val === 'DEMO_KEY' ? 'DEMO_KEY' : `${isTr() ? 'Özel' : 'Custom'} (***${val.slice(-4)})`);
+        if (st) st.textContent = val
+          ? `${t('apiSaved', 'Saved NASA API Key')}: ${isTr() ? 'Özel' : 'Custom'} (***${val.slice(-4)})`
+          : (isTr() ? 'Anahtar temizlendi: istekler sunucu proxy’si üzerinden gider.' : 'Key cleared: requests now use the server proxy.');
       };
     }
 
@@ -62,7 +65,9 @@
       return `<span class="badge-mode ${cls}">● ${label}</span>`;
     };
 
-    if (st) st.innerHTML = `${tr ? 'Hava' : 'Weather'}: ${badge(weatherRes.mode)} · ${tr ? 'Uzay havası' : 'Space weather'}: ${badge(spaceRes.mode)} · ${tr ? 'Anahtar' : 'Key'}: ${apiKey === 'DEMO_KEY' ? 'DEMO_KEY' : (tr ? 'Özel' : 'Custom')}`;
+    const keyLabel = !apiKey ? (tr ? 'proxy / yok' : 'proxy / none')
+      : (apiKey === 'DEMO_KEY' ? 'DEMO_KEY' : (tr ? 'Özel' : 'Custom'));
+    if (st) st.innerHTML = `${tr ? 'Hava' : 'Weather'}: ${badge(weatherRes.mode)} · ${tr ? 'Uzay havası' : 'Space weather'}: ${badge(spaceRes.mode)} · ${tr ? 'Anahtar' : 'Key'}: ${keyLabel}`;
 
     const w = weatherRes.data, ref = weatherRes.reference;
     const noneTxt = tr ? 'bildirilmedi' : 'not reported';
@@ -114,7 +119,7 @@
     const el = $('#live-api-results'), st = $('#live-api-status'), btnFetch = $('#btn-fetch-live');
     if (!el || !liveApi) return;
 
-    const apiKey = (storage && storage.getItem('nasa_api_key')) || 'DEMO_KEY';
+    const apiKey = (storage && storage.getItem('nasa_api_key')) || '';
     const cached = global.MDE_LIVE_STATE || (typeof globalThis !== 'undefined' ? globalThis.MDE_LIVE_STATE : null);
     if (opts && opts.useCache && cached) {
       renderResultsMarkup(el, st, cached.weather, cached.space, apiKey, liveApi);

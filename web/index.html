@@ -142,21 +142,21 @@
     </section>
 
     <section id="panel-habitability" class="mode-panel hidden">
-      <div class="sec-head"><h2>Live Planetary &amp; Habitability APIs</h2></div>
-      <p class="help">Live space weather, Mars surface telemetry, and Earth vs. Mars biosphere habitability metrics powered by NASA Open APIs.</p>
+      <div class="sec-head"><h2>Planetary &amp; Habitability APIs</h2></div>
+      <p class="help">Space weather (live) and Mars surface weather (a frozen archive) from NASA Open APIs, plus Earth-vs-Mars biosphere habitability metrics. Every result is labelled with its true status — LIVE, ARCHIVE or REFERENCE — so nothing is presented as live when it is not.</p>
 
       <div class="api-key-box">
-        <label for="nasa-api-key">NASA Open API Key</label>
+        <label for="nasa-api-key">NASA Open API Key <span class="hint">optional</span></label>
         <div class="api-key-row">
-          <input type="password" id="nasa-api-key" placeholder="DEMO_KEY" autocomplete="off">
+          <input type="password" id="nasa-api-key" placeholder="empty = use server proxy" autocomplete="off">
           <button type="button" id="btn-toggle-key" class="ghost" aria-pressed="false">Show</button>
           <button type="button" id="btn-save-key" class="ghost">Save</button>
         </div>
-        <div class="help note-sm">Using official NASA Open API (api.nasa.gov). Pre-configured with DEMO_KEY.</div>
+        <div class="help note-sm">When this page is served by the mission console, requests go through the same-origin proxy and no key is stored in the browser. A key entered here is only used for standalone deployments. <b>DEMO_KEY</b> is a last-resort fallback only: it is rate-limited to roughly 30 requests/hour and 50/day per IP and is not a live service.</div>
       </div>
 
       <div class="row">
-        <button id="btn-fetch-live" class="btn-spec btn-full">Connect &amp; Fetch Live Telemetry</button>
+        <button id="btn-fetch-live" class="btn-spec btn-full">Fetch weather &amp; space weather</button>
       </div>
 
       <div id="live-api-status" class="live-status" role="status" aria-live="polite">● Ready to query NASA APIs</div>
@@ -257,7 +257,7 @@
     <span class="hud-sep">·</span>
     <a href="https://jmars.mars.asu.edu/maps/?layer=TES_Thermal_Inertia_mola" target="_blank" rel="noopener">TES thermal inertia &amp; dust · ASU JMARS</a>
     <span class="hud-sep">·</span>
-    <a href="https://www.nasa.gov/mars-exploration-zones" target="_blank" rel="noopener">NASA landing-site criteria, 2015</a>
+    <a href="https://www.nasa.gov/journeytomars/mars-exploration-zones" target="_blank" rel="noopener">NASA landing-site criteria, 2015</a>
     <span class="hud-sep">·</span>
     <span>Viking Orbiter colour mosaic</span>
   </div>

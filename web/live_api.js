@@ -67,7 +67,14 @@
   //   'offline'   request failed, nothing to show
   // The UI must display `mode`; nothing here is ever invented and labelled as telemetry.
 
-  // InSight (Elysium Planitia, 4.5 N 135.6 E) ended on 21 Dec 2022, so this feed can only ever return archive sols.
+  // HONESTY FACT (verified against api.nasa.gov/insight_weather):
+// the InSight *mission* ended on 21 Dec 2022, but the public weather feed has been
+// FROZEN since sol 681 (2020-10-26). It returns HTTP 200 with those seven 2020 sols,
+// which makes it look live. It is not: it is a five-year-old archive.
+  const INSIGHT_FROZEN = { sol: 681, date: '2020-10-26' };
+
+  // InSight (Elysium Planitia, 4.5 N 135.6 E) - published seasonal ranges used only
+  // when the frozen feed cannot be read at all.
   const INSIGHT_REFERENCE = {
     // Published InSight/TWINS + PS seasonal ranges (Banfield et al. 2020, Nature Geoscience 13).
     site: 'Elysium Planitia (InSight lander)',
@@ -75,6 +82,25 @@
     pressure_pa: { min: 640, max: 760 },
     citation: 'Banfield et al. 2020, Nat. Geosci. 13, 190-198',
   };
+
+  // Same-origin proxy provided by the mission console (server.py). When present the
+  // NASA key stays on the server and never reaches the browser. When the page is
+  // deployed standalone these paths 404 and we fall back to api.nasa.gov directly.
+  const PROXY = { insight: '/api/insight', cme: '/api/donki/cme' };
+
+  async function tryProxy(path, fetchFn) {
+    try {
+      const res = await safeFetch(path, fetchFn);
+      if (!res || !res.ok) return null;
+      const data = await res.json();
+      return (data && data.error) ? null : data;
+    } catch (e) {
+      return null; // standalone deploy: no proxy, or non-JSON response
+    }
+  }
+
+  const ARCHIVE_SOURCE =
+    `NASA InSight weather feed (frozen at sol ${INSIGHT_FROZEN.sol}, ${INSIGHT_FROZEN.date}) - NOT live`;
 
   function parseInsight(data) {
     const keys = data && Array.isArray(data.sol_keys) ? data.sol_keys : [];
@@ -99,12 +125,21 @@
   }
 
   async function fetchNASAWeather(apiKey, fetchFn) {
+    // 1) Preferred: same-origin proxy (no key in the browser, no DEMO_KEY quota burn).
+    const prox = await tryProxy(PROXY.insight, fetchFn);
+    if (prox) {
+      const parsed = parseInsight(prox);
+      if (parsed) return { mode: 'archive', source: ARCHIVE_SOURCE + ' - via proxy', data: parsed, reference: INSIGHT_REFERENCE };
+    }
+    // 2) Fallback: direct api.nasa.gov. A user key is used if given; DEMO_KEY only as a
+    //    clearly-labelled last resort (rate-limited to ~30 req/h, 50/day per IP).
     const key = apiKey || 'DEMO_KEY';
     try {
       const res = await safeFetch(`https://api.nasa.gov/insight_weather/?api_key=${encodeURIComponent(key)}&feedtype=json&ver=1.0`, fetchFn);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const parsed = parseInsight(await res.json());
-      if (parsed) return { mode: 'archive', source: 'NASA InSight Mars Weather API (mission ended Dec 2022)', data: parsed, reference: INSIGHT_REFERENCE };
+      const suffix = (key === 'DEMO_KEY') ? ' - via DEMO_KEY (rate-limited fallback)' : ' - via user key';
+      if (parsed) return { mode: 'archive', source: ARCHIVE_SOURCE + suffix, data: parsed, reference: INSIGHT_REFERENCE };
       return { mode: 'reference', source: 'InSight feed returned no sols - showing published climatology', data: null, reference: INSIGHT_REFERENCE };
     } catch (err) {
       return { mode: 'reference', source: 'InSight feed unreachable (' + err.message + ') - showing published climatology', data: null, reference: INSIGHT_REFERENCE };
@@ -112,21 +147,28 @@
   }
 
   async function fetchSpaceWeather(apiKey, fetchFn) {
-    const key = apiKey || 'DEMO_KEY';
-    try {
-      const past = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-      const res = await safeFetch(`https://api.nasa.gov/DONKI/CME?startDate=${past}&api_key=${encodeURIComponent(key)}`, fetchFn);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const events = (Array.isArray(data) ? data : []).map(e => ({
-        id: e.activityID, startTime: e.startTime,
-        speed_kms: e.cmeAnalyses && e.cmeAnalyses[0] ? e.cmeAnalyses[0].speed : null,
-        note: e.note || '',
-      })).sort((a, b) => (a.startTime < b.startTime ? 1 : -1));
-      return { mode: 'live', source: 'NASA DONKI CME catalogue (last 30 days)', events };
-    } catch (err) {
-      return { mode: 'offline', source: 'NASA DONKI unreachable (' + err.message + ')', events: [] };
+    // 1) Preferred: same-origin proxy.
+    let data = await tryProxy(PROXY.cme, fetchFn);
+    let via = 'via proxy';
+    if (!data) {
+      // 2) Fallback: direct api.nasa.gov (user key, else DEMO_KEY as last resort).
+      const key = apiKey || 'DEMO_KEY';
+      try {
+        const past = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+        const res = await safeFetch(`https://api.nasa.gov/DONKI/CME?startDate=${past}&api_key=${encodeURIComponent(key)}`, fetchFn);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        data = await res.json();
+        via = (key === 'DEMO_KEY') ? 'via DEMO_KEY (rate-limited fallback)' : 'via user key';
+      } catch (err) {
+        return { mode: 'offline', source: 'NASA DONKI unreachable (' + err.message + ')', events: [] };
+      }
     }
+    const events = (Array.isArray(data) ? data : []).map(e => ({
+      id: e.activityID, startTime: e.startTime,
+      speed_kms: e.cmeAnalyses && e.cmeAnalyses[0] ? e.cmeAnalyses[0].speed : null,
+      note: e.note || '',
+    })).sort((a, b) => (a.startTime < b.startTime ? 1 : -1));
+    return { mode: 'live', source: `NASA DONKI CME catalogue (last 30 days, ${via})`, events };
   }
 
   global.LIVE_API = {
@@ -135,6 +177,7 @@
     fetchNASAWeather,
     fetchSpaceWeather,
     parseInsight,
-    INSIGHT_REFERENCE
+    INSIGHT_REFERENCE,
+    INSIGHT_FROZEN
   };
 })(typeof window !== 'undefined' ? window : module.exports);
