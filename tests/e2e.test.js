@@ -393,7 +393,71 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert.strictEqual(enCheck.mode, 'Site selection', 'Second #btn-lang click reverts cleanly back to English');
     assert(enCheck.aboutHtml.includes('Why it matters'), '#about-content reverts cleanly back to English');
 
-    // 7. Verify zero CSP violations, zero page errors, zero console errors
+    // 7. Multi-device responsive layout & touch viewport verification (laptop, tablet, phone, small phone, landscape)
+    const viewports = [
+      { name: 'laptop-1280', width: 1280, height: 800, mobile: false, dpr: 1, stackMapFirst: false },
+      { name: 'tablet-768', width: 768, height: 1024, mobile: true, dpr: 2, stackMapFirst: true },
+      { name: 'mobile-390', width: 390, height: 844, mobile: true, dpr: 2, stackMapFirst: true },
+      { name: 'mobile-360', width: 360, height: 740, mobile: true, dpr: 2, stackMapFirst: true },
+      { name: 'landscape-667', width: 667, height: 375, mobile: true, dpr: 2, stackMapFirst: true },
+    ];
+    for (const vp of viewports) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: vp.width,
+        height: vp.height,
+        deviceScaleFactor: vp.dpr,
+        mobile: vp.mobile
+      }, sessionId);
+      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: vp.mobile }, sessionId);
+      await evalJS(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+      const layout = await evalJS(`(() => {
+        const doc = document.documentElement;
+        const map = document.querySelector('.map-wrap').getBoundingClientRect();
+        const left = document.querySelector('.panel.left').getBoundingClientRect();
+        const right = document.querySelector('.panel.right').getBoundingClientRect();
+        const canvas = document.getElementById('map');
+        const modes = document.querySelector('.modes').getBoundingClientRect();
+        return {
+          scrollW: doc.scrollWidth,
+          innerW: window.innerWidth,
+          mapTop: Math.round(map.top),
+          mapH: Math.round(map.height),
+          mapW: Math.round(map.width),
+          leftTop: Math.round(left.top),
+          rightTop: Math.round(right.top),
+          canvasW: canvas.width,
+          canvasH: canvas.height,
+          modesRight: Math.round(modes.right)
+        };
+      })()`);
+      assert(layout.scrollW <= layout.innerW, `${vp.name}: horizontal overflow (${layout.scrollW} > ${layout.innerW})`);
+      assert(layout.modesRight <= vp.width + 1, `${vp.name}: mode nav overflowed viewport (${layout.modesRight} > ${vp.width})`);
+      assert(layout.mapW >= 280 && layout.mapH >= 240, `${vp.name}: map container too small (${layout.mapW}x${layout.mapH})`);
+      assert(layout.canvasW >= vp.width * vp.dpr * 0.4, `${vp.name}: map canvas did not resize (${layout.canvasW}x${layout.canvasH})`);
+      if (vp.stackMapFirst) {
+        assert(layout.mapTop < layout.leftTop && layout.mapTop < layout.rightTop, `${vp.name}: map should render before panels (mapTop=${layout.mapTop}, leftTop=${layout.leftTop})`);
+      }
+      if (vp.name === 'mobile-360') {
+        await evalJS(`document.getElementById('btn-lang').click()`);
+        await evalJS(`document.querySelector('.mode-btn[data-mode="habitability"]').click()`);
+        await evalJS(`document.getElementById('btn-export').click()`);
+        await evalJS(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+        const mobileModal = await evalJS(`({
+          scrollW: document.documentElement.scrollWidth,
+          innerW: window.innerWidth,
+          modalBoxW: document.querySelector('#brief-modal .modal-box').getBoundingClientRect().width
+        })`);
+        assert(mobileModal.scrollW <= mobileModal.innerW, `mobile-360 TR + brief modal horizontal overflow (${mobileModal.scrollW} > ${mobileModal.innerW})`);
+        assert(mobileModal.modalBoxW <= 360, `mobile-360 modal box wider than viewport: ${mobileModal.modalBoxW}`);
+        await evalJS(`document.getElementById('brief-close').click()`);
+        await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+        await evalJS(`document.getElementById('btn-lang').click()`);
+      }
+    }
+    await cdp.send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId);
+
+    // 8. Verify zero CSP violations, zero page errors, zero console errors
     const violations = await evalJS(`window.__cspViolations || []`);
     assert.strictEqual(violations.length, 0, `CSP violations detected under strict vercel.json CSP: ${JSON.stringify(violations)}`);
     assert.strictEqual(pageErrors.length, 0, `Uncaught page errors: ${pageErrors.join(' | ')}`);

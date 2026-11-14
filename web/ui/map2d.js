@@ -97,6 +97,7 @@
       const cx = canvas.width / 2, cy = canvas.height / 2, [gx, gy] = toGrid(cx, cy);
       const cw = Math.max(1, Math.floor(r.width * (global.devicePixelRatio || 1)));
       const ch = Math.max(1, Math.floor(r.height * (global.devicePixelRatio || 1)));
+      if (viewReady && canvas.width === cw && canvas.height === ch) return;
       canvas.width = cw;
       canvas.height = ch;
       if (globeCanvas) { globeCanvas.width = cw; globeCanvas.height = ch; }
@@ -328,6 +329,7 @@
       wrapView(); updateScaleBar(); draw();
     }, { passive: false });
     canvas.addEventListener('mousemove', (e) => {
+      if (performance.now() - lastTouchTap < 500) return;
       const g = gridAt(e), tip = $('#tooltip');
       if (!g) { if (tip) tip.classList.add('hidden'); return; }
       const [x, y] = g, v = layers.cellValues(x, y), s = S.score[y * W + x], nr = layers.nearestRegion(v.lat, v.lon);
@@ -338,12 +340,14 @@
         : `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}`)
         + ($('#hud-coord').dataset.t ? ` · ${$('#hud-coord').dataset.t} ms` : '');
       if (tip) {
+        if (global.matchMedia && global.matchMedia('(hover: none)').matches) { tip.classList.add('hidden'); return; }
         const locTxt = nr.distDeg < 6 ? escHtml(nr.region.name) : (tr ? escHtml(nr.region.name) + ' yakını' : 'near ' + escHtml(nr.region.name));
         tip.innerHTML = `<span class="tt-region">${locTxt}</span><b>${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))}</b> · ${tr ? 'skor' : 'score'} <b>${s.toFixed(2)}</b><br>${tr ? 'rakım' : 'elev'} ${v.elev.toFixed(0)} m · ${tr ? 'eğim' : 'slope'} ${v.slope.toFixed(1)}°<br>rad ${v.rad.toFixed(0)} mSv/${tr ? 'yıl' : 'yr'} · ${tr ? 'buz' : 'ice'} ${v.ice === null ? '—' : v.ice.toFixed(2)}<br>${tr ? 'pürüz' : 'rough'} ${v.rough.toFixed(0)} m · ${tr ? 'TA' : 'TI'} ${v.ti === null ? '—' : v.ti.toFixed(0)} · ${tr ? 'toz' : 'dust'} ${v.dust === null ? '—' : (v.dust * 100).toFixed(0) + '%'}`;
         const r = canvas.getBoundingClientRect();
-        tip.style.left = Math.max(8, Math.min(r.width - 210, e.clientX - r.left + 14)) + 'px';
-        tip.style.top = Math.max(8, Math.min(r.height - 95, e.clientY - r.top + 14)) + 'px';
         tip.classList.remove('hidden');
+        const tipW = tip.offsetWidth || 210, tipH = tip.offsetHeight || 95;
+        tip.style.left = Math.max(8, Math.min(Math.max(8, r.width - tipW - 8), e.clientX - r.left + 14)) + 'px';
+        tip.style.top = Math.max(8, Math.min(Math.max(8, r.height - tipH - 8), e.clientY - r.top + 14)) + 'px';
       }
     });
     canvas.addEventListener('mouseleave', () => { if ($('#tooltip')) $('#tooltip').classList.add('hidden'); });
@@ -412,9 +416,15 @@
     canvas.addEventListener('touchend', (e) => {
       if (touchState && touchState.mode === 'drag' && !touchState.moved && e.changedTouches.length === 1) {
         const t = e.changedTouches[0]; lastTouchTap = performance.now();
+        if ($('#tooltip')) $('#tooltip').classList.add('hidden');
         const g = gridAt(t); if (g && onPick) onPick(g[0], g[1]);
       }
-      if (e.touches.length === 0) touchState = null;
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchState = { mode: 'drag', x: t.clientX, y: t.clientY, moved: true, tx: S.view.tx, ty: S.view.ty, rLat: globe ? globe.state.targetLat : 0, rLon: globe ? globe.state.targetLon : 0 };
+      } else if (e.touches.length === 0) {
+        touchState = null;
+      }
     });
 
     return {

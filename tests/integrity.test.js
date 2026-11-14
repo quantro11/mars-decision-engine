@@ -84,9 +84,14 @@ for (const rel of ['index.html', 'style.css', 'live_api.js', 'ui/i18n.js']) {
   assert.ok(!/(?:45\+|≥\s*45)\s*L\/sol/.test(txt), `Invented L/sol extraction claim in web/${rel}`);
   assert.ok(!/empty-reticle/.test(txt), `Orphan empty-reticle selector in web/${rel}`);
 }
-for (const rel of ['globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/charts.js', 'ui/panels.js', 'ui/brief.js', 'ui/i18n.js']) {
+for (const rel of ['app.js', 'globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/map2d.js', 'ui/charts.js', 'ui/panels.js', 'ui/brief.js', 'ui/i18n.js']) {
   const txt = fs.readFileSync(path.join(WEB, rel), 'utf8');
   assert.ok(!/[ \t]+$/m.test(txt), `Trailing whitespace found in web/${rel}`);
+}
+assert.ok(/viewport-fit=cover/.test(html), 'index.html viewport supports notched/safe-area devices cleanly');
+const cssSrc = fs.readFileSync(path.join(WEB, 'style.css'), 'utf8');
+for (const mq of ['max-width: 1360px', 'max-width: 960px', 'max-width: 680px', 'pointer: coarse']) {
+  assert.ok(cssSrc.includes(mq), `style.css defines responsive rule (${mq})`);
 }
 const { SCORING } = require('../web/scoring.js');
 for (const p of Object.values(SCORING.PRESETS)) {

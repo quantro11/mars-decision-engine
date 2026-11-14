@@ -433,6 +433,7 @@
     L.ice = L[S.iceBand];
     await initWorkerLayers();
     window.addEventListener('resize', viewport.resize);
+    if (typeof ResizeObserver === 'function' && $('.map-wrap')) new ResizeObserver(viewport.resize).observe($('.map-wrap'));
     viewport.resize();
     rescore();
     $('#loading').classList.add('hidden');
