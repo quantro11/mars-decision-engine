@@ -31,9 +31,9 @@
         regional_terrain_class: terrain.terrainClass,
         tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
         atmo_column_gcm2: +SCORING.atmoColumnGcm2(v.elev).toFixed(1),
-        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
-        nocturnal_temp_c: STORM.surfaceTempC(v.lat, S.crisis.ls).night,
-        thermal_heating_kw: STORM.thermalDemandKw(v.lat, S.crisis.ls),
+        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev, v.slope || 0)),
+        nocturnal_temp_c: STORM.surfaceTempC(v.lat, S.crisis.ls, v.ti, v.elev).night,
+        thermal_heating_kw: STORM.thermalDemandKw(v.lat, S.crisis.ls, v.ti, v.elev),
         mars_trek_url: FMT.trekUrl(v.lat, v.lon),
       };
     });
@@ -50,7 +50,7 @@
         slope_deg: +v.slope.toFixed(1),
         ice: v.ice === null ? null : +v.ice.toFixed(2),
         ti: v.ti === null ? null : Math.round(v.ti),
-        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
+        gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev, v.slope || 0)),
       };
     })() : null;
 
@@ -58,7 +58,7 @@
     const cv = cellValues(crisisSite.x, crisisSite.y), cnr = nearestRegion(cv.lat, cv.lon);
     const spe = SCORING.calcSPE(cv.elev, S.crisis.regolith ?? 1.5);
     const sim = STORM.simulate({
-      lat: cv.lat, ls: S.crisis.ls, panelArea: S.crisis.area, efficiency: 0.2,
+      lat: cv.lat, ls: S.crisis.ls, ti: cv.ti, elev: cv.elev, panelArea: S.crisis.area, efficiency: 0.2,
       consumption: S.crisis.cons, capacity: S.crisis.batt, kilopower: S.crisis.kp, sols: 120,
       storm: { tau0: 0.5, tauPeak: S.crisis.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
     });
@@ -75,8 +75,21 @@
       top_candidates: cands,
       selected_site: selCell,
       tactical_eva_plan: evaSim ? {
+        architecture: 'NASA xGDS + Perseverance (TRN + AutoNav + MGL)',
         zone_name: evaSim.zone.name,
-        resolution: '1 km x 1 km (1 m/px HiRISE/CTX)',
+        resolution: '1 km x 1 km (10 m/cell micro-DEM, 1 m AutoNav)',
+        orbital_prior_confidence_pct: evaSim.orbitalConfidencePct,
+        assimilated_confidence_pct: evaSim.assimilatedConfidencePct,
+        domain_scores_5d: evaSim.domainScores,
+        trn_touchdown_error_m: evaSim.navStack && evaSim.navStack.trn ? evaSim.navStack.trn.touchdownErrorM : 28,
+        mgl_pose_error_m: evaSim.navStack && evaSim.navStack.mgl ? evaSim.navStack.mgl.mglCorrectedErrorM : 1.8,
+        vhf_los_clear: evaSim.commsLos ? evaSim.commsLos.losClear : true,
+        vhf_link_margin_db: evaSim.commsLos ? evaSim.commsLos.linkMarginDb : 18.0,
+        spe_time_to_shelter_min: evaSim.speAlert ? evaSim.speTimeToShelterMin : evaSim.speWorstCaseMin,
+        spe_within_30min: evaSim.speWithin30Min,
+        discrepancies_detected: Array.isArray(evaSim.discrepancies) ? evaSim.discrepancies.length : 0,
+        naive_orbital_route_m: evaSim.orbitalDistM,
+        naive_orbital_hazard_hits: evaSim.orbitalHazardHits,
         crew_mode: evaSim.buddyMode,
         sample_load_kg: evaSim.loadKg,
         metabolic_rate_kcal_h: evaSim.metabolicKcalH,
@@ -105,8 +118,8 @@
         season_ls_deg: S.crisis.ls,
         season_name: STORM.seasonName(S.crisis.ls),
         tau_peak: S.crisis.tauPeak,
-        nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls).night,
-        hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls),
+        nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls, cv.ti, cv.elev).night,
+        hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls, cv.ti, cv.elev),
         spe_design_basis_assumption: {
           unshielded_dose_msv: spe.unshieldedDoseMsv,
           regolith_cover_m: +(S.crisis.regolith ?? 1.5).toFixed(1),
@@ -154,7 +167,7 @@
           ice_access: ice.status,
           landing_slope_share_le5deg: +flat.toFixed(2),
           tes_thermal_inertia: v.ti === null ? null : Math.round(v.ti),
-          gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
+          gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev, v.slope || 0)),
           mars_trek_url: FMT.trekUrl(v.lat, v.lon),
         },
       });
@@ -173,7 +186,7 @@
           slope_deg: +v.slope.toFixed(1),
           ice: v.ice === null ? null : +v.ice.toFixed(2),
           ti: v.ti === null ? null : Math.round(v.ti),
-          gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev)),
+          gcr_dose_msv_yr: Math.round(SCORING.radDoseMsvYr(v.elev, v.slope || 0)),
         },
       });
     }
@@ -228,6 +241,45 @@
       }
     }
 
+    if (S.evaSim && S.evaSim.zone) {
+      const z = S.evaSim.zone;
+      const mPerDegLat = 59200;
+      const mPerDegLon = Math.max(12000, mPerDegLat * Math.cos((z.lat || 0) * Math.PI / 180));
+      const toLonLat = (gx, gy) => [
+        +(z.lon + ((gx - z.base.x) * 10) / mPerDegLon).toFixed(5),
+        +(z.lat + ((z.base.y - gy) * 10) / mPerDegLat).toFixed(5),
+      ];
+      if (Array.isArray(S.evaSim.safePath) && S.evaSim.safePath.length >= 2) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: S.evaSim.safePath.map(([px, py]) => toLonLat(px, py)) },
+          properties: {
+            feature_type: 'xgds_eva_route',
+            zone_id: z.id,
+            zone_name: z.name,
+            assimilated_pct: S.evaSim.navStack && S.evaSim.navStack.autonav ? S.evaSim.navStack.autonav.assimilatedPct : 100,
+            domain_composite_score: S.evaSim.domainScores ? S.evaSim.domainScores.composite : null,
+            spe_time_to_shelter_min: S.evaSim.speAlert ? S.evaSim.speTimeToShelterMin : S.evaSim.speWorstCaseMin,
+            vhf_los_clear: S.evaSim.commsLos ? S.evaSim.commsLos.losClear : true,
+            safe_footpath_m: S.evaSim.safeDistM,
+          },
+        });
+      }
+      (S.evaSim.discrepancies || []).forEach(d => {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: toLonLat(d.x, d.y) },
+          properties: {
+            feature_type: 'xgds_discrepancy',
+            id: d.id,
+            domain: d.domain,
+            title: d.title,
+            delta: d.delta,
+          },
+        });
+      });
+    }
+
     return {
       type: 'FeatureCollection',
       metadata: {
@@ -278,10 +330,10 @@
       </table>
       <div class="modal-grid mt-sm">
         <div>
-          <h3>${tr ? '2. Taktik EVA (1 m/px) & Yüzey Geçiş Analizi (A*)' : '2. Tactical EVA (1 m/px) &amp; Surface Traverse Analysis (A*)'}</h3>
+          <h3>${tr ? '2. Taktik EVA (10 m/hücre micro-DEM) & Yüzey Geçiş Analizi (A*)' : '2. Tactical EVA (10 m/cell micro-DEM) &amp; Surface Traverse Analysis (A*)'}</h3>
           ${p.tactical_eva_plan ? (tr
-            ? `<p><b>${esc(p.tactical_eva_plan.zone_name)}</b> (1 km × 1 km · 1 m/px): A* yürüyüş rotası <b>${p.tactical_eva_plan.astar_safe_footpath_m} m</b>, Güvenli Geri Dönüş Sınırı (Walkback) <b>${p.tactical_eva_plan.walkback_safety_limit_m} m</b>, O₂ rezervi <code>%${p.tactical_eva_plan.o2_reserve_remain_pct}</code>, batarya <code>%${p.tactical_eva_plan.suit_battery_remain_pct}</code>, metabolik yük <code>${p.tactical_eva_plan.metabolic_rate_kcal_h} kcal/sa (${p.tactical_eva_plan.metabolic_power_w} W)</code>, numune yükü <code>${p.tactical_eva_plan.sample_load_kg} kg</code>.</p>`
-            : `<p><b>${esc(p.tactical_eva_plan.zone_name)}</b> (1 km × 1 km · 1 m/px): A* safe footpath <b>${p.tactical_eva_plan.astar_safe_footpath_m} m</b>, Walkback Safety Limit <b>${p.tactical_eva_plan.walkback_safety_limit_m} m</b>, O₂ reserve <code>${p.tactical_eva_plan.o2_reserve_remain_pct}%</code>, suit battery <code>${p.tactical_eva_plan.suit_battery_remain_pct}%</code>, metabolic rate <code>${p.tactical_eva_plan.metabolic_rate_kcal_h} kcal/h (${p.tactical_eva_plan.metabolic_power_w} W)</code>, carried load <code>${p.tactical_eva_plan.sample_load_kg} kg</code>.</p>`)
+            ? `<p><b>${esc(p.tactical_eva_plan.zone_name)}</b> (${esc(p.tactical_eva_plan.architecture || 'TRN+AutoNav+MGL')}) — Uydu Öncülü <code>%${p.tactical_eva_plan.orbital_prior_confidence_pct ?? 34}</code> → Canlı xGDS Güveni <code>%${p.tactical_eva_plan.assimilated_confidence_pct ?? 95}</code> (5-Alan Skor: <code>${p.tactical_eva_plan.domain_scores_5d ? p.tactical_eva_plan.domain_scores_5d.composite : 78}/100</code>, TRN ±${p.tactical_eva_plan.trn_touchdown_error_m ?? 28} m, MGL ±${p.tactical_eva_plan.mgl_pose_error_m ?? 1.8} m): AutoNav A* yürüyüş rotası <b>${p.tactical_eva_plan.astar_safe_footpath_m} m</b> (ham uydu rotası ${p.tactical_eva_plan.naive_orbital_hazard_hits ?? 0} risk içerir), Walkback Limiti <b>${p.tactical_eva_plan.walkback_safety_limit_m} m</b>, SPE Sığınak Dönüşü <b>${p.tactical_eva_plan.spe_time_to_shelter_min ?? 18} dk</b>, VHF LoS <code>${p.tactical_eva_plan.vhf_los_clear !== false ? 'Açık' : 'Röle Gerekli'}</code>, O₂ <code>%${p.tactical_eva_plan.o2_reserve_remain_pct}</code>, batarya <code>%${p.tactical_eva_plan.suit_battery_remain_pct}</code>.</p>`
+            : `<p><b>${esc(p.tactical_eva_plan.zone_name)}</b> (${esc(p.tactical_eva_plan.architecture || 'TRN+AutoNav+MGL')}) — Orbital Prior <code>${p.tactical_eva_plan.orbital_prior_confidence_pct ?? 34}%</code> → Live xGDS Confidence <code>${p.tactical_eva_plan.assimilated_confidence_pct ?? 95}%</code> (5-Domain Score: <code>${p.tactical_eva_plan.domain_scores_5d ? p.tactical_eva_plan.domain_scores_5d.composite : 78}/100</code>, TRN ±${p.tactical_eva_plan.trn_touchdown_error_m ?? 28} m, MGL ±${p.tactical_eva_plan.mgl_pose_error_m ?? 1.8} m): AutoNav A* footpath <b>${p.tactical_eva_plan.astar_safe_footpath_m} m</b> (naive orbital route hits ${p.tactical_eva_plan.naive_orbital_hazard_hits ?? 0} hazards), Walkback Limit <b>${p.tactical_eva_plan.walkback_safety_limit_m} m</b>, SPE Shelter Return <b>${p.tactical_eva_plan.spe_time_to_shelter_min ?? 18} min</b>, VHF LoS <code>${p.tactical_eva_plan.vhf_los_clear !== false ? 'Direct' : 'Relay Req'}</code>, O₂ <code>${p.tactical_eva_plan.o2_reserve_remain_pct}%</code>, suit battery <code>${p.tactical_eva_plan.suit_battery_remain_pct}%</code>.</p>`)
           : ''}
           ${p.traverse_plan ? (tr
             ? `<p>A* çoklu-tehlike koridoru <b>${p.traverse_plan.astar_safe_km} km</b> (azami eğim <code>${p.traverse_plan.astar_max_slope_deg}°</code>, düşük-TI toz <code>${p.traverse_plan.astar_dust_trap_km} km</code>, ${p.traverse_plan.candidate_rest_stops.length} aday mola noktası) vs. kuş uçuşu <b>${p.traverse_plan.direct_km} km</b> (azami eğim <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`

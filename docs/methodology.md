@@ -115,12 +115,13 @@ The criterion therefore has **weight 0 in every preset**; users can raise it to 
 ## 9. Atmospheric column & GCR surface radiation model
 
 ```
-Σ(h)       = 16.4 · exp(−h / 11100)                     [g/cm²]
-D_GCR(h)   = 0.64 · exp(−(Σ(h) − 24.6) / 60) · 365.25   [mSv/yr]
+Σ(h)          = 16.4 · exp(−h / 11100)                                        [g/cm²]
+Ω(θ)          = max(0.75, cos²(θ / 2) − 0.002 · θ_deg)                        [topographic sky-view factor]
+D_GCR(h, θ)   = 0.64 · exp(−(Σ(h) − 24.6) / 60) · 365.25 · Ω(θ)               [mSv/yr]
 ```
 
-* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4400\text{ m}$, $\Sigma \approx 24.4\text{ g/cm}^2 \Rightarrow 0.64\text{ mSv/day} \approx 234\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $0.64 \pm 0.12\text{ mSv/day}$).
-* Because surface cosmic-ray protection answers a distinct crew life-support question beyond atmospheric EDL braking, `rad` is exposed both as a suitability criterion slider (0.05 preset weight), a dedicated global map layer (`Radiation`), and explicit column/dose telemetry in the site inspector and Mission Brief.
+* Calibrated to MSL Curiosity Radiation Assessment Detector (RAD) surface measurements at Gale Crater ($h \approx -4400\text{ m}$, $\Sigma \approx 24.4\text{ g/cm}^2 \Rightarrow 0.64\text{ mSv/day} \approx 234\text{ mSv/yr}$, matching Hassler et al., *Science* 343, 2014: $0.64 \pm 0.12\text{ mSv/day}$), with local horizon sky-view geometric shielding $\Omega(\theta)$ reducing isotropic cosmic-ray flux next to sloped scarps and canyon walls.
+* Because surface cosmic-ray protection answers a distinct crew life-support question beyond atmospheric EDL braking, `rad` is exposed both as a suitability criterion slider (0.05 preset weight), a dedicated global map layer (`Radiation`), and explicit column/dose telemetry in the site inspector, traverse planner, and Mission Brief.
 
 ## 10. Solar particle event (SPE) shielding — design-basis assumption
 
@@ -178,4 +179,19 @@ Every externally fetched value carries one of four labels, shown in the UI next 
 | OFFLINE | the request failed; nothing is shown |
 
 No placeholder sol numbers, pressures or CME events are ever generated. DONKI catalogues heliospheric CMEs; whether one reaches Mars is not assessed. Unit tests assert both rules (`tests/scoring.test.js`, data-honesty block).
+
+## 14. Tactical EVA, 0.38g Pandolf Bioenergetics & Post-Landing 5-Domain Map Assimilation (Phase 2)
+
+Orbital maps at ~5 km/px cannot resolve sub-metre boulders, migrated aeolian sand ripples, or local bearing anomalies. Phase 2 (`web/ui/eva.js` and `SCORING.calcPandolfMars`) models post-landing surface map construction on a `1 km × 1 km` (`100 × 100` cells at `10 m/cell`) local tactical grid:
+
+* **Navigation & Localization Stack:**
+  1. **TRN (Terrain Relative Navigation):** shrinks touchdown dispersion from the ~1,200 m orbital ellipse to ~25–32 m.
+  2. **AutoNav Progressive Assimilation (`Step 0..8` + spot-scan probes):** expands the scanned surface mask from the touchdown pad along the traverse corridor, blending the orbital prior ($1 - \alpha$) with in-situ observations ($\alpha \in [0, 1]$) across **5 Domains** (*Topography, Geomorphology, Thermal, Radiation, Optical*).
+  3. **MGL (Mars Global Localization):** correlates horizon skyline tie-points against MOLA/HiRISE rims to bound pose error to `~1.6–2.7 m` vs. `>18 m` uncorrected wheel/foot visual odometry drift.
+* **0.38g Martian Pandolf-Santee Locomotion & xEMU PLSS Budgets:**
+  ```
+  M_eff   = (m_body + m_suit + m_load_eff) · (3.71 / 9.81)
+  P_met   = 1.5 · m_body · (3.71 / 9.81) + W_load + η_terrain · M_eff · (1.5 v² + 0.35 v G_eff) + 115 W
+  ```
+  where $m_{\text{body}} = 80\text{ kg}$, $m_{\text{suit}} = 82\text{ kg}$, $115\text{ W}$ represents pressurized suit joint-bending work, and $\eta_{\text{terrain}} = 1.32 + 0.85 \cdot f_{\text{sand}}$. Consumables are tracked against NASA xEMU PLSS nominal budgets: **850 g primary $\text{O}_2$** ($0.255\text{ g/W}\cdot\text{h}$), **960 Wh battery** ($42\text{ W} + 0.06 P_{\text{met}}$), **4.2 L LCVG sublimator cooling water**, **8.0 h max EVA duration**, **VHF line-of-sight (LoS)** mast-to-suit link margin, and **30-minute SPE emergency shelter return**.
 

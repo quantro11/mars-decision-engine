@@ -28,12 +28,21 @@ for (const s of [...scripts, ...styles]) {
   assert.ok(fs.existsSync(path.join(WEB, s)), `Missing asset referenced by index.html: ${s}`);
 }
 
-for (const s of [...scripts, 'worker.js']) {
+for (const s of [...scripts, 'worker.js', 'sw.js']) {
   if (s === 'layers_data.js') continue;
   assert.ok(fs.existsSync(path.join(WEB, s)), `Missing worker/script asset: ${s}`);
   const code = fs.readFileSync(path.join(WEB, s), 'utf8');
   new vm.Script(code, { filename: s });
 }
+for (const apiFile of ['api/insight.js', 'api/rover.js', 'api/donki/cme.js', 'api/donki/flr.js']) {
+  assert.ok(fs.existsSync(path.join(ROOT, apiFile)), `Missing serverless proxy: ${apiFile}`);
+  const apiSrc = fs.readFileSync(path.join(ROOT, apiFile), 'utf8');
+  new vm.Script(apiSrc, { filename: apiFile });
+  assert.ok(!apiSrc.includes('2025-05-01'), `Hardcoded 2025-05-01 date cap must not exist in ${apiFile}`);
+}
+assert.ok(fs.readFileSync(path.join(ROOT, 'api/rover.js'), 'utf8').includes('qObj.camera'), 'api/rover.js accepts ?camera= query parameter from live_api.js');
+assert.ok(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').includes("serviceWorker.register('./sw.js')"), 'web/app.js registers offline service worker sw.js');
+assert.ok(fs.readFileSync(path.join(WEB, 'sw.js'), 'utf8').includes('./layers/elev.png'), 'web/sw.js caches planetary raster layers');
 
 // 4. layers/meta.js must stay synchronized with layers/meta.json
 const metaJson = JSON.parse(fs.readFileSync(path.join(WEB, 'layers/meta.json'), 'utf8'));
@@ -108,5 +117,18 @@ const csp = (hdrs.find(x => x.key === 'Content-Security-Policy') || {}).value ||
 assert.ok(hdrKeys.has('Content-Security-Policy') && !csp.includes("'unsafe-inline'") && csp.includes("worker-src 'self'"), 'vercel.json enforces strict CSP without unsafe-inline and allows worker-src self');
 assert.ok(hdrKeys.has('X-Content-Type-Options'), 'vercel.json sets X-Content-Type-Options');
 assert.ok(hdrKeys.has('Cache-Control'), 'vercel.json sets asset Cache-Control');
+
+// 8. dist/ build synchronization check (when dist/ exists, core web scripts must match web/)
+const DIST = path.join(ROOT, 'dist');
+if (fs.existsSync(DIST)) {
+  for (const rel of ['index.html', 'style.css', 'app.js', 'scoring.js', 'astar.js', 'storm.js', 'globe3d.js', 'sw.js', 'ui/eva.js', 'ui/panels.js', 'ui/brief.js']) {
+    assert.ok(fs.existsSync(path.join(DIST, rel)), `dist/${rel} exists in production bundle`);
+    assert.strictEqual(
+      fs.readFileSync(path.join(DIST, rel), 'utf8'),
+      fs.readFileSync(path.join(WEB, rel), 'utf8'),
+      `dist/${rel} is synchronized with web/${rel}`
+    );
+  }
+}
 
 console.log(`All integrity / sync / CSP / accessibility / asset tests passed (${scripts.length} scripts checked).`);

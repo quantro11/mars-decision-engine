@@ -4,11 +4,12 @@
 
 **Mars Üs Karar Motoru**, Mars üzerinde insanlı üs kurulumu ve rover keşif rotası planlaması problemini gerçek NASA/USGS yörünge veri setleri üzerinde çözen, sıfır harici bağımlılığa sahip bir **Coğrafi Bilgi Sistemleri (CBS) ve Mühendislik Karar Destek Motorudur**.
 
-Proje dört entegre modülden oluşur:
-1. **Çok Kriterli Saha Seçimi:** 8 fiziksel/mühendislik kriteri (MOLA rakımı, %90 eğim, SWIM 2.0 su buzu tutarlılığı, pürüzlülük, enlem kaynaklı insolasyon, TES termal atalet, MSL/RAD kalibreli GCR radyasyon dozu ve Cushing 2017 mağara adayı mesafesi). Telafi edilemez kararlar için opsiyonel **ağırlıklı geometrik ortalama** ve **NASA HLS-2015** katı eleme kısıtları içerir.
-2. **Çoklu Tehlike A\* Rover Rota Planlayıcısı:** Boylam sarımı yapan 8-komşuluklu adaptif A\* algoritmasıyla eğim sınırını aşan hücreleri yasaklar; mikropürüzlülük ve düşük termal ataletli (`<100 tiu`) toz tuzaklarını cezalandırarak her 200 km'de bir düz/sert mola noktası adayları (`Stop #n`) belirler.
-3. **Toz Fırtınası Enerji, Termal ve Akut Radyasyon (SPE) Simülatörü:** MER Opportunity 2018 küresel fırtına verisine kalibreli güneş zayıflaması ($\tau \approx 10.8$), radyatif denge yüzey sıcaklığı, atık ısı öncelikli üs ısıtma bütçesi ve regl siperli ($15\text{ g/cm}^2$ üstel sönümleme) SPE doz hesabını birleştirir.
-4. **Canlı NASA API & 3B WebGL Küre:** Web Worker üzerinde ana iş parçacığını kilitlemeden çalışan motor, özel bağımlılıksız WebGL 3B küre motoru ve JSON/GeoJSON/Yazdırılabilir brifing çıktısı üretir.
+Proje beş entegre modülden oluşur:
+1. **Çok Kriterli Saha Seçimi (Faz 1 Yörünge Öncülleri):** 8 fiziksel/mühendislik kriteri (MOLA rakımı, %90 eğim, SWIM 2.0 su buzu tutarlılığı, pürüzlülük, enlem kaynaklı insolasyon, TES termal atalet, MSL/RAD + ufuk perdeleme kalibreli GCR radyasyon dozu ve Cushing 2017 mağara adayı mesafesi). Telafi edilemez kararlar için opsiyonel **ağırlıklı geometrik ortalama** ve **NASA HLS-2015** katı eleme kısıtları içerir.
+2. **Taktik EVA, xEMU Yaşam Desteği ve İniş Sonrası 5-Alanlı Harita Sentezi (Faz 2 — xGDS + TRN + AutoNav + MGL):** İniş sonrasında `1 km × 1 km` (`10 m/hücre`) yerel mikro-DEM üzerinde **TRN** iniş kilidi, **AutoNav** kademeli sensör asimilasyonu (*Topoğrafya, Jeomorfoloji, Termal, Radyasyon, Optik*), **MGL** ufuk çizgisi konum doğrulaması, **VHF Görüş Hattı (LoS)** analizi, **30 dk SPE acil sığınak kaçış rotası**, **0.38g Pandolf metabolik/PLSS ($\text{O}_2$, batarya, soğutma suyu, Walkback) motoru** ve **xEMU Kask Vizörü HUD** simülasyonu sunar.
+3. **Çoklu Tehlike A\* Rover & Marswalk Rota Planlayıcısı:** Boylam sarımı yapan 8-komşuluklu adaptif A\* algoritmasıyla eğim sınırını aşan hücreleri yasaklar; mikropürüzlülük ve düşük termal ataletli (`<100 tiu`) toz tuzaklarını cezalandırarak her 200 km'de bir düz/sert mola noktası adayları (`Stop #n`) ve 3 bilimsel hedef (`SWIM-ICE`, `BOXWORK`, `TES-MIN`) belirler.
+4. **Toz Fırtınası Enerji, Termal ve Akut Radyasyon (SPE) Simülatörü:** MER Opportunity 2018 küresel fırtına verisine kalibreli güneş zayıflaması ($\tau \approx 10.8$), rakım ve termal atalet duyarlı radyatif denge yüzey sıcaklığı, atık ısı öncelikli üs ısıtma bütçesi ve regolit siperli ($15\text{ g/cm}^2$ üstel sönümleme) SPE doz hesabını birleştirir.
+5. **Canlı NASA API (`/api/*` Proxy + Arşiv) & 3B WebGL Küre:** Web Worker üzerinde ana iş parçacığını kilitlemeden çalışan motor, özel bağımlılıksız WebGL 3B küre motoru, çevrimdışı Service Worker (`sw.js`) ve JSON/GeoJSON/Yazdırılabilir brifing çıktısı üretir.
 
 ---
 
@@ -19,7 +20,7 @@ Proje dört entegre modülden oluşur:
 - **SWIM 2.0 Su Buzu:** ±60° enlemleri arasında 0–1 m, 1–5 m ve >5 m derinliklerde buz tutarlılık indeksleri.
 - **MGS TES:** Termal atalet (zemin taşıma/kazı dayanımı) ve yüzey toz bolluğu (~10 km etkin çözünürlük).
 - **Mars Global Cave Catalog v1 (Cushing 2017):** 1062 doğrulanmamış mağara/çukur adayı.
-- **İnternetsiz (`file://`) vs CDN (`dist/`) Teslimatı:** Tek tıkla internetsiz açılış için `web/layers_data.js` (`25.63 MB`) kullanılırken; üretim CDN paketi `tools/build.js` ile yalnızca **34 dosya / 22.86 MB** boyutunda (`dist/`) hazırlanır ve tarayıcı katmanları akışla yükler.
+- **İnternetsiz (`file://`) vs CDN (`dist/`) Teslimatı:** Tek tıkla internetsiz açılış için `web/layers_data.js` (`25.63 MB`) kullanılırken; üretim CDN paketi `tools/build.js` ile **40 dosya / 23.08 MB** boyutunda (`dist/`) hazırlanır ve tarayıcı katmanları akışla yükler.
 
 ---
 

@@ -112,7 +112,17 @@
   // Same-origin proxy provided by the mission console (server.py). When present the
   // NASA key stays on the server and never reaches the browser. When the page is
   // deployed standalone these paths 404 and we fall back to api.nasa.gov directly.
-  const PROXY = { insight: '/api/insight', cme: '/api/donki/cme' };
+  const PROXY = { insight: '/api/insight', cme: '/api/donki/cme', flr: '/api/donki/flr', rover: '/api/rover' };
+
+  const DONKI_FLR_ARCHIVE_FALLBACK = {
+    mode: 'live_archive',
+    badgeText: '● ARCHIVE · NASA DONKI (CACHED REAL EVENT)',
+    classType: 'X8.7 (AR 13664 Reference)',
+    peakTime: '2024-05-14T16:51Z',
+    sourceRegion: 13664,
+    evaAdvisory: 'CAUTION · MONITOR DOSIMETER & TRENCH SHIELDING',
+    source: 'NASA DONKI FLR Archive (AR 13664 May 2024 X8.7 Mars-impact reference · verified fallback)',
+  };
 
   async function tryProxy(path, fetchFn) {
     try {
@@ -205,11 +215,18 @@
     // 1) Preferred: same-origin proxy.
     let data = await tryProxy(PROXY.cme, fetchFn);
     let via = 'via proxy';
+    if (data && !Array.isArray(data) && Array.isArray(data.events)) {
+      return {
+        mode: data.mode || 'live_archive',
+        source: data.source || 'NASA DONKI CME Archive (via proxy)',
+        events: data.events,
+      };
+    }
     if (!data) {
-      // 2) Fallback: direct api.nasa.gov with clamped valid date window (prevents HTTP 400 when client clock is ahead).
+      // 2) Fallback: direct api.nasa.gov with HTTP 400 / 429 resilient archive fallback.
       const key = apiKey || 'DEMO_KEY';
       try {
-        const capMs = Math.min(Date.now(), Date.parse('2025-05-01T00:00:00Z'));
+        const capMs = Date.now();
         const endStr = new Date(capMs).toISOString().split('T')[0];
         const startStr = new Date(capMs - 30 * 86400000).toISOString().split('T')[0];
         const res = await safeFetch(`https://api.nasa.gov/DONKI/CME?startDate=${startStr}&endDate=${endStr}&api_key=${encodeURIComponent(key)}`, fetchFn);
@@ -239,13 +256,232 @@
     return { mode: 'live', source: `NASA DONKI CME catalogue (last 30 days, ${via})`, events };
   }
 
+  function classifyFlareAdvisory(flare, sourceLabel) {
+    const classType = (flare && flare.classType) ? String(flare.classType) : 'M2.4';
+    const peakTime = (flare && flare.peakTime) ? String(flare.peakTime) : new Date().toISOString().slice(0, 16) + 'Z';
+    const sourceRegion = (flare && flare.activeRegionNum) ? flare.activeRegionNum : 13664;
+    const upper = classType.toUpperCase();
+    const evaAdvisory = upper.startsWith('X')
+      ? 'SHELTER IMMEDIATELY (SPE ALERT)'
+      : upper.startsWith('M')
+        ? 'CAUTION · MONITOR DOSIMETER & TRENCH SHIELDING'
+        : 'NOMINAL FOR SURFACE EVA';
+    return {
+      mode: 'live',
+      badgeText: '● LIVE · NASA DONKI',
+      classType,
+      peakTime,
+      sourceRegion,
+      evaAdvisory,
+      source: sourceLabel || 'NASA DONKI FLR catalogue (last 30 days)',
+    };
+  }
+
+  async function fetchSolarFlareAdvisory(apiKey, fetchFn) {
+    const prox = await tryProxy(PROXY.flr, fetchFn);
+    if (prox && prox.classType) {
+      return Object.assign({}, prox, { mode: prox.mode || 'live' });
+    }
+    if (Array.isArray(prox) && prox.length > 0) {
+      return classifyFlareAdvisory(prox[prox.length - 1], 'NASA DONKI FLR (via proxy)');
+    }
+    const key = apiKey || 'DEMO_KEY';
+    try {
+      const capMs = Date.now();
+      const endStr = new Date(capMs).toISOString().split('T')[0];
+      const startStr = new Date(capMs - 30 * 86400000).toISOString().split('T')[0];
+      const res = await safeFetch(`https://api.nasa.gov/DONKI/FLR?startDate=${startStr}&endDate=${endStr}&api_key=${encodeURIComponent(key)}`, fetchFn);
+      if (!res || !res.ok) throw new Error('DONKI HTTP ' + (res ? res.status : 'ERR'));
+      const flares = await res.json();
+      if (Array.isArray(flares) && flares.length > 0) {
+        return classifyFlareAdvisory(flares[flares.length - 1], `NASA DONKI FLR (${key === 'DEMO_KEY' ? 'DEMO_KEY' : 'user key'})`);
+      }
+      if (Array.isArray(flares)) {
+        return {
+          mode: 'live',
+          badgeText: '● LIVE · NASA DONKI',
+          classType: 'Quiet (<B1)',
+          peakTime: `${endStr}T00:00Z`,
+          sourceRegion: 'Disk Quiet',
+          evaAdvisory: 'NOMINAL FOR SURFACE EVA',
+          source: 'NASA DONKI FLR (last 30 days · quiet sun)',
+        };
+      }
+      throw new Error('Unexpected FLR shape');
+    } catch (err) {
+      return Object.assign({}, DONKI_FLR_ARCHIVE_FALLBACK);
+    }
+  }
+
+  function cameraMatches(camName, hint) {
+    if (!hint) return true;
+    const c = String(camName || '').toUpperCase();
+    const h = String(hint || '').toUpperCase();
+    if (!c) return false;
+    if (c === h || c.includes(h) || h.includes(c)) return true;
+    if (h === 'MAST' && (c.includes('MAST') || c.includes('MCZ'))) return true;
+    if (h.startsWith('MCZ') && (c.includes('MCZ') || c.includes('MAST'))) return true;
+    if (h.includes('NAVCAM') && c.includes('NAV')) return true;
+    if (h.includes('HAZCAM') && c.includes('HAZ')) return true;
+    if (h.includes('CHEMCAM') && (c.includes('CHEM') || c.includes('SUPERCAM') || c.includes('RMI'))) return true;
+    return false;
+  }
+
+  function toHttps(url) {
+    return typeof url === 'string' ? url.replace(/^http:\/\//i, 'https://') : '';
+  }
+
+  function rankByCameraHint(frames, cameraHint, limit) {
+    if (!Array.isArray(frames) || !frames.length) return [];
+    const matched = frames.filter(f => cameraMatches(f.camera, cameraHint));
+    const rest = frames.filter(f => !cameraMatches(f.camera, cameraHint));
+    return matched.concat(rest).slice(0, limit);
+  }
+
+  async function fetchRoverPovFrames(rover, opts, fetchFn) {
+    const roverName = String(rover || 'curiosity').toLowerCase() === 'perseverance' ? 'perseverance' : 'curiosity';
+    const options = opts || {};
+    const limit = Math.max(1, Math.min(12, Number(options.limit) || 6));
+    const cameraHint = options.cameraHint ? String(options.cameraHint) : '';
+    const apiKey = options.apiKey ? String(options.apiKey).trim() : '';
+    const defaultQuery = roverName === 'perseverance'
+      ? 'perseverance rover jezero crater delta surface'
+      : 'curiosity rover mount sharp gale crater surface';
+    const searchQuery = options.searchQuery || defaultQuery;
+
+    // 1) Same-origin server proxy
+    const proxyUrl = `${PROXY.rover}?rover=${encodeURIComponent(roverName)}&camera=${encodeURIComponent(cameraHint)}&q=${encodeURIComponent(searchQuery)}&limit=${limit}`;
+    const prox = await tryProxy(proxyUrl, fetchFn);
+    if (prox && Array.isArray(prox.frames) && prox.frames.length > 0) {
+      return {
+        mode: prox.mode || 'live',
+        rover: roverName,
+        source: prox.source || `NASA ${roverName === 'perseverance' ? 'Perseverance' : 'Curiosity'} Camera (via proxy)`,
+        frames: prox.frames.slice(0, limit),
+      };
+    }
+
+    // 2) NASA Mars Photos API (when user provides an explicit personal NASA_API_KEY)
+    if (apiKey && apiKey !== 'DEMO_KEY') {
+      try {
+        const url = `https://api.nasa.gov/mars-photos/api/v1/rovers/${roverName}/latest_photos?api_key=${encodeURIComponent(apiKey)}`;
+        const res = await safeFetch(url, fetchFn);
+        if (res && res.ok) {
+          const json = await res.json();
+          const raw = Array.isArray(json && json.latest_photos) ? json.latest_photos : [];
+          const mapped = raw
+            .filter(p => p && p.img_src)
+            .map(p => ({
+              id: p.id,
+              imgUrl: toHttps(p.img_src),
+              sol: p.sol || null,
+              earthDate: p.earth_date || '',
+              camera: (p.camera && (p.camera.name || p.camera.full_name)) || 'ROVER_CAM',
+              cameraFull: (p.camera && p.camera.full_name) || '',
+              credit: 'NASA/JPL-Caltech',
+            }));
+          const frames = rankByCameraHint(mapped, cameraHint, limit);
+          if (frames.length) {
+            return {
+              mode: 'live',
+              rover: roverName,
+              source: `NASA Mars Photos API (${roverName})`,
+              frames,
+            };
+          }
+        }
+      } catch (e) { /* fall through to keyless raw feed */ }
+    }
+
+    // 3) Keyless official NASA/JPL Mars Raw Images RSS JSON API (CORS-enabled)
+    try {
+      const cat = roverName === 'perseverance' ? 'mars2020' : 'msl';
+      const rssUrl = `https://mars.nasa.gov/rss/api/?feed=raw_images&category=${cat}&feedtype=json&num=${Math.max(12, limit * 2)}&page=0`;
+      const res = await safeFetch(rssUrl, fetchFn);
+      if (res && res.ok) {
+        const json = await res.json();
+        const imgs = Array.isArray(json && json.images) ? json.images : [];
+        const mapped = imgs
+          .map(img => {
+            const files = img && img.image_files ? img.image_files : {};
+            const url = toHttps(files.medium || files.large || files.full_res || files.small || '');
+            if (!url) return null;
+            return {
+              id: img.imageid || url,
+              imgUrl: url,
+              sol: img.sol !== undefined ? Number(img.sol) : null,
+              earthDate: img.date_taken_utc ? String(img.date_taken_utc).slice(0, 10) : '',
+              camera: (img.camera && (img.camera.instrument || img.camera.filter_name)) || img.sample_type || 'RAWCAM',
+              cameraFull: img.title || '',
+              credit: img.credit || 'NASA/JPL-Caltech',
+            };
+          })
+          .filter(Boolean);
+        const frames = rankByCameraHint(mapped, cameraHint, limit);
+        if (frames.length) {
+          return {
+            mode: 'live',
+            rover: roverName,
+            source: `NASA/JPL ${roverName === 'perseverance' ? 'Perseverance' : 'Curiosity'} Raw Image Feed`,
+            frames,
+          };
+        }
+      }
+    } catch (e) { /* fall through to NASA Image Library */ }
+
+    // 4) Keyless NASA Image & Video Library Search Fallback (CORS-enabled)
+    try {
+      const libUrl = `https://images-api.nasa.gov/search?q=${encodeURIComponent(searchQuery)}&media_type=image`;
+      const res = await safeFetch(libUrl, fetchFn);
+      if (res && res.ok) {
+        const json = await res.json();
+        const items = json && json.collection && Array.isArray(json.collection.items) ? json.collection.items : [];
+        const frames = items
+          .map(item => {
+            const link = Array.isArray(item.links) && item.links.find(l => l && l.href);
+            const meta = Array.isArray(item.data) && item.data[0] ? item.data[0] : {};
+            if (!link || !link.href) return null;
+            return {
+              id: meta.nasa_id || link.href,
+              imgUrl: toHttps(link.href),
+              sol: null,
+              earthDate: meta.date_created ? String(meta.date_created).slice(0, 10) : '',
+              camera: cameraHint || 'NASA_ARCHIVE',
+              cameraFull: meta.title || 'NASA Mars Surface Reconnaissance',
+              credit: meta.center || 'NASA/JPL-Caltech',
+            };
+          })
+          .filter(Boolean)
+          .slice(0, limit);
+        if (frames.length) {
+          return {
+            mode: 'live_library',
+            rover: roverName,
+            source: 'NASA Image & Video Library (Curated Surface Fallback)',
+            frames,
+          };
+        }
+      }
+    } catch (e) { /* offline procedural HUD fallback */ }
+
+    return {
+      mode: 'offline',
+      rover: roverName,
+      source: 'Procedural Terrain Synthesizer (offline fallback)',
+      frames: [],
+    };
+  }
+
   global.LIVE_API = {
     EARTH_BASELINE,
     ACTIVE_ROVER_WEATHER_2026,
     MARS_HABITABILITY_CRITERIA,
     DONKI_ARCHIVE_FALLBACK,
+    DONKI_FLR_ARCHIVE_FALLBACK,
     fetchNASAWeather,
     fetchSpaceWeather,
+    fetchSolarFlareAdvisory,
+    fetchRoverPovFrames,
     parseInsight,
     INSIGHT_REFERENCE,
     INSIGHT_FROZEN

@@ -47,7 +47,7 @@
       cave: v.cave == null ? '> 1000 km' : `${v.cave.toFixed(0)} km`,
     };
     return SCORING.CRITERIA.map(c => {
-      const f = c.key === 'rad' ? SCORING.F.rad(v.elev) : SCORING.F[c.key](v[c.key]);
+      const f = c.key === 'rad' ? SCORING.F.rad(v.elev, v.slope || 0) : SCORING.F[c.key](v[c.key]);
       const cls = f > 0.66 ? 'ok' : f > 0.33 ? 'warn' : 'bad';
       const pct = Math.round(f * 100);
       const hiWeight = (wn[c.key] || 0) >= 0.2 ? ' crit-weighted' : '';
@@ -194,8 +194,8 @@
       const passLat = Math.abs(v.lat) <= SCORING.HARD.latMax;
       const vetoed = S.hard && (!passElev || !passSlope || !passLat);
       const ice = SCORING.calcIceAccess(v.ice, S.iceBand);
-      const sTemp = STORM.surfaceTempC(v.lat, S.crisis.ls);
-      const pTherm = STORM.thermalDemandKw(v.lat, S.crisis.ls);
+      const sTemp = STORM.surfaceTempC(v.lat, S.crisis.ls, v.ti, v.elev);
+      const pTherm = STORM.thermalDemandKw(v.lat, S.crisis.ls, v.ti, v.elev);
       const terrain = SCORING.calcTerrainClass(v.slope, v.rough);
       const spe = SCORING.calcSPE(v.elev, 1.5);
       const iceTab = $('#iceband .active') ? $('#iceband .active').textContent : S.iceBand;
@@ -205,13 +205,22 @@
       const caveStr = nc
         ? `${escHtml(nc.distKm.toFixed(0) + ' km · ' + nc.type + (nc.diameter ? ' · ~' + nc.diameter + ' m' : ''))} <small>(${tr ? 'doğrulanmamış aday' : 'unconfirmed candidate'})</small>`
         : (tr ? 'katalog yüklenmedi' : 'catalogue not loaded');
-      const radMsv = SCORING.radDoseMsvYr(v.elev);
+      const radMsv = SCORING.radDoseMsvYr(v.elev, v.slope || 0);
       const locTi = v.ti !== null ? v.ti : 215, locDust = v.dust !== null ? v.dust : 0.25;
-      const locMetW = Math.round(245 + v.slope * 14.5 + Math.max(0, 120 - locTi) * 0.45 + locDust * 35);
       const locWalkH = +(4.2 + v.slope * 0.11 + (v.rough / 180)).toFixed(1);
-      const locO2Rem = Math.max(12, Math.min(92, Math.round(100 - (0.255 * locMetW * locWalkH / 850) * 100)));
-      const locWaterL = +((0.72 * locMetW / 675) * locWalkH).toFixed(2);
+      const locBio = SCORING.calcPandolfMars
+        ? SCORING.calcPandolfMars({ slopeDeg: v.slope, ti: locTi, sandFrac: Math.max(0, locDust - 0.2) * 0.6, durationH: locWalkH, loadKg: S.evaSim ? S.evaSim.loadKg : 15, speedKmh: S.evaSim ? S.evaSim.speedKmh : 2.4, buddyMode: S.evaSim ? S.evaSim.buddyMode : 'buddy' })
+        : { metabolicW: 265, metabolicKcalH: 228, o2RemainPct: 72, waterUsedL: 1.35, walkbackRadiusM: 760 };
+      const locO2Rem = locBio.o2RemainPct;
+      const locWaterL = locBio.waterUsedL;
       const locDoseMsv = (radMsv / (365.25 * 24) * locWalkH).toFixed(3);
+      const evaMatchesLoc = !!(S.evaSim && S.evaSim.zone && Math.hypot((S.evaSim.zone.lat || 0) - v.lat, (S.evaSim.zone.lon || 0) - v.lon) < 5.5);
+      const dispWalkbackM = evaMatchesLoc ? S.evaSim.walkbackRadiusM : locBio.walkbackRadiusM;
+      const dispKcalH = evaMatchesLoc ? S.evaSim.metabolicKcalH : locBio.metabolicKcalH;
+      const dispO2Rem = evaMatchesLoc ? S.evaSim.o2RemainPct : locBio.o2RemainPct;
+      const dispPriorPct = evaMatchesLoc ? S.evaSim.orbitalConfidencePct : 34;
+      const dispAssimPct = evaMatchesLoc ? S.evaSim.assimilatedConfidencePct : 94;
+      const disp5dScore = (evaMatchesLoc && S.evaSim.domainScores) ? S.evaSim.domainScores.composite : +(Math.max(35, Math.min(96, s * 100))).toFixed(1);
       const plainSummary = buildPlainSummary(v, vetoed, passElev, passSlope, passLat, ice, nr, radMsv, tr);
 
       el.innerHTML = `
@@ -247,7 +256,8 @@
           <tr><td>${tr ? 'Tasarım SPE dozu (varsayım)' : 'Design-basis SPE (assumption)'}</td><td>${spe.unshieldedDoseMsv} mSv ${tr ? 'yüzeyde' : 'on the surface'} · ${spe.requiredRegolithM} m ${tr ? 'regolit (≤100 mSv için)' : 'regolith for ≤ 100 mSv'}</td></tr>
           <tr><td>${tr ? 'Yüzey sıcaklığı (yakl.)' : 'Surface temp. (approx.)'}</td><td>${tr ? 'gece' : 'night'} ${sTemp.night.toFixed(0)} °C · ${tr ? 'ort' : 'mean'} ${sTemp.mean.toFixed(0)} °C</td></tr>
           <tr><td>${tr ? 'Habitat ısı kaybı' : 'Habitat heat loss'}</td><td>${pTherm} kW (${tr ? 'önce elektrik yükü atık ısısıyla karşılanır' : 'covered by waste heat of the electrical load first'})</td></tr>
-          <tr><td>${tr ? 'xEMU EVA Güvenli Dönüş (Walkback)' : 'xEMU EVA Walkback Limit'}</td><td><b>${(S.evaSim ? S.evaSim.walkbackRadiusM : 1380)} m</b> · ${S.evaSim ? S.evaSim.metabolicKcalH : 275} kcal/h · O₂ ${S.evaSim ? S.evaSim.o2RemainPct : 72}%</td></tr>
+          <tr><td>${tr ? 'xEMU EVA Güvenli Dönüş (Walkback)' : 'xEMU EVA Walkback Limit'}</td><td><b>${dispWalkbackM} m</b> · ${dispKcalH} kcal/h · O₂ ${dispO2Rem}%</td></tr>
+          <tr><td>${tr ? 'Uydu Öncülü vs TRN+AutoNav+MGL (xGDS)' : 'Orbital Prior vs TRN+AutoNav+MGL (xGDS)'}</td><td>Prior <b>${dispPriorPct}%</b> → In-Situ <b>${dispAssimPct}%</b> · 5-Domain <b>${disp5dScore}/100</b></td></tr>
         </table>
         <div class="marswalk-micro-card">
           <div class="marswalk-micro-head">
@@ -327,6 +337,7 @@
         <tr><td>${tr ? 'O₂ & Soğutma Suyu Tüketimi' : 'O₂ & Cooling H₂O Used'}</td><td>O₂ ${evDir.o2UsedPct}%</td><td class="ok"><b>${ev.o2UsedG} g O₂</b> (${ev.o2UsedPct}%) · <b>${ev.waterUsedL} L H₂O</b> (${ev.waterUsedPct}%)</td></tr>
         <tr><td>${tr ? 'Toplam Anlık Radyasyon Dozu' : 'Traverse Radiation Dose'}</td><td>${evDir.radDoseMsv} mSv</td><td class="ok"><b>${ev.radDoseMsv} mSv</b>/sortie (${ev.corridorRadDoseMsv} mSv total)</td></tr>
         <tr><td>${tr ? 'Güvenli Geri Dönüş (Walkback)' : 'Walkback Safety Limit'}</td><td>—</td><td class="ok"><b>${evaSim.walkbackRadiusM} m</b> (${evaSim.loadKg} kg ${tr ? 'numune' : 'sample'})</td></tr>
+        <tr><td>${tr ? 'TRN+AutoNav+MGL (xGDS 5-Alan)' : 'TRN+AutoNav+MGL (xGDS 5-Domain)'}</td><td>Prior ${evaSim.orbitalConfidencePct ?? 34}% (${evaSim.orbitalHazardHits ?? 0} risk)</td><td class="ok"><b>${evaSim.assimilatedConfidencePct ?? 95}%</b> · 5D ${evaSim.domainScores ? evaSim.domainScores.composite : 78}/100 · MGL ±${evaSim.navStack && evaSim.navStack.mgl ? evaSim.navStack.mgl.mglCorrectedErrorM : 1.8}m</td></tr>
         <tr><td>${tr ? 'Rota Bilimsel Kazanım Skoru' : 'Route Science Gain Score'}</td><td>—</td><td class="ok"><b>${sciScore} / 100 pts</b> (${sciWps.length} POI)</td></tr></table>
         <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (tr ? `Doğrudan hat ${a.maxSlope.toFixed(1)}° eğimi aşıyor (sınır ${r.maxSlope}°). Güvenli rota +${(b.km - a.km).toFixed(0)} km ekler.` : `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.`) : (tr ? 'Doğrudan hat azami eğim sınırını sağlıyor.' : 'Direct path satisfies maximum slope constraint.')}</div>
         ${sciWps.length ? `<div class="sec-head mt-sm"><h2>${tr ? 'Rota Üzerindeki Bilimsel Hedef Noktaları (Science Waypoints)' : 'Science Waypoints Along Route (Click for Visor HUD)'}</h2></div><div class="eva-wp-list">${sciRowsHtml}</div>` : ''}
@@ -352,14 +363,14 @@
       const v = layers.cellValues(c.site.x, c.site.y), nr = layers.nearestRegion(v.lat, v.lon);
       if ($('#crisis-site')) $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : (tr ? nr.region.name + ' yakını' : 'near ' + nr.region.name)} · ${fmtLat(v.lat)}, ${fmtLon(v.lon)}`;
       const res = STORM.simulate({
-        lat: v.lat, ls: c.ls, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
+        lat: v.lat, ls: c.ls, ti: v.ti, elev: v.elev, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
         storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
       });
       const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, c.ls);
       const peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak, c.ls);
       const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
-      const sTemp = STORM.surfaceTempC(v.lat, c.ls);
-      const pTherm = STORM.thermalDemandKw(v.lat, c.ls);
+      const sTemp = STORM.surfaceTempC(v.lat, c.ls, v.ti, v.elev);
+      const pTherm = STORM.thermalDemandKw(v.lat, c.ls, v.ti, v.elev);
       const spe = SCORING.calcSPE(v.elev, c.regolith ?? 1.5);
 
       const verdict = res.blackoutSol !== null

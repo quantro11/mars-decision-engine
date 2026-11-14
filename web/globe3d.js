@@ -70,7 +70,8 @@
       float hD = texture2D(u_elevTex, v_uv + vec2(0.0, texel.y)).r;
 
       float bumpStrength = 8.0 + u_relief * 45.0;
-      float dU = (hR - hL) * bumpStrength;
+      float cosLat = max(0.25, cos(lat));
+      float dU = (hR - hL) * bumpStrength / cosLat;
       float dV = (hD - hU) * bumpStrength;
       vec3 pertN = normalize(N - dU * T + dV * B);
 
@@ -663,9 +664,11 @@
       gl.uniform1f(res.uGlobe.showOv, opts.showOverlay ? 1.0 : 0.0);
       gl.uniform1f(res.uGlobe.lighting, state.sunLight ? 1.0 : 0.0);
 
-      // Camera & Sun direction in world space (headlight-offset solar vector for optimal inspection)
+      // Camera & Sun direction in world space (headlight-offset solar vector modulated by Martian seasonal obliquity Ls)
       const [camWx, camWy, camWz] = rotToWorld(0, 0, state.camDist);
-      const [sunWx, sunWy, sunWz] = rotToWorld(1.15, 0.75, state.camDist + 1.5);
+      const lsRad = ((opts.ls ?? 251) * Math.PI) / 180;
+      const declOffset = 0.4396 * Math.sin(lsRad); // 25.19 deg Martian axial tilt
+      const [sunWx, sunWy, sunWz] = rotToWorld(1.15, 0.65 + declOffset * 0.45, state.camDist + 1.5);
       gl.uniform3f(res.uGlobe.camPos, camWx, camWy, camWz);
       gl.uniform3f(res.uGlobe.sunDir, sunWx, sunWy, sunWz);
 

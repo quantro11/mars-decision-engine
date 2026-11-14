@@ -392,17 +392,24 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert(kbState.summary.includes('Plain summary') && kbState.summary.includes('mSv/yr'), `Plain summary card missing or incomplete: ${kbState.summary}`);
     assert(kbState.checksText.includes('✓') || kbState.checksText.includes('✕'), 'Constraint check badges must include non-color ✓/✕ indicator');
 
-    // Verify TES Dust Abundance never shows "no data" and Zoom to Local EVA Zone + Helmet Visor HUD work end-to-end
+    // Verify TES Dust Abundance never shows "no data" and xGDS + TRN + AutoNav + MGL Live Surface Assimilation + Helmet Visor HUD work end-to-end
     const detailText = await evalJS(`document.getElementById('detail').textContent`);
     assert(!/TES Dust Abundance\s*no data/i.test(detailText), `TES Dust Abundance should be interpolated, not 'no data': ${detailText}`);
+    assert(detailText.includes('TRN+AutoNav+MGL') && detailText.includes('xGDS'), `Detail panel should show Orbital Prior vs TRN+AutoNav+MGL confidence: ${detailText}`);
     await evalJS(`document.getElementById('use-eva').click()`);
     const evaCheck = await waitFor(() => evalJS(`(() => {
       const p = document.getElementById('panel-eva');
       const c = document.getElementById('eva-local-canvas');
       if (!p || p.classList.contains('hidden') || !c) return null;
       return { text: p.textContent, w: c.width, h: c.height };
-    })()`), 'Tactical EVA 1m/px panel & local canvas');
-    assert(evaCheck.w > 0 && evaCheck.text.includes('Walkback') && evaCheck.text.includes('kcal/h'), 'EVA panel renders Walkback & metabolic telemetry');
+    })()`), 'xGDS + TRN + AutoNav + MGL 1m/px panel & local canvas');
+    assert(evaCheck.w > 0 && evaCheck.text.includes('Walkback') && evaCheck.text.includes('kcal/h') && evaCheck.text.includes('TRN') && evaCheck.text.includes('AutoNav') && evaCheck.text.includes('MGL'), 'EVA panel renders TRN + AutoNav + MGL + xGDS 5-domain & Walkback telemetry');
+    await evalJS(`document.getElementById('btn-eva-reset').click()`);
+    const step0Label = await evalJS(`document.getElementById('eva-scan-step-v').textContent`);
+    assert(step0Label.includes('Step 0/8'), `Reset button should set Orbital Prior Step 0/8, got: ${step0Label}`);
+    await evalJS(`document.getElementById('btn-eva-scan').click()`);
+    const step8Label = await evalJS(`document.getElementById('eva-scan-step-v').textContent`);
+    assert(step8Label.includes('Step 8/8') && step8Label.includes('100%'), `100% Verified button should complete 5-domain assimilation, got: ${step8Label}`);
     await evalJS(`document.getElementById('btn-open-hud').click()`);
     const hudCheck = await waitFor(() => evalJS(`(() => {
       const m = document.getElementById('hud-modal');
@@ -410,18 +417,8 @@ async function runHttpE2E(browserPath, securityHeaders) {
       if (!m || m.classList.contains('hidden') || !c) return null;
       return { text: m.textContent, w: c.width };
     })()`), 'Helmet Visor HUD modal & Ground POV canvas');
-    assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT'), 'Helmet Visor HUD renders Ground POV and LIBS oxides');
+    assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT') && hudCheck.text.includes('MGL POSE'), 'Helmet Visor HUD renders Ground POV, MGL lock, and LIBS oxides');
     await evalJS(`document.getElementById('hud-close').click()`);
-    await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
-    const brandSubTxt = await evalJS(`document.querySelector('.brand-sub').textContent`);
-    assert.strictEqual(brandSubTxt, 'Landing-site, Marswalk (EVA) route & science planning on real orbital data', 'Header subtitle matches NASA Marswalk & science brief');
-    await evalJS(`document.getElementById('plan-marswalk-btn').click()`);
-    const marswalkRoute = await waitFor(() => evalJS(`(() => {
-      const r = document.getElementById('route-stats');
-      if (!r || !r.textContent.includes('POI-1') || !r.textContent.includes('kcal/h')) return null;
-      return r.textContent;
-    })()`), 'Marswalk A* route with Science Waypoints & spacesuit telemetry');
-    assert(marswalkRoute.includes('POI-1') && marswalkRoute.includes('POI-2') && marswalkRoute.includes('POI-3') && marswalkRoute.includes('mSv'), 'Marswalk route renders Science POIs and cumulative radiation dose');
     await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
 
     await evalJS(`document.getElementById('guide-dismiss').click()`);

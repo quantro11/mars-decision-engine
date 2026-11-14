@@ -84,13 +84,20 @@ def up2(name):
     if a.shape == (OUT_H, OUT_W):
         return a
     assert a.shape == (OUT_H // 2, OUT_W // 2), (name, a.shape)
-    return np.repeat(np.repeat(a, 2, axis=0), 2, axis=1)
+    valid = (a > 0).astype(np.float32)
+    vals = a.astype(np.float32)
+    s = np.array(Image.fromarray(vals, "F").resize((OUT_W, OUT_H), Image.BILINEAR))
+    w = np.array(Image.fromarray(valid, "F").resize((OUT_W, OUT_H), Image.BILINEAR))
+    return np.where(w > 0.5, np.clip(np.round(s / np.maximum(w, 1e-6)), 1, 255), 0).astype(np.uint8)
 
 
 def hillshade(elev_m):
+    H, W = elev_m.shape
+    lat = 90 - (np.arange(H) + 0.5) * 180 / H
     gy, gx = np.gradient(elev_m)
-    px = 2 * math.pi * MARS_R / OUT_W
-    slope = np.arctan(2.5 * np.hypot(gx / px, gy / px))
+    py = math.pi * MARS_R / H
+    px = np.maximum((2 * math.pi * MARS_R / W) * np.cos(np.radians(lat)), 1.0)[:, None]
+    slope = np.arctan(2.5 * np.hypot(gx / px, gy / py))
     aspect = np.arctan2(-gx, gy)
     az, alt = np.radians(315), np.radians(45)
     return np.clip(np.sin(alt) * np.cos(slope) + np.cos(alt) * np.sin(slope) * np.cos(az - aspect), 0, 1)

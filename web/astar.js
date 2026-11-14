@@ -139,6 +139,23 @@
     return lastRes;
   }
 
+  function smoothCellElev(L, x, y) {
+    const W = L.width, H = L.height, off = L.meta.elev.offset, sc = L.meta.elev.scale;
+    const kx = [1, 2, 1];
+    let acc = 0, wsum = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      const ny = Math.max(0, Math.min(H - 1, y + dy));
+      const wy = kx[dy + 1];
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = ((x + dx) % W + W) % W;
+        const w = wy * kx[dx + 1];
+        acc += (off + L.elev[ny * W + nx] * sc) * w;
+        wsum += w;
+      }
+    }
+    return acc / wsum;
+  }
+
   function pathStats(L, path, kmCol, kmRow) {
     const W = L.width, sc = L.meta.slope.scale;
     const rScale = L.meta.rough ? L.meta.rough.scale : 0;
@@ -155,10 +172,13 @@
       const ti = (L.ti && L.ti[n] > 0) ? L.ti[n] * tiScale : 215;
       const iceRaw = L.ice ? L.ice[n] : (L.ice15 ? L.ice15[n] : 0);
       const ice = iceRaw > 0 ? (iceOff + iceRaw * iceScale) : null;
-      const elev = L.meta.elev.offset + L.elev[n] * L.meta.elev.scale;
-      // MSL-RAD calibrated GCR dose rate (mSv/yr) from elevation
+      const elev = smoothCellElev(L, x, y);
+      // MSL-RAD calibrated GCR dose rate (mSv/yr) with local topographic sky-view shielding (unified with SCORING.radDose)
       const atmo = 16.4 * Math.exp(-elev / 11100);
-      const radMsvYr = Math.max(175, Math.min(320, 318 * Math.exp(-0.0145 * (atmo - 9.5))));
+      const sDeg = Math.min(45, Math.max(0, s || 0));
+      const skyView = 1 - 0.5 * (1 - Math.cos(sDeg * Math.PI / 180));
+      const geomFactor = Math.max(0.75, skyView - sDeg * 0.002);
+      const radMsvYr = 0.64 * Math.exp(-(atmo - 24.6) / 60) * 365.25 * geomFactor;
       if (i) { const p = path[i - 1], py = (p / W) | 0, px = p - py * W;
         let dx = Math.abs(x - px); if (dx > W / 2) dx = W - dx;
         const d = Math.hypot(dx * kmCol[y], (y - py) * kmRow); km += d;
@@ -249,20 +269,34 @@
     )));
 
     // Spacesuit (xEMU) Marswalk Bioenergetics & Radiation Dose along the traverse
-    // Evaluates both a standard 6.5 km local Marswalk sortie along the corridor AND full corridor staged EVA totals
-    const walkSpeedKmh = 2.4;
-    const sortieKm = Math.min(Math.max(km, 4.8), 14.4); // Single EVA sortie distance capped to 8h window
-    const walkHours = +(sortieKm / walkSpeedKmh + 1.2).toFixed(1); // +1.2h for 3 Science POI sampling stops
+    // Uses 0.38g Martian Pandolf equation with terrain-degraded walking speed so hazardous/steep/dusty corridors
+    // require genuinely longer sortie durations and higher metabolic/O2 budgets than safe A* corridors.
+    const meanR = sumR / path.length;
+    const dustFrac = dustKm / Math.max(1, km);
+    const hazFrac = hazardKm / Math.max(1, km);
+    const effWalkSpeedKmh = Math.max(1.15, 2.45 - 0.045 * meanS - 0.03 * Math.max(0, maxS - 10) - 0.45 * dustFrac - 0.0015 * meanR);
+    const sortieKm = km < 14.4
+      ? Math.max(4.8, km)
+      : Math.min(16.8, 12.0 + hazFrac * 3.8 + dustFrac * 2.4 + Math.max(0, maxS - 12) * 0.14);
+    const walkHours = +(sortieKm / effWalkSpeedKmh + 1.2).toFixed(1); // +1.2h for 3 Science POI sampling stops
     const maxEvaLimitH = 8.0;
-    const totalEvaHoursAll = +(km / walkSpeedKmh + 1.2).toFixed(1);
+    const totalEvaHoursAll = +(km / effWalkSpeedKmh + 1.2).toFixed(1);
     const evaSorties = Math.max(1, Math.ceil(totalEvaHoursAll / 6.5));
-    const metabolicW = Math.round(255 + meanS * 14.5 + (dustKm / Math.max(1, km)) * 65);
+    const MARS_G = 3.71, bodyKg = 80, suitKg = 82, effLoadKg = 15 * 0.90;
+    const vMps = 2.4 / 3.6;
+    const effMassMars = (bodyKg + suitKg + effLoadKg) * (MARS_G / 9.81);
+    const effSlopeDeg = meanS * 0.65 + Math.max(0, maxS - meanS) * 0.35;
+    const effGradePct = Math.tan((effSlopeDeg * 0.55) * Math.PI / 180) * 100 + hazFrac * 18;
+    const terrainEta = 1.32 + dustFrac * 0.85 + hazFrac * 0.35;
+    const loadWorkW = effLoadKg * 2.8 + 2.5 * effMassMars * Math.pow(effLoadKg / bodyKg, 2);
+    const pandolfW = 1.5 * bodyKg * (MARS_G / 9.81) + loadWorkW + terrainEta * effMassMars * (1.5 * vMps * vMps + 0.35 * vMps * effGradePct) + 115;
+    const metabolicW = Math.round(Math.max(190, Math.min(680, pandolfW)));
     const metabolicKcalH = Math.round(metabolicW * 0.8598);
     const sortieKcal = Math.round(metabolicKcalH * walkHours);
     const o2UsedG = Math.round(0.255 * metabolicW * walkHours);
-    const o2UsedPct = Math.min(98, Math.round((o2UsedG / 850) * 100));
-    const waterUsedL = +((0.72 * metabolicW / 675) * walkHours).toFixed(2);
-    const waterUsedPct = Math.min(98, Math.round((waterUsedL / 3.8) * 100));
+    const o2UsedPct = Math.min(99, Math.round((o2UsedG / 850) * 100));
+    const waterUsedL = +((Math.max(0.08, 0.72 * metabolicW / 675)) * walkHours).toFixed(2);
+    const waterUsedPct = Math.min(99, Math.round((waterUsedL / 4.2) * 100));
     const meanRadMsvYr = km > 0 ? (radWeightedKm / km) : (profile[0] ? profile[0].radMsvYr : 235);
     const radDoseMsv = +((meanRadMsvYr / (365.25 * 24)) * walkHours).toFixed(3);
     const corridorRadDoseMsv = +((meanRadMsvYr / (365.25 * 24)) * totalEvaHoursAll).toFixed(2);
@@ -279,10 +313,10 @@
       sortieKcal,
       o2UsedG,
       o2UsedPct,
-      o2RemainPct: Math.max(2, 100 - o2UsedPct),
+      o2RemainPct: Math.max(1, 100 - o2UsedPct),
       waterUsedL,
       waterUsedPct,
-      waterRemainPct: Math.max(2, 100 - waterUsedPct),
+      waterRemainPct: Math.max(1, 100 - waterUsedPct),
       meanRadMsvYr: Math.round(meanRadMsvYr),
       radDoseMsv,
       corridorRadDoseMsv,
@@ -290,25 +324,45 @@
 
     return {
       km, maxSlope: maxS, meanSlope: meanS, hazardKm, dustKm,
-      meanRough: sumR / path.length, profile, safeHavens,
+      meanRough: meanR, profile, safeHavens,
       scienceWaypoints, scienceScore, evaStats,
     };
   }
 
-  // Straight (great-circle-ish on the grid) line for comparison: Bresenham with wrap.
+  // Direct spherical great-circle geodesic (slerp on unit sphere, with antimeridian wrap) for comparison.
   function straight(L, sx, sy, gx, gy) {
     const W = L.width, H = L.height;
     let dx = gx - sx; if (dx > W / 2) dx -= W; if (dx < -W / 2) dx += W;
-    const dy = gy - sy, steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+    const dy = gy - sy;
+    const lat1 = L.latOfRow(sy) * Math.PI / 180, lon1 = L.lonOfCol(sx) * Math.PI / 180;
+    const lat2 = L.latOfRow(gy) * Math.PI / 180, lon2 = L.lonOfCol(gx) * Math.PI / 180;
+    const u1 = [Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)];
+    const u2 = [Math.cos(lat2) * Math.cos(lon2), Math.cos(lat2) * Math.sin(lon2), Math.sin(lat2)];
+    const dot = Math.max(-1, Math.min(1, u1[0] * u2[0] + u1[1] * u2[1] + u1[2] * u2[2]));
+    const omega = Math.acos(dot), sinO = Math.sin(omega);
+    const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
     const path = [];
     for (let i = 0; i <= steps; i++) {
-      const x = ((Math.round(sx + dx * i / steps) % W) + W) % W, y = Math.round(sy + dy * i / steps);
-      path.push(y * W + x);
+      const t = i / steps;
+      let x, y;
+      if (sinO > 1e-5 && (sy !== gy || Math.abs(lat1) > 0.14)) {
+        const a = Math.sin((1 - t) * omega) / sinO, b = Math.sin(t * omega) / sinO;
+        const ux = a * u1[0] + b * u2[0], uy = a * u1[1] + b * u2[1], uz = a * u1[2] + b * u2[2];
+        const latD = Math.asin(Math.max(-1, Math.min(1, uz))) * 180 / Math.PI;
+        const lonD = Math.atan2(uy, ux) * 180 / Math.PI;
+        x = ((Math.floor((lonD + 180) / 360 * W) % W) + W) % W;
+        y = Math.max(0, Math.min(H - 1, Math.floor((90 - latD) / 180 * H)));
+      } else {
+        x = ((Math.round(sx + dx * t) % W) + W) % W;
+        y = Math.round(sy + dy * t);
+      }
+      const cell = y * W + x;
+      if (!path.length || path[path.length - 1] !== cell) path.push(cell);
     }
     const MR = MARS_R, kmRow = Math.PI * MR / H, kmCol = new Float32Array(H);
     for (let y = 0; y < H; y++) kmCol[y] = (2 * Math.PI * MR / W) * Math.cos(L.latOfRow(y) * Math.PI / 180);
     return { ok: true, path, stats: pathStats(L, path, kmCol, kmRow) };
   }
 
-  global.ASTAR = { plan, straight, haversineKm };
+  global.ASTAR = { plan, straight, haversineKm, smoothCellElev };
 })(typeof window !== 'undefined' ? window : module.exports);

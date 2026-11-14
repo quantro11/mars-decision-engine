@@ -162,13 +162,67 @@ for (const k in S.PRESETS) assert.strictEqual(S.PRESETS[k].w.cave, 0);
 assert.strictEqual(S.F.cave(20), 1); assert.strictEqual(S.F.cave(600), 0); assert.strictEqual(S.F.cave(null), 0);
 assert.ok(S.scoreCell({ ...ideal, cave: 30 }, { ...w, cave: 0.3 }, true) > S.scoreCell({ ...ideal, cave: 900 }, { ...w, cave: 0.3 }, true));
 
-// --- data honesty & verified LIVE ARCHIVE fallback: failed DONKI requests use verified May 2024 AR3664 Mars archive
+// --- data honesty & verified LIVE ARCHIVE fallback + xGDS + Perseverance (TRN + AutoNav + MGL) 5-Domain Surface Assimilation
 const EVA = require('../web/ui/eva.js').MDE_EVA;
-const sim15 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 15, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy' });
-const sim30 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 30, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy' });
-assert.ok(sim15.maxSafeSlope <= 15 && sim15.directBoulderHits > 0, 'Local 1m/px A* routes around boulders and steep scarps');
+assert.strictEqual(EVA.DOMAINS.length, 5, '5 core surface assimilation domains (Topography, Geomorphology, Thermal, Radiation, Optical)');
+assert.ok(EVA.SYSTEM_ARCH.TRN && EVA.SYSTEM_ARCH.AUTONAV && EVA.SYSTEM_ARCH.MGL && EVA.SYSTEM_ARCH.XGDS, 'TRN + AutoNav + MGL + xGDS architecture defined');
+const simStep0 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 15, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 0, mglLocked: false });
+const sim15 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 15, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 8, mglLocked: true });
+const sim30 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 30, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 8, mglLocked: true });
+assert.ok(sim15.maxSafeSlope <= 15 && sim15.directBoulderHits > 0, 'Local 1m/px AutoNav A* routes around boulders and steep scarps');
+assert.ok(sim15.navStack.autonav.assimilatedPct > simStep0.navStack.autonav.assimilatedPct, 'Progressive AutoNav scan increases assimilated biome percentage');
+assert.ok(sim15.assimilatedConfidencePct > simStep0.assimilatedConfidencePct, 'In-situ 5-domain assimilation raises confidence above coarse orbital prior');
+assert.ok(sim15.orbitalHazardHits > 0 && sim15.orbitalSandM > sim15.safeSandM, 'Naive orbital-only route hits temporal-drift sand traps and sub-grid boulders avoided by AutoNav');
+assert.ok(sim15.navStack.mgl.mglCorrectedErrorM < simStep0.navStack.mgl.mglCorrectedErrorM, 'MGL horizon correlation lock eliminates wheel/foot odometry drift');
+assert.ok(sim15.domainScores.composite > 0 && sim15.domainScores.topography > 0 && sim15.domainScores.thermal > 0 && sim15.domainScores.radiation > 0 && sim15.domainScores.optical > 0 && sim15.domainScores.geomorphology > 0, 'All 5 domain scores computed');
 assert.ok(sim30.metabolicKcalH > sim15.metabolicKcalH && sim30.o2UsedG > sim15.o2UsedG, 'Heavier sample load increases metabolic kcal/h and O2 consumption');
 assert.ok(sim15.walkbackRadiusM > 300 && sim15.withinWalkback, 'Walkback safety radius computed and satisfied');
+assert.ok(sim15.meanUphillGradePct >= 0 && sim15.meanDownhillGradePct >= 0, 'Signed uphill/downhill grade computed along EVA footpath');
+assert.ok(EVA.ZONES.gale_boxwork.waypoints[0].x !== EVA.ZONES.jezero_delta.waypoints[0].x && EVA.ZONES.jezero_delta.waypoints[0].x !== EVA.ZONES.nili_fossae.waypoints[0].x, 'Distinct waypoint topologies across biomes');
+const customZ1 = EVA.zoneFromCoords(-14.5, 175.4, { elev: -1900, slope: 6, rough: 42, ti: 210, ice: 0.1, rad: 255 }, 'Gusev');
+const customZ2 = EVA.zoneFromCoords(22.3, -47.9, { elev: -3600, slope: 3, rough: 20, ti: 260, ice: 0.1, rad: 238 }, 'Chryse');
+assert.ok(customZ1.base.x !== customZ2.base.x || customZ1.base.y !== customZ2.base.y, 'Coordinate-seeded custom EVA zones synthesize distinct geometries');
+assert.ok(S.radDose(-2000, 14) < S.radDose(-2000, 0), 'Topographic horizon sky-view factor reduces GCR dose on sloped walls');
+assert.ok(S.scoreCell({ ...flat, elev: -1000, slope: 12 }, { rad: 1 }, false) > S.scoreCell({ ...flat, elev: -1000, slope: 0 }, { rad: 1 }, false), 'scoreCell couples slope sky-view shielding into radiation suitability');
+const tDust = T.surfaceTempC(0, 180, 55, -2000), tRock = T.surfaceTempC(0, 180, 500, -2000);
+assert.ok((tDust.day - tDust.night) > (tRock.day - tRock.night) + 25, 'Low-TI dust exhibits larger diurnal temperature swing than high-TI bedrock');
+assert.strictEqual(typeof A.smoothCellElev, 'function', 'Sub-pixel 3x3 Gaussian elevation smoothing exported on ASTAR');
+
+// --- Interactive map-building: spot scans, dynamic hazards, SPE escape, VHF LoS, custom weights, honest chemistry
+const zg = EVA.ZONES.gale_boxwork;
+const simScan0 = EVA.simulateEVA(zg, { scanStep: 2 });
+const simScan1 = EVA.simulateEVA(zg, { scanStep: 2, customScanPts: [{ x: 80, y: 15, r: 11 }, { x: 85, y: 80, r: 11 }], spotProbe: { x: 80, y: 15 } });
+assert.ok(simScan1.navStack.autonav.assimilatedPct > simScan0.navStack.autonav.assimilatedPct, 'User spot scans expand AutoNav assimilated area');
+assert.ok(simScan1.spotProbe && simScan1.spotProbe.xMeters === 800 && typeof simScan1.spotProbe.compositeScore === 'number', 'Spot probe returns local 5-domain cell readings');
+const hzPt = sim15.safePath[Math.floor(sim15.safePath.length / 3)];
+const simHz = EVA.simulateEVA(zg, { scanStep: 8, dynamicHazards: [{ x: hzPt[0], y: hzPt[1], r: 4 }] });
+assert.ok(!simHz.safePath.some(([x, y]) => Math.hypot(x - hzPt[0], y - hzPt[1]) < 3), 'A* re-routes around injected dynamic hazard');
+assert.ok(simHz.discrepancies.some(d => String(d.id).startsWith('DISC-DYN')), 'Dynamic hazard logged as xGDS discrepancy');
+const simSpe = EVA.simulateEVA(zg, { scanStep: 4, speAlert: true });
+assert.ok(simSpe.speAlert && simSpe.spePath.length > 1 && simSpe.speTimeToShelterMin > 0 && typeof simSpe.speWithin30Min === 'boolean', 'SPE emergency escape path + time-to-shelter computed');
+assert.ok(simSpe.commsLos && typeof simSpe.commsLos.losClear === 'boolean' && typeof simSpe.commsLos.linkMarginDb === 'number', 'VHF line-of-sight terrain check computed');
+const simCw = EVA.simulateEVA(zg, { scanStep: 8, scoreMode: 'custom', customWeights: { topography: 0, geomorphology: 0, thermal: 0, radiation: 0, optical: 100 } });
+assert.ok(Math.abs(simCw.domainScores.composite - simCw.domainScores.optical) < 0.2, 'Custom 5-domain weights drive the composite score');
+const zIce = EVA.zoneFromCoords(62, -30, { elev: -4000, slope: 2, ti: 240, ice: 0.6, rad: 240 }, 'Ice Plain');
+const zBas = EVA.zoneFromCoords(-20, 20, { elev: 1000, slope: 5, ti: 420, ice: 0, rad: 270 }, 'Basalt Plain');
+assert.ok(zIce.waypoints[0].chem.H2O > 20 && zBas.waypoints[0].chem.H2O < 6, 'Custom-site chemistry is conditioned on orbital ice/TI, not copied from Gale');
+assert.ok(!/Boxwork/i.test(zBas.waypoints.map(w => w.rockType).join(' ')), 'Custom-site lithology does not inherit Gale boxwork labels');
+const simIce = EVA.simulateEVA(zIce, { scanStep: 8 });
+assert.ok(simIce.orbitalHazardHits > 0 && simIce.orbitalSandM > simIce.safeSandM, 'Custom zones still show orbital-vs-AutoNav discrepancy');
+
+// --- Cross-module physics unification checks (GCR radiation, thermal elevation/TI, Pandolf bioenergetics, Great-Circle & A* evaStats)
+assert.strictEqual(Math.round(S.radDose(safe.stats.profile[0].elev, safe.stats.profile[0].slope)), Math.round(safe.stats.profile[0].radMsvYr), 'ASTAR and SCORING use identical MSL-RAD + sky-view GCR radiation formula');
+assert.ok(str.stats.evaStats.walkHours > safe.stats.evaStats.walkHours, 'Direct route across steep/dusty hazards takes more EVA walk hours than safe A* route');
+assert.ok(str.stats.evaStats.metabolicW >= safe.stats.evaStats.metabolicW, 'Hazardous direct route requires higher metabolic power');
+assert.ok(T.thermalDemandKw(0, 251, 200, 4000) > T.thermalDemandKw(0, 251, 200, -4000), 'Higher elevation increases habitat thermal demand via atmospheric lapse rate');
+const simHighElev = T.simulate({ ...cold, lat: 0, elev: 4000, ti: 180, consumption: 40, sols: 40 });
+const simLowElev = T.simulate({ ...cold, lat: 0, elev: -4500, ti: 180, consumption: 40, sols: 40 });
+assert.ok(simHighElev.rows[20].heater > simLowElev.rows[20].heater, 'STORM.simulate couples elevation & TI into daily habitat heating budget');
+const bioLight = S.calcPandolfMars({ slopeDeg: 2, ti: 250, loadKg: 10, durationH: 5 });
+const bioHeavy = S.calcPandolfMars({ slopeDeg: 12, ti: 70, loadKg: 30, durationH: 5 });
+assert.ok(bioHeavy.metabolicW > bioLight.metabolicW && bioHeavy.walkbackRadiusM < bioLight.walkbackRadiusM, 'SCORING.calcPandolfMars scales metabolic load and walkback envelope with slope, TI, and load');
+const gcHighLat = A.straight(L, 10, 4, 60, 4);
+assert.ok(gcHighLat.ok && gcHighLat.path.some(idx => Math.floor(idx / W) < 4), 'ASTAR.straight follows spherical great-circle arc poleward at high latitude');
 
 (async () => {
   const fail = async () => { throw new Error('net down'); };

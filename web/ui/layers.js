@@ -120,7 +120,7 @@
         lat: L.latOfRow(y),
         lon: L.lonOfCol(x),
       };
-      out.rad = SCORING.radDose(out.elev);
+      out.rad = SCORING.radDose(out.elev, out.slope);
       return out;
     }
 
@@ -146,7 +146,7 @@
       }
       const center = cellValues(((cx % W) + W) % W, Math.min(H - 1, Math.max(0, cy)));
       return {
-        rad: SCORING.radDose(e / n),
+        rad: SCORING.radDose(e / n, sl / n),
         elev: e / n,
         slope: sl / n,
         rough: r / n,

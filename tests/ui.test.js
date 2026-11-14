@@ -125,12 +125,21 @@ const r2 = S.sensitivity(L, S.PRESETS.balanced.w, true, refCands, { runs: 10, sp
 assert.deepStrictEqual(r1, r2, 'Monte Carlo sensitivity is reproducible with seeded PRNG');
 assert.ok(r1[0] >= 0 && r1[0] <= 1);
 
-// --- 6. Brief payload + HTML XSS escaping
+// --- 6. Brief payload + xGDS 5-Domain Surface Fusion + HTML XSS escaping
+const EVA = require('../web/ui/eva.js').MDE_EVA;
+const localGrid = EVA.buildLocalGrid(EVA.ZONES.jezero_delta);
+const domScores = EVA.scoreLocalDomains(localGrid, EVA.ZONES.jezero_delta, 'balanced');
+assert.ok(domScores.topography.length === 10000 && domScores.inSituMean.composite > 0, 'scoreLocalDomains evaluates 100x100 5-domain suitability grid');
+const maskStep2 = EVA.buildAssimilationMask(localGrid, EVA.ZONES.jezero_delta, [[16, 82], [25, 36]], 2);
+const maskStep8 = EVA.buildAssimilationMask(localGrid, EVA.ZONES.jezero_delta, [[16, 82], [25, 36]], 8);
+assert.ok(maskStep8.assimilatedPct === 100 && maskStep2.assimilatedPct > 0 && maskStep2.assimilatedPct < 100, 'buildAssimilationMask expands scan footprint to 100%');
+const evaSimMock = EVA.simulateEVA(EVA.ZONES.jezero_delta, { scanStep: 8, mglLocked: true });
 const mockS = {
   preset: 'balanced', agg: 'geo', hard: true, iceBand: 'ice15', weights: { ...S.PRESETS.balanced.w },
   candidates: [{ x: 20, y: 8, blockPx: 2, score: 0.85, robust: 0.9 }],
   selected: { x: 20, y: 8 },
   score,
+  evaSim: evaSimMock,
   route: { safe: wrapRoute, straight: wrapRoute, speed: 20 },
   crisis: { site: { x: 20, y: 8 }, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 2, regolith: 1.5 },
 };
@@ -145,6 +154,7 @@ assert.strictEqual(payload.scoring_aggregation, 'geo');
 assert.strictEqual(payload.top_candidates[0].ice_access, 'LIKELY');
 assert.strictEqual(payload.top_candidates[0].regional_terrain_class, 'SMOOTH');
 assert.strictEqual(payload.top_candidates[0].landing_slope_share_le5deg, 0.85);
+assert.ok(payload.tactical_eva_plan.architecture.includes('xGDS') && payload.tactical_eva_plan.assimilated_confidence_pct > payload.tactical_eva_plan.orbital_prior_confidence_pct, 'Brief tactical_eva_plan records xGDS 5-domain confidence gain');
 assert.ok(Array.isArray(payload.traverse_plan.candidate_rest_stops));
 assert.ok(payload.dust_storm_simulation.spe_design_basis_assumption.shielded_dose_msv <= 100);
 assert.strictEqual(payload.dust_storm_simulation.survives_blackout, true);
@@ -152,6 +162,7 @@ assert.strictEqual(payload.top_candidates[0].robust_pct, 90);
 const htmlOut = BR.renderBriefHTML(payload, FMT);
 assert.ok(!htmlOut.includes('<img src=x'), 'Brief HTML escapes malicious tags');
 assert.ok(htmlOut.includes('&lt;img src=x'), 'Escaped markup rendered safely');
+assert.ok(htmlOut.includes('TRN') && htmlOut.includes('xGDS'), 'Brief HTML summarizes TRN + AutoNav + MGL + xGDS localization');
 
 // --- 6b. GIS GeoJSON export (FeatureCollection + antimeridian split) & Bilingual TR/EN i18n
 const I18N = require('../web/ui/i18n.js').MDE_I18N;
@@ -169,6 +180,9 @@ assert.ok(geo.features.some(f => f.properties.feature_type === 'selected_site'))
 assert.ok(geo.features.some(f => f.properties.feature_type === 'crisis_station'));
 const routeFeat = geo.features.find(f => f.properties.feature_type === 'astar_safe_route');
 assert.ok(routeFeat && routeFeat.geometry.type === 'MultiLineString', 'Antimeridian-crossing A* route splits cleanly into MultiLineString');
+const evaRouteFeat = geo.features.find(f => f.properties.feature_type === 'xgds_eva_route');
+assert.ok(evaRouteFeat && evaRouteFeat.geometry.type === 'LineString' && evaRouteFeat.geometry.coordinates.length >= 2, 'GeoJSON exports local xGDS EVA route');
+assert.ok(geo.features.some(f => f.properties.feature_type === 'xgds_discrepancy' && f.geometry.type === 'Point'), 'GeoJSON exports xGDS orbital-vs-in-situ discrepancies');
 
 const fakeLbl = { firstChild: { nodeType: 3, nodeValue: 'Slope limit ' } };
 const fakeInp = { closest: () => fakeLbl, parentElement: { querySelector: () => null } };

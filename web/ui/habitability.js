@@ -57,7 +57,7 @@
     }
   }
 
-  function renderResultsMarkup(el, st, weatherRes, spaceRes, apiKey, liveApi) {
+  function renderResultsMarkup(el, st, weatherRes, spaceRes, apiKey, liveApi, flareRes) {
     const esc = getEsc(), tr = isTr();
     const badge = (m) => {
       const entry = BADGE_MAP[m];
@@ -88,11 +88,18 @@
          <div class="help note-sm">${tr ? `Yayımlanmış klimatoloji (${esc(ref.citation)}); aktif 2025–2026 ölçümleri yukarıda REMS & MEDA istasyonlarında gösterilmektedir.` : `Published climatology (${esc(ref.citation)}); active 2025–2026 surface telemetry shown above via REMS & MEDA.`}</div>`);
 
     const cme = spaceRes.events && spaceRes.events[0];
+    const flareHtml = flareRes ? `
+      <hr class="sep">
+      <div class="help note-sm">${badge(flareRes.mode || 'live')} ${esc(flareRes.source || 'NASA DONKI FLR')}</div>
+      <div class="kv"><span>${tr ? 'Son Güneş Patlaması (DONKI FLR)' : 'Latest Solar Flare (DONKI FLR)'}</span><b>${esc(flareRes.classType)} · AR ${esc(flareRes.sourceRegion)}</b></div>
+      <div class="kv"><span>${tr ? 'Tepe Zamanı (UTC)' : 'Peak Time (UTC)'}</span><b>${esc(flareRes.peakTime)}</b></div>
+      <div class="kv"><span>${tr ? 'EVA Yüzey Tavsiyesi' : 'EVA Surface Advisory'}</span><b>${esc(flareRes.evaAdvisory)}</b></div>` : '';
     const spaceBlock = spaceRes.mode === 'offline'
-      ? `<div class="help">${tr ? `Veri yok: ${esc(spaceRes.source)}. Varsayım üretilmedi.` : `No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.`}</div>`
+      ? `<div class="help">${tr ? `Veri yok: ${esc(spaceRes.source)}. Varsayım üretilmedi.` : `No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.`}</div>${flareHtml}`
       : `<div class="kv"><span>${tr ? 'Kataloglanan CME' : 'CMEs catalogued'}</span><b>${spaceRes.events.length}</b></div>
          ${cme ? `<div class="kv"><span>${tr ? 'En şiddetli / son olay' : 'Most recent / peak'}</span><b>${esc(cme.startTime)}${cme.speed_kms ? ' · ' + Math.round(cme.speed_kms) + ' km/s' : ''}</b></div>` : ''}
          ${cme && cme.note ? `<div class="help note-sm">${esc(cme.note)}</div>` : ''}
+         ${flareHtml}
          <div class="help note-sm">${tr ? 'DONKI heliosferik CME kataloglar; Mars yüzey radyasyon etkisi MAVEN/MSL-RAD ölçümleriyle doğrulanır.' : 'DONKI catalogues heliospheric CMEs; Mars surface radiation impact is cross-referenced with MAVEN/MSL-RAD observations.'}</div>`;
 
     const critRows = liveApi.MARS_HABITABILITY_CRITERIA.map(rawC => {
@@ -129,7 +136,7 @@
     const apiKey = (storage && storage.getItem('nasa_api_key')) || '';
     const cached = global.MDE_LIVE_STATE || (typeof globalThis !== 'undefined' ? globalThis.MDE_LIVE_STATE : null);
     if (opts && opts.useCache && cached) {
-      renderResultsMarkup(el, st, cached.weather, cached.space, apiKey, liveApi);
+      renderResultsMarkup(el, st, cached.weather, cached.space, apiKey, liveApi, cached.flare);
       return;
     }
 
@@ -137,15 +144,19 @@
     if (st) st.textContent = t('apiQuerying', 'Querying NASA Open APIs (api.nasa.gov)…');
 
     try {
-      const [weatherRes, spaceRes] = await Promise.all([
+      const fetchFlare = typeof liveApi.fetchSolarFlareAdvisory === 'function'
+        ? liveApi.fetchSolarFlareAdvisory(apiKey, fetchFn)
+        : Promise.resolve(null);
+      const [weatherRes, spaceRes, flareRes] = await Promise.all([
         liveApi.fetchNASAWeather(apiKey, fetchFn),
-        liveApi.fetchSpaceWeather(apiKey, fetchFn)
+        liveApi.fetchSpaceWeather(apiKey, fetchFn),
+        fetchFlare
       ]);
-      const nextState = { weather: weatherRes, space: spaceRes, fetchedAt: new Date().toISOString() };
+      const nextState = { weather: weatherRes, space: spaceRes, flare: flareRes, fetchedAt: new Date().toISOString() };
       global.MDE_LIVE_STATE = nextState;
       if (typeof globalThis !== 'undefined') globalThis.MDE_LIVE_STATE = nextState;
       if (opts && opts.onLiveUpdate) opts.onLiveUpdate(nextState);
-      renderResultsMarkup(el, st, weatherRes, spaceRes, apiKey, liveApi);
+      renderResultsMarkup(el, st, weatherRes, spaceRes, apiKey, liveApi, flareRes);
     } finally {
       if (btnFetch) btnFetch.disabled = false;
     }

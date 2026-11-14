@@ -20,9 +20,12 @@
   function atmoColumnGcm2(h_m) {
     return 16.4 * Math.exp(-h_m / 11100);
   }
-  function radDose(h_m) {
+  function radDose(h_m, slopeDeg = 0) {
     const sigma = atmoColumnGcm2(h_m);
-    return 0.64 * Math.exp(-(sigma - 24.6) / 60) * 365.25;
+    const sDeg = Math.min(45, Math.max(0, slopeDeg || 0));
+    const skyView = 1 - 0.5 * (1 - Math.cos(sDeg * Math.PI / 180));
+    const geomFactor = Math.max(0.75, skyView - sDeg * 0.002);
+    return 0.64 * Math.exp(-(sigma - 24.6) / 60) * 365.25 * geomFactor;
   }
   const radDoseMsvYr = radDose;
 
@@ -88,7 +91,7 @@
     // 150-400 = sand / duricrust / cemented soil (ideal); > 500 = rock / bedrock (hazard, hard to dig). null = no data.
     ti(v) { if (v === null) return 0.5; if (v < 100) return Math.max(0, v / 100 * 0.3); if (v < 150) return 0.3 + 0.7 * (v - 100) / 50; if (v <= 400) return 1; return ramp(v, 400, 700); },
     // Radiation: lower dose is better. <= 200 mSv/yr (Hellas floor) = 1, >= 290 mSv/yr (above +2 km) = 0.
-    rad(h_m) { return ramp(radDose(h_m), 200, 290); },
+    rad(h_m, slopeDeg = 0) { return ramp(radDose(h_m, slopeDeg), 200, 290); },
     // Shelter access: distance (km) to the nearest MGC3 cave candidate. <= 50 km = 1, >= 500 km = 0. null = >= 1020 km.
     cave(km) { return km === null ? 0 : ramp(km, 50, 500); },
     // Solar energy and thermal budget: mean insolation ~ cos(lat), rescaled so 0 deg = 1 and 50 deg = 0.
@@ -126,7 +129,7 @@
     if (hard && (v.elev > HARD.elevMax || v.slope > HARD.slopeMax || Math.abs(v.lat) > HARD.latMax)) return 0;
     return (w.elev || 0) * F.elev(v.elev) + (w.slope || 0) * F.slope(v.slope) + (w.ice || 0) * F.ice(v.ice)
          + (w.rough || 0) * F.rough(v.rough) + (w.lat || 0) * F.lat(v.lat) + (w.ti || 0) * F.ti(v.ti)
-         + (w.rad || 0) * F.rad(v.elev) + (w.cave || 0) * F.cave(v.cave ?? null);
+         + (w.rad || 0) * F.rad(v.elev, v.slope || 0) + (w.cave || 0) * F.cave(v.cave ?? null);
   }
 
   // Full-map scoring. layers: {elev, slope, rough, ice: Float32Array|null-coded, lat: Float32Array (per row)}
@@ -139,6 +142,7 @@
     const ln = (f) => Math.log(Math.max(0.01, f));
     const { width, height } = L;
     const fe = new Float32Array(256), fs = new Float32Array(256), fr = new Float32Array(256), fi = new Float32Array(256), ft = new Float32Array(256), fc = new Float32Array(256);
+    const frad = new Float32Array(64 * 256);
     const useCave = !!(L.cave && w.cave > 0);
     for (let i = 0; i < 256; i++) {
       const h = L.meta.elev.offset + i * L.meta.elev.scale;
@@ -146,8 +150,13 @@
       const fiv = i === 0 ? 0 : F.ice(L.meta.ice.offset + i * L.meta.ice.scale), ftv = i === 0 ? F.ti(null) : F.ti(i * L.meta.ti.scale);
       const fcv = i === 255 ? 0 : F.cave(i * (L.meta.cave ? L.meta.cave.scale : 4));
       fc[i] = geo ? w.cave * ln(fcv) : w.cave * fcv;
-      if (geo) { fe[i] = w.elev * ln(F.elev(h)) + w.rad * ln(F.rad(h)); fs[i] = w.slope * ln(fsv); fr[i] = w.rough * ln(frv); fi[i] = w.ice * ln(fiv); ft[i] = w.ti * ln(ftv); }
-      else { fe[i] = w.elev * F.elev(h) + w.rad * F.rad(h); fs[i] = w.slope * fsv; fr[i] = w.rough * frv; fi[i] = w.ice * fiv; ft[i] = w.ti * ftv; }
+      if (geo) { fe[i] = w.elev * ln(F.elev(h)); fs[i] = w.slope * ln(fsv); fr[i] = w.rough * ln(frv); fi[i] = w.ice * ln(fiv); ft[i] = w.ti * ln(ftv); }
+      else { fe[i] = w.elev * F.elev(h); fs[i] = w.slope * fsv; fr[i] = w.rough * frv; fi[i] = w.ice * fiv; ft[i] = w.ti * ftv; }
+      for (let sb = 0; sb < 64; sb++) {
+        const sDeg = (sb === 0 ? 0 : sb * 4 + 2) * L.meta.slope.scale;
+        const frvRad = F.rad(h, sDeg);
+        frad[(sb << 8) + i] = geo ? w.rad * ln(frvRad) : w.rad * frvRad;
+      }
     }
     const elevHardIdx = (HARD.elevMax - L.meta.elev.offset) / L.meta.elev.scale;
     const slopeHardIdx = HARD.slopeMax / L.meta.slope.scale;
@@ -159,7 +168,7 @@
         const i = row + x;
         const e = L.elev[i], s = L.slope[i];
         if (hard && (e > elevHardIdx || s > slopeHardIdx)) { out[i] = 0; continue; }
-        const t = fe[e] + fs[s] + fi[L.ice[i]] + fr[L.rough[i]] + ft[L.ti[i]] + fl + (useCave ? fc[L.cave[i]] : 0);
+        const t = fe[e] + frad[((s >> 2) << 8) + e] + fs[s] + fi[L.ice[i]] + fr[L.rough[i]] + ft[L.ti[i]] + fl + (useCave ? fc[L.cave[i]] : 0);
         out[i] = geo ? Math.exp(t) : t;
       }
     }
@@ -246,5 +255,55 @@
 
   function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcIceAccess, calcSPE, speDose, calcTerrainClass, sensitivity, sampleBilinear, mulberry32 };
+  // ---------------------------------------------------------------- 0.38g Martian Pandolf-Santee EVA Bioenergetics & xEMU PLSS
+  // Shared kernel across Site Selection, Regional A* Traverse, and Tactical 1 km x 1 km EVA Planner.
+  // Budgets: 850 g primary O2, 960 Wh battery, 4.2 L LCVG sublimator cooling water, 8.0 h nominal EVA window.
+  const MARS_G = 3.71;
+  function calcPandolfMars(opts = {}) {
+    const slopeDeg = Math.max(0, opts.slopeDeg || 0);
+    const speedKmh = Math.max(0.5, opts.speedKmh || 2.4);
+    const loadKg = Math.max(0, opts.loadKg ?? 15);
+    const buddyMode = opts.buddyMode || 'buddy';
+    const durationH = Math.max(0.2, opts.durationH ?? 6.0);
+    const ti = opts.ti !== undefined ? opts.ti : 215;
+    const sandFrac = Math.max(0, Math.min(1, opts.sandFrac ?? (ti !== null && ti < 100 ? (100 - ti) / 100 : 0)));
+    const vMps = Math.max(0.25, speedKmh / 3.6);
+    const bodyKg = 80, suitKg = 82;
+    const effLoadKg = buddyMode === 'rover_eva' ? loadKg * 0.55 : loadKg * 0.90;
+    const effMassMars = (bodyKg + suitKg + effLoadKg) * (MARS_G / 9.81);
+    const effGradePct = opts.gradePct !== undefined && opts.gradePct !== null
+      ? opts.gradePct
+      : Math.tan((slopeDeg * 0.48) * Math.PI / 180) * 100;
+    const terrainEta = 1.32 + sandFrac * 0.85;
+    const suitJointWorkW = 115;
+    const loadWorkW = effLoadKg * 2.8 + 2.5 * effMassMars * Math.pow(effLoadKg / bodyKg, 2);
+    const pandolfW = 1.5 * bodyKg * (MARS_G / 9.81) +
+                     loadWorkW +
+                     terrainEta * effMassMars * (1.5 * vMps * vMps + 0.35 * vMps * effGradePct) +
+                     suitJointWorkW;
+    const metabolicW = Math.round(Math.max(190, Math.min(680, pandolfW)));
+    const metabolicKcalH = Math.round(metabolicW * 0.8598);
+    const totalKcal = Math.round(metabolicKcalH * durationH);
+    const o2UsedG = Math.round(0.255 * metabolicW * durationH);
+    const o2UsedPct = Math.min(99, Math.round((o2UsedG / 850) * 100));
+    const o2RemainPct = Math.max(1, 100 - o2UsedPct);
+    const waterRateLh = Math.max(0.08, (0.72 * metabolicW) / 675);
+    const waterUsedL = +(waterRateLh * durationH).toFixed(2);
+    const waterUsedPct = Math.min(99, Math.round((waterUsedL / 4.2) * 100));
+    const waterRemainPct = Math.max(1, 100 - waterUsedPct);
+    const buddyFactor = buddyMode === 'rover_eva' ? 1.24 : (buddyMode === 'solo' ? 0.86 : 1.0);
+    const loadPenalty = Math.max(0.55, 1 - 0.0075 * effLoadKg);
+    const slopePenalty = Math.max(0.7, 1 - Math.max(0, slopeDeg - 10) * 0.008);
+    const paceFactor = Math.sqrt(Math.max(0.6, Math.min(1.25, speedKmh / 2.4)));
+    const o2Factor = Math.max(0.55, Math.min(1, o2RemainPct / 80));
+    const walkbackRadiusM = Math.round(Math.max(320, Math.min(980, 960 * loadPenalty * slopePenalty * paceFactor * o2Factor * buddyFactor)));
+    return {
+      metabolicW, metabolicKcalH, totalKcal,
+      o2UsedG, o2UsedPct, o2RemainPct,
+      waterUsedL, waterUsedPct, waterRemainPct,
+      walkbackRadiusM,
+    };
+  }
+
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcIceAccess, calcSPE, speDose, calcTerrainClass, calcPandolfMars, sensitivity, sampleBilinear, mulberry32 };
 })(typeof window !== 'undefined' ? window : module.exports);

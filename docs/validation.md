@@ -27,7 +27,7 @@ A random cell has an expected percentile of 50. p-values come from 200 random-lo
 | Acheron Fossae | 28 |
 | Acidalia Plantia | 80 |
 | Arabia Terra | 90 |
-| Aram Chaos | 92 |
+| Aram Chaos | 93 |
 | Arcadia | 76 |
 | Arcadia Planitia | 47 |
 | Ausonia | 94 |
@@ -49,7 +49,7 @@ A random cell has an expected percentile of 50. p-values come from 200 random-lo
 | Ismenius Cavus | 76 |
 | Jezero | 68 |
 | Kasei Valles | 7 |
-| Mawrth Valles | 83 |
+| Mawrth Valles | 84 |
 | McLaughlin Crater | 56 |
 | NE Marineris Crater | 99 |
 | Newton Crater | 85 |
@@ -70,7 +70,7 @@ A random cell has an expected percentile of 50. p-values come from 200 random-lo
 
 | Test | Weighted sum (default) | Weighted geometric mean |
 |---|---|---|
-| 1 — landers | 90 | 89 |
+| 1 — landers | 90 | 88 |
 | 2 — HLS-2015 sites | 71 | 71 |
 
 ## How to read this

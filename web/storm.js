@@ -73,22 +73,30 @@
     if (!annualQ.has(k)) { let q = 0; for (let l = 0; l < 360; l += 5) q += insolationTOA(k, l) / 72; annualQ.set(k, q); }
     return annualQ.get(k);
   }
-  function surfaceTempC(lat, ls) {
+  function surfaceTempC(lat, ls, ti, elev) {
     const qa = annualMeanQ(lat);
     const qNow = (ls === undefined || ls === null) ? null : insolationTOA(lat, ls);
     const q = qNow === null ? qa : 0.5 * qNow + 0.5 * qa;
     // polar night: the surface sits at the CO2 frost point (seasonal cap)
-    const tK = qNow === 0 ? T_FROST : Math.max(T_FROST, Math.pow((1 - ALBEDO) * q / (EMISS * SIGMA), 0.25));
+    const lapseK = (elev !== undefined && elev !== null) ? -0.0005 * elev : 0;
+    const tK = qNow === 0 ? T_FROST : Math.max(T_FROST, Math.pow((1 - ALBEDO) * q / (EMISS * SIGMA), 0.25) + lapseK);
     const mean = tK - 273.15;
-    return { mean: Math.round(mean * 10) / 10, night: Math.round((mean - 36) * 10) / 10, day: Math.round((mean + 28) * 10) / 10 };
+    const ampScale = (ti !== undefined && ti !== null)
+      ? Math.max(0.55, Math.min(1.60, Math.sqrt(220 / Math.max(40, ti))))
+      : 1.0;
+    return {
+      mean: Math.round(mean * 10) / 10,
+      night: Math.round((mean - 36 * ampScale) * 10) / 10,
+      day: Math.round((mean + 28 * ampScale) * 10) / 10
+    };
   }
 
   // Habitat heat loss: UA = 90 W/K (~220 m2 envelope, U ~ 0.4 W/m2K; assumption) to reach +20 C inside.
   // All electrical power used inside the habitat ends up as heat, so heaters only cover the shortfall
   // (see simulate: heater energy = max(0, loss - electrical load)).
   const UA_KW_PER_K = 0.090;
-  function thermalDemandKw(lat, ls) {
-    const t = surfaceTempC(lat, ls);
+  function thermalDemandKw(lat, ls, ti, elev) {
+    const t = surfaceTempC(lat, ls, ti, elev);
     return Math.round(UA_KW_PER_K * Math.max(0, 20.0 - t.mean) * 10) / 10;
   }
 
@@ -102,7 +110,7 @@
     return s.tau0;
   }
 
-  // cfg: {lat, ls|Ls0, panelArea, efficiency, consumption(kWh/sol), capacity(kWh), kilopower(units), sols, storm:{...}, dustCleaning?:bool}
+  // cfg: {lat, ls|Ls0, ti?, elev?, panelArea, efficiency, consumption(kWh/sol), capacity(kWh), kilopower(units), sols, storm:{...}, dustCleaning?:bool}
   function simulate(cfg) {
     const rows = [];
     let batt = cfg.capacity;
@@ -115,8 +123,8 @@
     for (let sol = 0; sol < cfg.sols; sol++) {
       const tau = tauAt(sol, cfg.storm);
       const lsSol = (ls0 === undefined || ls0 === null) ? null : (ls0 + sol * LS_PER_SOL + 360) % 360;
-      const sTemp = surfaceTempC(cfg.lat, lsSol);
-      const lossKwh = thermalDemandKw(cfg.lat, lsSol) * SOL_H;
+      const sTemp = surfaceTempC(cfg.lat, lsSol, cfg.ti, cfg.elev);
+      const lossKwh = thermalDemandKw(cfg.lat, lsSol, cfg.ti, cfg.elev) * SOL_H;
       // Electrical load is dissipated inside the habitat; heaters only make up the remainder.
       const heaterKwh = Math.max(0, lossKwh - cfg.consumption);
 

@@ -103,18 +103,60 @@
     </section>
 
     <section id="panel-eva" class="mode-panel hidden">
-      <div class="sec-head"><h2>Tactical EVA / Marswalk</h2><span class="hint">1 km × 1 km · 1 m/px</span></div>
-      <p class="help" id="eva-intro">Hyper-local 1 m/px astronaut foot traverse around boulders, steep crater walls, and sand traps with xEMU suit O₂/battery/cooling telemetry, Walkback Safety Limit, and Helmet Visor HUD.</p>
+      <div class="sec-head"><h2>xGDS · TRN+AutoNav+MGL Map Builder</h2><span class="hint">1 km × 1 km · 10 m/cell (1 m AutoNav)</span></div>
+      <p class="help" id="eva-intro">Post-landing 5-domain surface assimilation (Topography, Geomorphology, Thermal, Radiation, Optical): replaces stale orbital priors with live Perseverance TRN + AutoNav + MGL localization, dynamic scoring, and real-time astronaut walkback routing.</p>
 
       <div class="control-group">
-        <label for="eva-zone-select">Local HiRISE / CTX EVA Zone
+        <label for="eva-zone-select">Target Landing Zone / Biome
           <select id="eva-zone-select">
+            <option value="jezero_delta" selected>Jezero Crater · Cheyava Falls &amp; Western Delta (TRN+AutoNav)</option>
             <option value="gale_boxwork">Gale Crater · Mount Sharp Boxwork (2025–2026)</option>
-            <option value="jezero_delta">Jezero Crater · Cheyava Falls &amp; Witch Hazel Hill (2025–2026)</option>
-            <option value="nili_fossae">Nili Fossae · Carbonate &amp; Clay Trough</option>
+            <option value="nili_fossae">Nili Fossae · Carbonate &amp; Clay Trough (Unexplored Adjacent)</option>
             <option value="arcadia_ice">Arcadia Planitia · Polygon Ice Sheet</option>
           </select>
         </label>
+        <label for="eva-domain-layer">5-Domain Assimilation Layer (xGDS)
+          <select id="eva-domain-layer">
+            <option value="composite">5-Domain Composite Relief &amp; Route</option>
+            <option value="topography">Domain 1 · Topography (Stereo DEM Slope &amp; Scarp)</option>
+            <option value="geomorphology">Domain 2 · Geomorphology (Boulders, Fractures &amp; Dunes)</option>
+            <option value="thermal">Domain 3 · Thermal (In-Situ TI &amp; Dust Drift)</option>
+            <option value="radiation">Domain 4 · Radiation (RAD &amp; Horizon Sky-View)</option>
+            <option value="optical">Domain 5 · Optical (SuperCam VNIR &amp; Albedo)</option>
+          </select>
+        </label>
+        <label for="eva-score-mode">xGDS Live Scoring Objective
+          <select id="eva-score-mode">
+            <option value="balanced">Balanced Mission (Hab Safety + Science)</option>
+            <option value="hab_safety">Habitat &amp; Traverse Engineering Safety</option>
+            <option value="science_bio">Astrobiology &amp; Geochemistry Discovery</option>
+            <option value="isru_water">ISRU Water &amp; Thermal Stability</option>
+            <option value="custom">Custom 5-Domain Weights (Manual Sliders)</option>
+          </select>
+        </label>
+        <div id="eva-custom-weights" class="eva-custom-weights hidden">
+          <label>Topography weight <span id="eva-w-topo-v">24%</span>
+            <input type="range" id="eva-w-topo" min="0" max="100" step="1" value="24"></label>
+          <label>Geomorphology weight <span id="eva-w-geo-v">24%</span>
+            <input type="range" id="eva-w-geo" min="0" max="100" step="1" value="24"></label>
+          <label>Thermal inertia weight <span id="eva-w-therm-v">16%</span>
+            <input type="range" id="eva-w-therm" min="0" max="100" step="1" value="16"></label>
+          <label>Radiation shield weight <span id="eva-w-rad-v">18%</span>
+            <input type="range" id="eva-w-rad" min="0" max="100" step="1" value="18"></label>
+          <label>Optical spectral weight <span id="eva-w-opt-v">18%</span>
+            <input type="range" id="eva-w-opt" min="0" max="100" step="1" value="18"></label>
+        </div>
+        <label>AutoNav Surface Assimilation Progress <span id="eva-scan-step-v">Step 4/8 · 56%</span>
+          <input type="range" id="eva-scan-step" min="0" max="8" step="1" value="4"></label>
+        <div class="eva-sim-btns">
+          <button type="button" id="btn-eva-reset" class="ghost">Orbital Prior (0%)</button>
+          <button type="button" id="btn-eva-step" class="ghost">+1 Scan</button>
+          <button type="button" id="btn-eva-play" class="btn-spec">Auto-Scan</button>
+          <button type="button" id="btn-eva-scan" class="ghost">100% Verified</button>
+          <button type="button" id="btn-eva-mgl" class="ghost">MGL Pose Lock: ON</button>
+          <button type="button" id="btn-eva-spe" class="ghost">SPE 30m Escape Sim</button>
+          <button type="button" id="btn-eva-hazard" class="ghost">+ Inject Hazard</button>
+        </div>
         <label for="eva-buddy-mode">EVA Crew &amp; Mobility Architecture
           <select id="eva-buddy-mode">
             <option value="buddy">2-Crew Buddy System (EV-1 + EV-2 Foot Pair)</option>
@@ -359,12 +401,12 @@
     <h3>6 · Season, radiation &amp; weight sensitivity</h3>
     <p>Seasonal insolation <code>S(φ, Lₛ)</code> uses Mars's 25.19° obliquity and orbital eccentricity (e = 0.0934, perihelion at Lₛ = 251°). Atmospheric column mass follows from MOLA elevation (16.4 g/cm² at datum, 11.1 km scale height) for chronic GCR dose (anchored to Curiosity RAD: 0.64 mSv/day at −4.4 km) and a unified exponential attenuation law (λ = 15 g/cm²) for a design-basis August-1972-class SPE assumption. The Monte Carlo test perturbs every weight 30 times to measure Top-5 ranking stability.</p>
 
-    <h3>7 · What this model does not do</h3>
+    <h3>7 · Orbital Priors vs. Post-Landing Surface Assimilation</h3>
     <ul class="spec-list">
-      <li><b>Resolution.</b> About 5 km per pixel (TES layers ≈ 10 km): meter-scale boulders and small craters are not resolved; regional terrain class reflects MOLA relief only, and landing ellipses require HiRISE imagery (linked per site).</li>
-      <li><b>Elevation steps.</b> The global MOLA layer is quantised at ≈ 115 m, so slopes are regional gradients.</li>
-      <li><b>Ice coverage.</b> SWIM maps ±60° latitude consistency only (datasets agree vs. concentration/yield); outside ±60°, ice is unknown and scored zero.</li>
-      <li><b>Not modelled.</b> Local topographic horizon shadowing, active array-cleaning cycles, and propellant boil-off.</li>
+      <li><b>Orbital Prior Limits.</b> Phase 1 global layers (~5 km/px MOLA, ~10 km/px TES, SWIM 2.0) represent historical orbital priors subject to temporal change (Δt dust storms, migrating aeolian dunes, sub-meter boulders) and cannot certify human ground traversability alone.</li>
+      <li><b>Live Map Building (Phase 2).</b> Upon landing in any target or adjacent biome, the xGDS + Perseverance (TRN + AutoNav + MGL) simulator progressively ingests surface telemetry across 5 domains (Topography, Geomorphology, Thermal, Radiation, Optical) to detect orbital-vs-in-situ discrepancies, re-score the biome live, and plan safe walkback routes.</li>
+      <li><b>Ice coverage.</b> SWIM maps ±60° latitude consistency only; outside ±60°, subsurface water ice must be confirmed in-situ with Neutron/GPR probes.</li>
+      <li><b>Scope boundaries.</b> Orbital DEM is quantised at ≈ 115 m globally; local 1 m/px micro-relief uses seeded surface sensor simulation outside historical HiRISE corridors.</li>
     </ul>
 
     <h3>8 · Validation benchmark &amp; terrestrial portability</h3>

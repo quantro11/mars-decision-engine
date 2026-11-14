@@ -439,5 +439,6 @@
     if ($('#loading')) $('#loading').innerHTML = `<div class="loading-title">Failed to decode planetary layers</div><div class="loading-sub">${escHtml(err && err.message ? err.message : err)}</div>`;
   });
 
+  if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
   window.MDE = { L, S, globe, cellValues: layers.cellValues, rescore, setViewMode };
 })();

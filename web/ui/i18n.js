@@ -191,8 +191,30 @@
     [['#panel-score .sec-head h2', 3], 'Ağırlık duyarlılığı'],
     ['#panel-score p.help', 'Üst sıralardaki adayların ağırlık belirsizliğine dayanıp dayanmadığını görmek için her ağırlığı 30 kez sarsarak yeniden sıralayın.'],
     ['#sens-run', 'Sağlamlık testini çalıştır'],
-    ['#panel-eva .sec-head h2', 'Taktik EVA / Mars Yürüyüşü'],
-    ['#eva-intro', 'Kaya blokları, dik krater duvarları ve kum tuzakları etrafında 1 m/px yerel A* yürüyüş rotası, xEMU giysi O₂/batarya/soğutma telemetrisi, Güvenli Geri Dönüş Çemberi ve Kask İçi HUD.'],
+    ['#panel-eva .sec-head h2', 'xGDS · TRN+AutoNav+MGL Harita Oluşturucu'],
+    ['#panel-eva .sec-head .hint', '1 km × 1 km · 10 m/hücre (1 m AutoNav)'],
+    ['#eva-intro', 'İniş sonrası 5-alanlı yüzey veri sindirimi (Topografi, Jeomorfoloji, Termal, Radyasyon, Optik): zamanla değişen ham uydu öncüllerini Perseverance TRN + AutoNav + MGL yerelleştirmesi ve canlı xGDS puanlamasıyla yeniler.'],
+    ['#eva-zone-select option[value="jezero_delta"]', 'Jezero Krateri · Cheyava Şelalesi & Batı Delta (TRN+AutoNav)'],
+    ['#eva-zone-select option[value="gale_boxwork"]', 'Gale Krateri · Mount Sharp Boxwork (2025–2026)'],
+    ['#eva-zone-select option[value="nili_fossae"]', 'Nili Fossae · Karbonat & Kil Vadisi (Keşfedilmemiş Komşu)'],
+    ['#eva-zone-select option[value="arcadia_ice"]', 'Arcadia Planitia · Poligonal Buz Örtüsü'],
+    ['#eva-domain-layer option[value="composite"]', '5-Alanlı Bileşik Kabartma & Rota'],
+    ['#eva-domain-layer option[value="topography"]', 'Alan 1 · Topografi (Stereo DEM Eğim & Yamaç)'],
+    ['#eva-domain-layer option[value="geomorphology"]', 'Alan 2 · Jeomorfoloji (Kayalar, Çatlaklar & Kumullar)'],
+    ['#eva-domain-layer option[value="thermal"]', 'Alan 3 · Termal (Yerel TI & Toz Sürüklenmesi)'],
+    ['#eva-domain-layer option[value="radiation"]', 'Alan 4 · Radyasyon (RAD & Ufuk Gökyüzü Kalkanı)'],
+    ['#eva-domain-layer option[value="optical"]', 'Alan 5 · Optik (SuperCam VNIR & Albedo)'],
+    ['#eva-score-mode option[value="balanced"]', 'Dengeli Görev (Üs Güvenliği + Bilim)'],
+    ['#eva-score-mode option[value="hab_safety"]', 'Üs Kurulum & Geçiş Mühendislik Güvenliği'],
+    ['#eva-score-mode option[value="science_bio"]', 'Astrobiyoloji & Jeokimya Keşfi'],
+    ['#eva-score-mode option[value="isru_water"]', 'ISRU Su & Termal Zemin Kararlılığı'],
+    ['#eva-score-mode option[value="custom"]', 'Özel 5-Alanlı Ağırlıklar (Manuel Sürgü)'],
+    ['#eva-buddy-mode option[value="buddy"]', '2-Kişilik Eşli Sistem (EV-1 + EV-2 Yaya Çifti)'],
+    ['#eva-buddy-mode option[value="rover_eva"]', 'Basınçlı Rover + Yaya EVA Kombinasyonu'],
+    ['#btn-eva-reset', 'Uydu Öncülü (%0)'],
+    ['#btn-eva-step', '+1 Tara'],
+    ['#btn-eva-scan', '%100 Doğrulanmış'],
+    ['#btn-eva-hazard', '+ Engel Ekle'],
     ['#hud-close', 'Kapat'],
     ['#panel-route .sec-head h2', 'Rover / Marswalk rotası'],
     ['#panel-route p.help', 'Harita veya küreden başlangıç ve varış seçin. Planlayıcı MOLA eğim haritasında Bilimsel Hedef Noktalarına (POI) uğrayan en güvenli rotayı bulur ve uzay giysisi (EVA) metabolik/O₂/radyasyon yükünü hesaplar.'],
@@ -245,8 +267,16 @@
   // Slider control input selectors whose enclosing <label> first text node is localized
   const LEADS_TR = [
     ['#sens', 'Ağırlık belirsizliği '],
-    ['#eva-zone-select', 'Yerel HiRISE / CTX EVA Bölgesi '],
+    ['#eva-zone-select', 'Hedef İniş Bölgesi / Biyom '],
+    ['#eva-domain-layer', '5-Alanlı Veri Katmanı (xGDS) '],
+    ['#eva-score-mode', 'xGDS Canlı Puanlama Hedefi '],
+    ['#eva-scan-step', 'AutoNav Yüzey Sindirim Adımı '],
     ['#eva-buddy-mode', 'EVA Mürettebat & Hareket Mimarisi '],
+    ['#eva-w-topo', 'Topografi ağırlığı '],
+    ['#eva-w-geo', 'Jeomorfoloji ağırlığı '],
+    ['#eva-w-therm', 'Termal atalet ağırlığı '],
+    ['#eva-w-rad', 'Radyasyon kalkanı ağırlığı '],
+    ['#eva-w-opt', 'Optik spektral ağırlığı '],
     ['#eva-load', 'Bilimsel ekipman / numune yükü '],
     ['#eva-speed', 'Astronot yürüyüş hızı '],
     ['#eva-maxslope', 'xEMU giysi azami eğim '],
@@ -302,12 +332,12 @@
     </div>
     <h3>6 · Mevsim, radyasyon ve Monte Carlo ağırlık duyarlılığı</h3>
     <p>Mevsimsel insolasyon Mars’ın 25.19° eksen eğikliğini ve yörünge dışmerkezliğini (e = 0.0934, günberi Lₛ = 251°) içerir. Atmosfer sütun kütlesi (16.4 g/cm², 11.1 km ölçek yüksekliği) hem kronik GCR dozunu hem Ağustos-1972 sınıfı tasarım SPE olayını (λ = 15 g/cm²) hesaplar. Monte Carlo testi tüm ağırlıkları 30 kez sarsarak İlk-5 kararlılığını ölçer.</p>
-    <h3>7 · Modelin sınırları ve dürüst beyan</h3>
+    <h3>7 · Uydu Öncülleri vs İniş Sonrası Canlı Yüzey Sindirimi</h3>
     <ul class="spec-list">
-      <li><b>Çözünürlük:</b> Piksel başına ≈ 5 km (TES ≈ 10 km); metre ölçeğindeki kayalar ve küçük kraterler çözünmez, iniş elipsi için site kartındaki HiRISE bağlantısı incelenmelidir.</li>
-      <li><b>Yükseklik adımı:</b> Küresel MOLA katmanı ≈ 115 m adımlıdır; eğimler bölgesel gradyanları yansıtır.</li>
-      <li><b>Buz kapsamı:</b> SWIM yalnızca ±60° arası tutarlılık haritalar; derişim veya kazı verimi ölçmez, ±60° dışı sıfır sayılır.</li>
-      <li><b>Modellenmeyenler:</b> Yerel ufuk gölgelemesi, aktif panel temizliği ve kriyojenik yakıt buharlaşması.</li>
+      <li><b>Uydu Öncülü Sınırları:</b> Faz 1 küresel katmanları (~5 km/px MOLA, ~10 km/px TES, SWIM 2.0) zamanla değişme olasılığı yüksek (Δt toz fırtınaları, göçen kumullar, metre altı kayalar) tarihsel uydu öncülleridir; tek başına insan geçişini doğrulamaz.</li>
+      <li><b>Canlı Harita Oluşturma (Faz 2):</b> Herhangi bir biyoma inişte xGDS + Perseverance (TRN + AutoNav + MGL) motoru Topografi, Jeomorfoloji, Termal, Radyasyon ve Optik alanlarında yerel sensörleri kademeli sindirip uydu-yerel sapmalarını bulur, biyomu yeniden puanlar ve anlık rota üretir.</li>
+      <li><b>Buz kapsamı:</b> SWIM yalnızca ±60° arası tutarlılık haritalar; ±60° dışı Nötron/GPR sondalarıyla yerinde doğrulanmalıdır.</li>
+      <li><b>Kapsam sınırı:</b> Küresel MOLA ≈ 115 m adımlıdır; tarihi rover şeridi dışındaki 1 m/px analizler koordinat tohumlu yüzey simülasyonuyla modellenir.</li>
     </ul>
     <h3>8 · İstatistiksel doğrulama ve karasal DEM taşınabilirliği</h3>
     <ul class="spec-list">
