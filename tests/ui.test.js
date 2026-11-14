@@ -172,7 +172,7 @@ assert.ok(routeFeat && routeFeat.geometry.type === 'MultiLineString', 'Antimerid
 
 const fakeLbl = { firstChild: { nodeType: 3, nodeValue: 'Slope limit ' } };
 const fakeInp = { closest: () => fakeLbl, parentElement: { querySelector: () => null } };
-const fakeBrand = { textContent: 'Mars Base Decision Engine' };
+const fakeBrand = { textContent: 'Mars EVA & Base Decision Engine' };
 const fakeAbout = { innerHTML: '<h3>English</h3>' };
 const fakeLangBtn = { textContent: 'TR', title: '', setAttribute() {} };
 const fakeDoc = {
@@ -182,16 +182,35 @@ const fakeDoc = {
 };
 I18N.setLang('tr', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Saha seçimi');
+assert.strictEqual(I18N.t('mode.eva'), 'Taktik EVA · 1m/px');
 assert.strictEqual(I18N.trDomain('LIKELY'), 'YÜKSEK OLASILIK');
 assert.ok(fakeAbout.innerHTML.includes('Veri Seti') && !fakeAbout.innerHTML.includes('style='), '#about-content swaps cleanly to Turkish');
 assert.ok(OV.renderLegendHTML('score', 'tr').includes('ELENDİ/ZAYIF'), 'Map legend renders Turkish scale labels');
-assert.strictEqual(fakeBrand.textContent, 'Mars Üs Karar Motoru');
+assert.strictEqual(fakeBrand.textContent, 'Mars EVA & Üs Karar Motoru');
 assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Eğim sınırı ');
 I18N.setLang('en', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Site selection');
 assert.strictEqual(fakeAbout.innerHTML, '<h3>English</h3>', 'Reverting to English restores original #about-content cleanly');
-assert.strictEqual(fakeBrand.textContent, 'Mars Base Decision Engine');
+assert.strictEqual(fakeBrand.textContent, 'Mars EVA & Base Decision Engine');
 assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Slope limit ');
+
+// --- 6c. Neighbor ring interpolation for TES nodata (0) pixels in layers.js
+const LY = require('../web/ui/layers.js').MDE_LAYERS;
+const store0 = LY.createLayerStore({
+  META: { width: 8, height: 8, elev: { scale: 10, offset: -4000 }, slope: { scale: 0.1 }, rough: { scale: 2 }, ice: { scale: 0.01, offset: -1 }, ti: { scale: 4 }, dust: { scale: 0.005, offset: 0 } },
+  SCORING: S, REGIONS: [{ name: 'Jezero', lat: 18.4, lon: 77.6 }], ASTAR: A
+});
+store0.L.elev = new Uint8Array(64).fill(100);
+store0.L.slope = new Uint8Array(64).fill(10);
+store0.L.rough = new Uint8Array(64).fill(5);
+store0.L.ice = new Uint8Array(64).fill(150);
+store0.L.ti = new Uint8Array(64).fill(50);
+store0.L.dust = new Uint8Array(64).fill(40);
+store0.L.ti[3 * 8 + 3] = 0; // nodata hole at (3,3)
+store0.L.dust[3 * 8 + 3] = 0; // nodata hole at (3,3)
+const cvHole = store0.cellValues(3, 3);
+assert.ok(cvHole.ti !== null && cvHole.ti > 150, 'TES TI nodata pixel interpolated from neighbors');
+assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel interpolated from neighbors');
 
 // --- 7. Habitability API DOM controller, key visibility toggle, & XSS safety
 (async () => {

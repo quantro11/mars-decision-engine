@@ -4,12 +4,14 @@
 
   const STRINGS = {
     en: {
-      brandName: 'Mars Base Decision Engine',
-      brandSub: 'Landing-site & survival planning on real orbital data',
+      brandName: 'Mars EVA & Base Decision Engine',
+      brandSub: 'Phase 1: Strategic Base Siting · Phase 2: Hyper-Local EVA & Suit HUD',
       'mode.score': 'Site selection',
+      'mode.eva': 'Tactical EVA · 1m/px',
       'mode.route': 'Rover route',
       'mode.crisis': 'Dust-storm power',
       'mode.habitability': 'Habitability & APIs',
+      zoomLocalEva: 'Zoom to Local EVA Zone (1 m/px) & HUD',
       'view.2d': 'Map',
       'view.3d': 'Globe',
       flytoDefault: 'Go to a region…',
@@ -50,10 +52,10 @@
       'ov.none': 'NASA VIKING MDIM 2.1 OPTICAL',
       hudHint2d: 'Drag to pan · scroll to zoom · click to inspect',
       hudHint3d: 'Drag to orbit · scroll to zoom · click to inspect',
-      hudNoWebgl: '3D globe unavailable (WebGL disabled) — staying in 2D map view',
-      proj2d: 'Map · equirectangular',
-      proj3d: 'Globe · MOLA relief',
-      overlayPrefix: 'Overlay',
+      hudNoWebgl: 'WebGL unavailable; staying in 2D map view',
+      proj2d: 'Equirectangular',
+      proj3d: '3D MOLA globe',
+      overlayPrefix: 'Layer',
       btnLang: 'TR',
       btnLangTitle: 'Switch interface to Turkish (Türkçe)',
       noCands: 'No surface block satisfies active constraints.',
@@ -82,12 +84,14 @@
       goalPin: 'Goal',
     },
     tr: {
-      brandName: 'Mars Üs Karar Motoru',
-      brandSub: 'Gerçek yörünge verileriyle iniş sahası ve hayatta kalma planlaması',
+      brandName: 'Mars EVA & Üs Karar Motoru',
+      brandSub: 'Aşama 1: Stratejik Üs Seçimi · Aşama 2: Hiper-Yerel EVA ve Kask HUD',
       'mode.score': 'Saha seçimi',
+      'mode.eva': 'Taktik EVA · 1m/px',
       'mode.route': 'Rover rotası',
       'mode.crisis': 'Toz fırtınası gücü',
       'mode.habitability': 'Yaşanabilirlik & API',
+      zoomLocalEva: 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD',
       'view.2d': 'Harita',
       'view.3d': '3B Küre',
       flytoDefault: 'Bir bölgeye git…',
@@ -126,11 +130,11 @@
       'ov.rad': 'GCR RADYASYON DOZU',
       'ov.cave': 'MAĞARA ADAYI MESAFESİ (DOĞRULANMAMIŞ)',
       'ov.none': 'NASA VIKING OPTİK MOZAİK',
-      hudHint2d: 'Kaydır: sürükle · yakınlaştır: tekerlek · incele: tıkla',
-      hudHint3d: 'Küre döndür: sürükle · yakınlaştır: tekerlek · incele: tıkla',
-      hudNoWebgl: '3B küre kullanılamıyor (WebGL kapalı) — 2B haritada kalınıyor',
-      proj2d: 'Harita · eşdikdörtgen',
-      proj3d: 'Küre · MOLA kabartma',
+      hudHint2d: 'Sürükle: kaydır · tekerlek: yakınlaştır · tıkla: incele',
+      hudHint3d: 'Sürükle: döndür · tekerlek: yakınlaştır · tıkla: incele',
+      hudNoWebgl: 'WebGL kapalı; 2B haritada kalınıyor',
+      proj2d: 'Eşdikdörtgen',
+      proj3d: '3B MOLA küre',
       overlayPrefix: 'Katman',
       btnLang: 'EN',
       btnLangTitle: 'Arayüzü İngilizceye çevir (English)',
@@ -163,9 +167,10 @@
 
   // Static DOM bindings: [selectorOrTuple, trText]
   const DOM_TR = [
-    ['.brand-name', 'Mars Üs Karar Motoru'],
-    ['.brand-sub', 'Gerçek yörünge verileriyle iniş sahası ve hayatta kalma planlaması'],
+    ['.brand-name', 'Mars EVA & Üs Karar Motoru'],
+    ['.brand-sub', 'Aşama 1: Stratejik Üs Seçimi · Aşama 2: Hiper-Yerel EVA ve Kask HUD'],
     ['.mode-btn[data-mode="score"] .mode-label', 'Saha seçimi'],
+    ['.mode-btn[data-mode="eva"] .mode-label', 'Taktik EVA · 1m/px'],
     ['.mode-btn[data-mode="route"] .mode-label', 'Rover rotası'],
     ['.mode-btn[data-mode="crisis"] .mode-label', 'Toz fırtınası gücü'],
     ['.mode-btn[data-mode="habitability"] .mode-label', 'Yaşanabilirlik & API'],
@@ -175,8 +180,8 @@
     ['#btn-export', 'Rapor al'],
     ['#btn-about', 'Yöntem'],
     [['#panel-score .sec-head h2', 0], 'Görev önceliği'],
-    ['#score-intro', 'Mars genelinde iniş alanlarını sıralamak için bir hedef seçin veya öncelikleri kendinize göre ayarlayın.'],
-    ['#guide-title', 'Bu haritayı nasıl okuyabilirsiniz?'],
+    ['#score-intro', 'Bir ön ayar seçin veya aşağıdaki kriter ağırlıklarını değiştirin.'],
+    ['#guide-text', 'Aşağıdan bir aday bölge seçin veya haritada herhangi bir noktaya dokunup arazi, su buzu ve fırtına gücünü görün.'],
     ['#guide-dismiss', 'Gizle'],
     [['#panel-score .sec-head h2', 1], 'Kriter ağırlıkları'],
     [['#panel-score .sec-head .hint', 0], '%100’e normalize'],
@@ -186,6 +191,9 @@
     [['#panel-score .sec-head h2', 3], 'Ağırlık duyarlılığı'],
     ['#panel-score p.help', 'Üst sıralardaki adayların ağırlık belirsizliğine dayanıp dayanmadığını görmek için her ağırlığı 30 kez sarsarak yeniden sıralayın.'],
     ['#sens-run', 'Sağlamlık testini çalıştır'],
+    ['#panel-eva .sec-head h2', 'Taktik EVA / Mars Yürüyüşü'],
+    ['#eva-intro', 'Kaya blokları, dik krater duvarları ve kum tuzakları etrafında 1 m/px yerel A* yürüyüş rotası, xEMU giysi O₂/batarya/soğutma telemetrisi, Güvenli Geri Dönüş Çemberi ve Kask İçi HUD.'],
+    ['#hud-close', 'Kapat'],
     ['#panel-route .sec-head h2', 'Rover rotası'],
     ['#panel-route p.help', 'Harita veya küreden başlangıç ve varış seçin. Planlayıcı MOLA eğim haritasında en güvenli rotayı bulup kuş uçuşuyla kıyaslar.'],
     ['#route-demo', 'Jezero → Nili örneği'],
@@ -193,11 +201,11 @@
     ['#panel-crisis .sec-head h2', 'Toz fırtınası güç modeli'],
     ['#panel-crisis p.help', 'Haritadan veya aday kartından bir saha seçin; güç sistemini 2018-benzeri küresel toz fırtınasına göre boyutlandırın.'],
     ['#panel-crisis .station-lbl', 'Saha'],
-    ['#panel-habitability .sec-head h2', 'Gezegen ve Yaşanabilirlik API'],
-    ['#panel-habitability p.help', 'NASA Open API ile uzay havası (canlı) ve Mars yüzey hava durumu (donmuş arşiv) ile Dünya–Mars yaşanabilirlik metrikleri. Her sonuç gerçek durumunu etiketler: CANLI, ARŞİV veya REFERANS — canlı olmayan hiçbir şey canlı gösterilmez.'],
+    ['#panel-habitability .sec-head h2', 'Gezegen & Yaşanabilirlik API'],
+    ['#panel-habitability p.help', 'Canlı NASA DONKI uzay havası, InSight arşiv ölçümleri ve Curiosity Gale iklim özetleri.'],
     ['#panel-habitability .api-key-box label', 'NASA Open API Anahtarı (isteğe bağlı)'],
     ['#btn-save-key', 'Kaydet'],
-    ['#panel-habitability .api-key-box .note-sm', 'Bu sayfa görev konsolu üzerinden sunulduğunda istekler aynı kaynaklı proxy’den geçer ve tarayıcıda anahtar saklanmaz. Buraya girilen anahtar yalnızca bağımsız (standalone) dağıtımda kullanılır. DEMO_KEY yalnızca son çaredir: saatte ~30, günde 50 istekle sınırlıdır ve canlı bir servis değildir.'],
+    ['#panel-habitability .api-key-box .note-sm', 'Sunucu proxy için boş bırakın veya tek başına kullanım için kişisel NASA anahtarı girin (DEMO_KEY saatlik/günlük sınırla çalışır).'],
     ['#btn-fetch-live', 'Hava ve uzay havasını çek'],
     ['.layers .sec-head h2', 'Harita katmanı'],
     ['#overlay button[data-ov="score"]', 'Skor'],
@@ -212,8 +220,8 @@
     ['#btn-sun', 'Güneş'],
     ['#btn-spin', 'Dönüş'],
     ['#zoom-reset', 'Sığdır'],
-    ['#loading .loading-title', 'Mars hazırlanıyor'],
-    ['#loading .loading-sub', 'NASA yükseklik, yeraltı su buzu ve sıcaklık haritaları yükleniyor…'],
+    ['#loading .loading-title', 'Mars Karar Motoru'],
+    ['#loading .loading-sub', 'NASA yükseklik, su buzu ve termal katmanlar yükleniyor…'],
     ['#candidates-sec .sec-head h2', 'En iyi aday bölgeler'],
     ['#candidates-sec .sec-head .hint', '2°×2° blok · ≥ 800 km ara'],
     ['#detail-sec .sec-head h2', 'Seçili konum'],
@@ -234,6 +242,11 @@
   // Slider control input selectors whose enclosing <label> first text node is localized
   const LEADS_TR = [
     ['#sens', 'Ağırlık belirsizliği '],
+    ['#eva-zone-select', 'Yerel HiRISE / CTX EVA Bölgesi '],
+    ['#eva-buddy-mode', 'EVA Mürettebat & Hareket Mimarisi '],
+    ['#eva-load', 'Bilimsel ekipman / numune yükü '],
+    ['#eva-speed', 'Astronot yürüyüş hızı '],
+    ['#eva-maxslope', 'xEMU giysi azami eğim '],
     ['#maxslope', 'Eğim sınırı '],
     ['#kslope', 'Eğim cezası '],
     ['#speed', 'Ortalama hız '],
@@ -392,14 +405,6 @@
       node.nodeValue = lang === 'tr' ? trVal : span._mdeEnLast;
     }
 
-    const GUIDE_STEPS_TR_HTML = '<li><b>Bir hedef seçin</b> soldan — güvenli iniş, su buzu veya dengeli.</li><li><b>Haritada parlak bir alana</b> veya alttaki sıralı aday kartlarından birine tıklayın.</li><li><b>Özet kutusunu okuyun</b> — <em>Seçili konum</em> altında güvenlik ve yaşam özetini görün.</li>';
-
-    const guideSteps = doc.querySelector('#guide-steps');
-    if (guideSteps) {
-      if (guideSteps._mdeEnHtml === undefined) guideSteps._mdeEnHtml = guideSteps.innerHTML;
-      guideSteps.innerHTML = lang === 'tr' ? GUIDE_STEPS_TR_HTML : guideSteps._mdeEnHtml;
-    }
-
     const aboutC = doc.querySelector('#about-content');
     if (aboutC) {
       if (aboutC._mdeEnHtml === undefined) aboutC._mdeEnHtml = aboutC.innerHTML;
@@ -416,7 +421,7 @@
 
     const apiSt = doc.querySelector('#live-api-status');
     if (apiSt && (!global.MDE_LIVE_STATE || apiSt.textContent.includes('Ready to query') || apiSt.textContent.includes('sorgusuna hazır'))) {
-      apiSt.textContent = lang === 'tr' ? '● NASA API sorgusuna hazır' : '● Ready to query NASA APIs';
+      apiSt.textContent = lang === 'tr' ? 'NASA API sorgusuna hazır' : 'Ready to query NASA APIs';
     }
 
     const btnLang = doc.querySelector('#btn-lang');

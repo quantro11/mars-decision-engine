@@ -63,9 +63,10 @@
       storm: { tau0: 0.5, tauPeak: S.crisis.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
     });
 
+    const evaSim = S.evaSim || null;
     return {
       generated_at: new Date().toISOString(),
-      system: 'Mars Base Decision Engine (MDE-2.4)',
+      system: 'Mars EVA & Base Decision Engine (MDE-3.0)',
       architecture_preset: S.preset || 'custom',
       scoring_aggregation: S.agg || 'sum',
       hard_constraints_hls2015: S.hard,
@@ -73,6 +74,21 @@
       normalized_weights: Object.fromEntries(Object.entries(wn).map(([k, v]) => [k, +v.toFixed(3)])),
       top_candidates: cands,
       selected_site: selCell,
+      tactical_eva_plan: evaSim ? {
+        zone_name: evaSim.zone.name,
+        resolution: '1 km x 1 km (1 m/px HiRISE/CTX)',
+        crew_mode: evaSim.buddyMode,
+        sample_load_kg: evaSim.loadKg,
+        metabolic_rate_kcal_h: evaSim.metabolicKcalH,
+        metabolic_power_w: evaSim.metabolicW,
+        o2_reserve_remain_pct: evaSim.o2RemainPct,
+        suit_battery_remain_pct: evaSim.battRemainPct,
+        cooling_water_used_l: evaSim.waterUsedL,
+        walkback_safety_limit_m: evaSim.walkbackRadiusM,
+        astar_safe_footpath_m: evaSim.safeDistM,
+        direct_footpath_m: evaSim.directDistM,
+        within_walkback_limit: evaSim.withinWalkback,
+      } : null,
       traverse_plan: S.route.safe && S.route.safe.ok ? {
         direct_km: +S.route.straight.stats.km.toFixed(1),
         direct_max_slope_deg: +S.route.straight.stats.maxSlope.toFixed(1),
@@ -215,7 +231,7 @@
     return {
       type: 'FeatureCollection',
       metadata: {
-        system: 'Mars Base Decision Engine (MDE-2.4)',
+        system: 'Mars EVA & Base Decision Engine (MDE-3.0)',
         crs_note: 'IAU Mars 2000 planetocentric lon/lat mapped to RFC 7946 [lon, lat]',
         generated_at: new Date().toISOString(),
         preset: S.preset || 'custom',
@@ -262,7 +278,11 @@
       </table>
       <div class="modal-grid mt-sm">
         <div>
-          <h3>${tr ? '2. Yüzey Geçiş Analizi (A*)' : '2. Surface Traverse Analysis (A*)'}</h3>
+          <h3>${tr ? '2. Taktik EVA (1 m/px) & Yüzey Geçiş Analizi (A*)' : '2. Tactical EVA (1 m/px) &amp; Surface Traverse Analysis (A*)'}</h3>
+          ${p.tactical_eva_plan ? (tr
+            ? `<p><b>${esc(p.tactical_eva_plan.zone_name)}</b> (1 km × 1 km · 1 m/px): A* yürüyüş rotası <b>${p.tactical_eva_plan.astar_safe_footpath_m} m</b>, Güvenli Geri Dönüş Sınırı (Walkback) <b>${p.tactical_eva_plan.walkback_safety_limit_m} m</b>, O₂ rezervi <code>%${p.tactical_eva_plan.o2_reserve_remain_pct}</code>, batarya <code>%${p.tactical_eva_plan.suit_battery_remain_pct}</code>, metabolik yük <code>${p.tactical_eva_plan.metabolic_rate_kcal_h} kcal/sa (${p.tactical_eva_plan.metabolic_power_w} W)</code>, numune yükü <code>${p.tactical_eva_plan.sample_load_kg} kg</code>.</p>`
+            : `<p><b>${esc(p.tactical_eva_plan.zone_name)}</b> (1 km × 1 km · 1 m/px): A* safe footpath <b>${p.tactical_eva_plan.astar_safe_footpath_m} m</b>, Walkback Safety Limit <b>${p.tactical_eva_plan.walkback_safety_limit_m} m</b>, O₂ reserve <code>${p.tactical_eva_plan.o2_reserve_remain_pct}%</code>, suit battery <code>${p.tactical_eva_plan.suit_battery_remain_pct}%</code>, metabolic rate <code>${p.tactical_eva_plan.metabolic_rate_kcal_h} kcal/h (${p.tactical_eva_plan.metabolic_power_w} W)</code>, carried load <code>${p.tactical_eva_plan.sample_load_kg} kg</code>.</p>`)
+          : ''}
           ${p.traverse_plan ? (tr
             ? `<p>A* çoklu-tehlike koridoru <b>${p.traverse_plan.astar_safe_km} km</b> (azami eğim <code>${p.traverse_plan.astar_max_slope_deg}°</code>, düşük-TI toz <code>${p.traverse_plan.astar_dust_trap_km} km</code>, ${p.traverse_plan.candidate_rest_stops.length} aday mola noktası) vs. kuş uçuşu <b>${p.traverse_plan.direct_km} km</b> (azami eğim <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`
             : `<p>A* multi-hazard corridor requires <b>${p.traverse_plan.astar_safe_km} km</b> (max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>, low-TI dust <code>${p.traverse_plan.astar_dust_trap_km} km</code>, ${p.traverse_plan.candidate_rest_stops.length} candidate rest stops — terrain only, no shelter implied) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`)

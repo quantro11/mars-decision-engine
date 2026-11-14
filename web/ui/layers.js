@@ -75,6 +75,34 @@
       });
     }
 
+    function sampleValid(arr, x, y, scale, offset, fallback) {
+      if (!arr) return fallback;
+      const cx = ((x % W) + W) % W;
+      const cy = Math.min(H - 1, Math.max(0, y));
+      const direct = arr[cy * W + cx];
+      if (direct > 0) return offset + direct * scale;
+      const radii = [1, 2, 3, 5, 8, 12, 18, 26, 38, 52];
+      for (const r of radii) {
+        let sum = 0, wSum = 0;
+        for (let dy = -r; dy <= r; dy++) {
+          const ny = cy + dy;
+          if (ny < 0 || ny >= H) continue;
+          const step = (dy === -r || dy === r) ? 1 : (2 * r);
+          for (let dx = -r; dx <= r; dx += step) {
+            const nx = ((cx + dx) % W + W) % W;
+            const raw = arr[ny * W + nx];
+            if (raw > 0) {
+              const w = 1 / Math.hypot(dx, dy);
+              sum += raw * w;
+              wSum += w;
+            }
+          }
+        }
+        if (wSum > 0) return offset + (sum / wSum) * scale;
+      }
+      return fallback;
+    }
+
     function cellValues(x, y) {
       const i = y * W + x;
       const iceRaw = L.ice ? L.ice[i] : 0;
@@ -86,9 +114,9 @@
         slope: L.slope[i] * META.slope.scale,
         rough: L.rough[i] * META.rough.scale,
         ice: iceRaw === 0 ? null : META.ice.offset + iceRaw * META.ice.scale,
-        ti: L.ti[i] === 0 ? null : L.ti[i] * META.ti.scale,
+        ti: sampleValid(L.ti, x, y, META.ti.scale, 0, 215),
         cave: !L.cave || L.cave[i] === 255 ? null : L.cave[i] * (META.cave ? META.cave.scale : 4),
-        dust: L.dust[i] === 0 ? null : META.dust.offset + L.dust[i] * META.dust.scale,
+        dust: sampleValid(L.dust, x, y, META.dust.scale, META.dust.offset, 0.18),
         lat: L.latOfRow(y),
         lon: L.lonOfCol(x),
       };
@@ -116,15 +144,16 @@
           if (dust !== null) { du += dust; nD++; }
         }
       }
+      const center = cellValues(((cx % W) + W) % W, Math.min(H - 1, Math.max(0, cy)));
       return {
         rad: SCORING.radDose(e / n),
         elev: e / n,
         slope: sl / n,
         rough: r / n,
         ice: nIce ? ic / nIce : null,
-        ti: nT ? t / nT : null,
-        dust: nD ? du / nD : null,
-        cave: cellValues(((cx % W) + W) % W, Math.min(H - 1, Math.max(0, cy))).cave,
+        ti: nT ? t / nT : center.ti,
+        dust: nD ? du / nD : center.dust,
+        cave: center.cave,
         lat: L.latOfRow(cy),
         lon: L.lonOfCol(cx),
       };

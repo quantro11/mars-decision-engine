@@ -2,9 +2,6 @@
 (function (global) {
   'use strict';
 
-  const PRESET_CODES = { landing: '01', isru: '02', balanced: '03' };
-  const CRIT_TAGS = { elev: '01', slope: '02', ice: '03', rough: '04', lat: '05', ti: '06', rad: '07', cave: '08' };
-
   /**
    * Announce status transitions concisely to assistive technologies (#sr-status).
    * @param {string} msg
@@ -88,7 +85,7 @@
   function createPanels(ctx) {
     const {
       doc = global.document, S, layers, SCORING, STORM, FMT, CHARTS,
-      onRescore, onSelect, onUseRoute, onUseCrisis, onGlobeFly,
+      onRescore, onSelect, onUseRoute, onUseCrisis, onUseEva, onGlobeFly,
     } = ctx;
     const $ = (s) => doc.querySelector(s);
     const { candidateName, trekUrl, fmtLat, fmtLon, escHtml } = FMT;
@@ -102,10 +99,9 @@
         const active = S.preset === k;
         b.className = 'preset' + (active ? ' active' : '');
         b.setAttribute('aria-pressed', String(active));
-        const code = PRESET_CODES[k] || k.toUpperCase();
         const pname = t('preset.' + k, p.name);
         const psub = t('presetSub.' + k, '');
-        b.innerHTML = `<span class="p-code">${escHtml(code)}</span><span class="p-name">${escHtml(pname)}</span><small>${escHtml(psub)}</small>`;
+        b.innerHTML = `<span class="p-name">${escHtml(pname)}</span><small>${escHtml(psub)}</small>`;
         b.onclick = () => { S.preset = k; S.weights = { ...p.w }; buildPresets(); buildSliders(); onRescore(); };
         el.appendChild(b);
       }
@@ -119,11 +115,10 @@
       const tr = isTr();
       for (const c of SCORING.CRITERIA) {
         const d = doc.createElement('div'); d.className = 'slider';
-        const tag = CRIT_TAGS[c.key] || c.key.toUpperCase();
         const clabel = t('crit.' + c.key, c.label);
         const helpTip = t('critHelp.' + c.key, '');
         if (helpTip) d.title = helpTip;
-        d.innerHTML = `<div class="lbl"><span class="lbl-left"><span class="crit-tag">${escHtml(tag)}</span><span>${escHtml(clabel)}</span></span><b>${(wn[c.key] * 100).toFixed(0)}%</b></div><input type="range" min="0" max="100" value="${Math.round(S.weights[c.key] * 100)}" aria-label="${escHtml(clabel)} ${tr ? 'önemi' : 'importance'}">`;
+        d.innerHTML = `<div class="lbl"><span class="lbl-left">${escHtml(clabel)}</span><b>${(wn[c.key] * 100).toFixed(0)}%</b></div><input type="range" min="0" max="100" value="${Math.round(S.weights[c.key] * 100)}" aria-label="${escHtml(clabel)} ${tr ? 'önemi' : 'importance'}">`;
         d.querySelector('input').oninput = (e) => {
           S.weights[c.key] = +e.target.value / 100;
           S.preset = null;
@@ -163,9 +158,20 @@
         const robustTag = c.robust != null ? ` · <span class="robust ${c.robust >= 0.8 ? 'ok' : c.robust >= 0.5 ? 'warn' : 'bad'}">${tr ? 'TUTARLI' : 'STABLE'} ${(c.robust * 100).toFixed(0)}%</span>` : '';
         li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${escHtml(name)}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">NASA EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
           <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${tr ? 'buz' : 'ice'}: <b>${escHtml(trDom(ice.status).toLowerCase().replace(/_/g, ' '))}</b> · ${(flat * 100).toFixed(0)}% ${tr ? 'düz zemin' : 'flat ground'}${robustTag}</div>${critRowsHTML(v, S.weights, { SCORING, escHtml })}
-          <a class="trek" href="${escHtml(trekUrl(v.lat, v.lon))}" target="_blank" rel="noopener">${tr ? 'NASA Mars Trek’te incele (HiRISE / CTX) →' : 'Inspect in NASA Mars Trek (HiRISE / CTX) →'}</a>`;
+          <div class="card-links">
+            <button type="button" class="eva-card-btn">${tr ? 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD →' : 'Zoom to Local EVA Zone (1 m/px) & HUD →'}</button>
+            <a class="trek" href="${escHtml(trekUrl(v.lat, v.lon))}" target="_blank" rel="noopener">${tr ? 'NASA Mars Trek (HiRISE / CTX) →' : 'NASA Mars Trek (HiRISE / CTX) →'}</a>
+          </div>`;
         const trekLink = li.querySelector('.trek');
         if (trekLink) trekLink.onclick = (e) => e.stopPropagation();
+        const evaBtn = li.querySelector('.eva-card-btn');
+        if (evaBtn) {
+          evaBtn.onclick = (e) => {
+            e.stopPropagation();
+            onSelect(c.x, c.y, i);
+            if (onUseEva) onUseEva(c.x, c.y, v, name);
+          };
+        }
         const activateCard = () => {
           onSelect(c.x, c.y, i);
           if (onGlobeFly) onGlobeFly(v.lat, v.lon);
@@ -235,11 +241,14 @@
           <tr><td>${tr ? 'Tasarım SPE dozu (varsayım)' : 'Design-basis SPE (assumption)'}</td><td>${spe.unshieldedDoseMsv} mSv ${tr ? 'yüzeyde' : 'on the surface'} · ${spe.requiredRegolithM} m ${tr ? 'regolit (≤100 mSv için)' : 'regolith for ≤ 100 mSv'}</td></tr>
           <tr><td>${tr ? 'Yüzey sıcaklığı (yakl.)' : 'Surface temp. (approx.)'}</td><td>${tr ? 'gece' : 'night'} ${sTemp.night.toFixed(0)} °C · ${tr ? 'ort' : 'mean'} ${sTemp.mean.toFixed(0)} °C</td></tr>
           <tr><td>${tr ? 'Habitat ısı kaybı' : 'Habitat heat loss'}</td><td>${pTherm} kW (${tr ? 'önce elektrik yükü atık ısısıyla karşılanır' : 'covered by waste heat of the electrical load first'})</td></tr>
+          <tr><td>${tr ? 'xEMU EVA Güvenli Dönüş (Walkback)' : 'xEMU EVA Walkback Limit'}</td><td><b>${(S.evaSim ? S.evaSim.walkbackRadiusM : 1380)} m</b> · ${S.evaSim ? S.evaSim.metabolicKcalH : 275} kcal/h · O₂ ${S.evaSim ? S.evaSim.o2RemainPct : 72}%</td></tr>
         </table>
         <div class="row">
+          <button id="use-eva" class="btn-spec btn-full">${escHtml(t('zoomLocalEva', tr ? 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD' : 'Zoom to Local EVA Zone (1 m/px) & HUD'))}</button>
           <button id="use-route" class="ghost">${escHtml(t('startRouteHere', 'Start a route here'))}</button>
           <button id="use-crisis" class="ghost">${escHtml(t('useStormModel', 'Use in storm model'))}</button>
         </div>`;
+      if ($('#use-eva')) $('#use-eva').onclick = () => { if (onUseEva) onUseEva(x, y, v, nr.region.name); };
       $('#use-route').onclick = () => onUseRoute(x, y);
       $('#use-crisis').onclick = () => onUseCrisis(x, y, true);
       announce(tr ? `Seçildi: ${nr.region.name}, skor ${s.toFixed(2)}.` : `Selected ${nr.region.name}, score ${s.toFixed(2)}, ${vetoed ? 'vetoed' : 'within constraints'}.`, doc);
@@ -261,6 +270,7 @@
       const cls = (s) => s > r.maxSlope ? 'bad' : s > 10 ? 'warn' : 'ok';
       const havens = b.safeHavens || [];
       const havenStr = havens.length ? havens.map(h => `${h.name} (${h.km}km · sol ${Math.round(h.km / r.speed)})`).join(', ') : (tr ? 'Tespit edilmedi' : 'None detected');
+      const evaSim = S.evaSim || { o2UsedPct: 28, o2RemainPct: 72, battUsedPct: 24, battRemainPct: 76, loadKg: 15, metabolicKcalH: 278, metabolicW: 323, walkbackRadiusM: 1380 };
 
       el.innerHTML = `<table class="stat-table"><tr><th>${tr ? 'Metrik' : 'Metric'}</th><th class="straight">${tr ? 'Doğrudan' : 'Direct'}</th><th class="safe">${tr ? 'A* Güvenli' : 'A* Safe'}</th></tr>
         <tr><td>${tr ? 'Toplam Mesafe' : 'Total Distance'}</td><td>${a.km.toFixed(0)} km</td><td>${b.km.toFixed(0)} km <small>(+${(100 * (b.km / a.km - 1)).toFixed(0)}%)</small></td></tr>
@@ -269,7 +279,10 @@
         <tr><td>${tr ? '&gt;10° Eğim Mesafesi' : 'Distance &gt;10° Slope'}</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
         <tr><td>${tr ? 'Düşük-TI Toz (&lt;100 tiu)' : 'Low-TI Dust (&lt;100 tiu)'}</td><td>${(a.dustKm || 0).toFixed(0)} km</td><td>${(b.dustKm || 0).toFixed(0)} km</td></tr>
         <tr><td>${tr ? 'Aday mola noktası' : 'Candidate rest stops'}</td><td>—</td><td><b>${havens.length}</b> (${tr ? 'düz, pürüzsüz, sert' : 'flat, smooth, firm'})</td></tr>
-        <tr><td>${tr ? 'Geçiş Süresi' : 'Traverse Duration'}</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr></table>
+        <tr><td>${tr ? 'Geçiş Süresi' : 'Traverse Duration'}</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr>
+        <tr><td>${tr ? 'Astronot O₂ / Giysi Bat.' : 'Astronaut O₂ / Suit Batt'}</td><td>—</td><td class="ok">O₂ -${evaSim.o2UsedPct}% (${evaSim.o2RemainPct}% rem) · Batt -${evaSim.battUsedPct}%</td></tr>
+        <tr><td>${tr ? 'Ekipman Yükü & Metabolik' : 'Sample Load & Metabolic'}</td><td>—</td><td>${evaSim.loadKg} kg · ${evaSim.metabolicKcalH} kcal/h (${evaSim.metabolicW} W)</td></tr>
+        <tr><td>${tr ? 'Güvenli Geri Dönüş (Walkback)' : 'Walkback Safety Limit'}</td><td>—</td><td class="ok"><b>${evaSim.walkbackRadiusM} m</b> (${tr ? 'Rover+Yaya İkili' : 'Rover+Foot Buddy'})</td></tr></table>
         <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (tr ? `Doğrudan hat ${a.maxSlope.toFixed(1)}° eğimi aşıyor (sınır ${r.maxSlope}°). Güvenli rota +${(b.km - a.km).toFixed(0)} km ekler.` : `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.`) : (tr ? 'Doğrudan hat azami eğim sınırını sağlıyor.' : 'Direct path satisfies maximum slope constraint.')}</div>
         ${havens.length ? `<div class="help haven-note"><b>${tr ? 'MOLA NOKTALARI (YALNIZCA ARAZİ, SIĞINAK ANLAMI TAŞIMAZ)' : 'REST STOPS (TERRAIN ONLY, NO SHELTER IMPLIED)'}</b>${escHtml(havenStr)}</div>` : ''}
         <div class="hint mt-sm">${tr ? 'Güvenli rota boyunca yükselti profili' : 'Elevation profile along the safe route'} · ${(r.ms || 0).toFixed(0)} ms, ${r.safe.path.length} ${tr ? 'hücre' : 'cells'}</div>${CHARTS.profileSVG(b.profile)}`;

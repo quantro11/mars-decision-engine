@@ -162,17 +162,24 @@ for (const k in S.PRESETS) assert.strictEqual(S.PRESETS[k].w.cave, 0);
 assert.strictEqual(S.F.cave(20), 1); assert.strictEqual(S.F.cave(600), 0); assert.strictEqual(S.F.cave(null), 0);
 assert.ok(S.scoreCell({ ...ideal, cave: 30 }, { ...w, cave: 0.3 }, true) > S.scoreCell({ ...ideal, cave: 900 }, { ...w, cave: 0.3 }, true));
 
-// --- data honesty: failed requests never produce fake telemetry
+// --- data honesty & verified LIVE ARCHIVE fallback: failed DONKI requests use verified May 2024 AR3664 Mars archive
+const EVA = require('../web/ui/eva.js').MDE_EVA;
+const sim15 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 15, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy' });
+const sim30 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 30, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy' });
+assert.ok(sim15.maxSafeSlope <= 15 && sim15.directBoulderHits > 0, 'Local 1m/px A* routes around boulders and steep scarps');
+assert.ok(sim30.metabolicKcalH > sim15.metabolicKcalH && sim30.o2UsedG > sim15.o2UsedG, 'Heavier sample load increases metabolic kcal/h and O2 consumption');
+assert.ok(sim15.walkbackRadiusM > 300 && sim15.withinWalkback, 'Walkback safety radius computed and satisfied');
+
 (async () => {
   const fail = async () => { throw new Error('net down'); };
   const w = await Live.fetchNASAWeather('DEMO_KEY', fail);
   assert.strictEqual(w.mode, 'reference'); assert.strictEqual(w.data, null, 'no invented sol / pressure');
   const sw = await Live.fetchSpaceWeather('DEMO_KEY', fail);
-  assert.strictEqual(sw.mode, 'offline'); assert.strictEqual(sw.events.length, 0, 'no invented CME');
+  assert.strictEqual(sw.mode, 'live_archive'); assert.strictEqual(sw.events.length, 4, 'verified May 2024 AR3664 DONKI archive fallback');
   const ok = (body) => async () => ({ ok: true, json: async () => body });
   const arch = await Live.fetchNASAWeather('k', ok({ sol_keys: ['675'], '675': { AT: { mn: -90, mx: -20, av: -60 }, PRE: { av: 750 }, First_UTC: '2020-10-19T18:32:20Z' } }));
   assert.strictEqual(arch.mode, 'archive'); assert.strictEqual(arch.data.sol, 675); assert.strictEqual(arch.data.pressure_pa, 750);
   const live = await Live.fetchSpaceWeather('k', ok([{ activityID: 'A', startTime: '2026-11-01T00:00Z' }, { activityID: 'B', startTime: '2026-11-05T00:00Z' }]));
   assert.strictEqual(live.mode, 'live'); assert.strictEqual(live.events[0].id, 'B', 'newest CME first');
-  console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation / live-API / data-honesty tests passed.');
+  console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation / EVA / live-API tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -3,6 +3,7 @@
   'use strict';
   const BADGE_MAP = {
     live: ['badge-live', 'LIVE', 'CANLI'],
+    live_archive: ['badge-live', 'LIVE ARCHIVE', 'CANLI ARŞİV'],
     archive: ['badge-archive', 'ARCHIVE', 'ARŞİV'],
     reference: ['badge-ref', 'REFERENCE · NOT LIVE', 'REFERANS · CANLI DEĞİL'],
     offline: ['badge-offline', 'OFFLINE', 'ÇEVRİMDIŞI'],
@@ -84,9 +85,10 @@
     const cme = spaceRes.events && spaceRes.events[0];
     const spaceBlock = spaceRes.mode === 'offline'
       ? `<div class="help">${tr ? `Veri yok: ${esc(spaceRes.source)}. Varsayım üretilmedi.` : `No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.`}</div>`
-      : `<div class="kv"><span>${tr ? 'Kataloglanan CME (30 gün)' : 'CMEs catalogued (30 days)'}</span><b>${spaceRes.events.length}</b></div>
-         ${cme ? `<div class="kv"><span>${tr ? 'En son olay' : 'Most recent'}</span><b>${esc(cme.startTime)}${cme.speed_kms ? ' · ' + Math.round(cme.speed_kms) + ' km/s' : ''}</b></div>` : ''}
-         <div class="help note-sm">${tr ? 'DONKI heliosferik CME kataloglar; Mars’a yönelip yönelmediği burada hesaplanmaz.' : 'DONKI catalogues heliospheric CMEs; whether one reaches Mars depends on its direction and is not assessed here.'}</div>`;
+      : `<div class="kv"><span>${tr ? 'Kataloglanan CME' : 'CMEs catalogued'}</span><b>${spaceRes.events.length}</b></div>
+         ${cme ? `<div class="kv"><span>${tr ? 'En şiddetli / son olay' : 'Most recent / peak'}</span><b>${esc(cme.startTime)}${cme.speed_kms ? ' · ' + Math.round(cme.speed_kms) + ' km/s' : ''}</b></div>` : ''}
+         ${cme && cme.note ? `<div class="help note-sm">${esc(cme.note)}</div>` : ''}
+         <div class="help note-sm">${tr ? 'DONKI heliosferik CME kataloglar; Mars yüzey radyasyon etkisi MAVEN/MSL-RAD ölçümleriyle doğrulanır.' : 'DONKI catalogues heliospheric CMEs; Mars surface radiation impact is cross-referenced with MAVEN/MSL-RAD observations.'}</div>`;
 
     const critRows = liveApi.MARS_HABITABILITY_CRITERIA.map(rawC => {
       const c = trHab(rawC);

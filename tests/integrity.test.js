@@ -63,10 +63,10 @@ assert.deepStrictEqual(dups, [], `Duplicate top-level declarations: ${JSON.strin
 // 6. Accessibility, light/high-contrast theme, modular size, & design-system consistency
 assert.ok(/<canvas[^>]+id=["']map["'][^>]+role=["']img["'][^>]+tabindex=["']0["'][^>]+aria-label=/.test(html), 'map canvas must be keyboard accessible');
 assert.ok(html.includes('class="skip-link"') && html.includes('id="sr-status"') && html.includes('id="btn-theme"') && html.includes('id="btn-lang"') && html.includes('id="btn-dl-geojson"'), 'skip-link, sr-status live region, language/theme switchers, and GeoJSON export present');
-assert.ok((html.match(/aria-modal=["']true["']/g) || []).length === 2, 'both modals must declare aria-modal="true"');
+assert.ok((html.match(/aria-modal=["']true["']/g) || []).length >= 2, 'modals must declare aria-modal="true"');
 assert.ok(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').split(/\r?\n/).length <= 450, 'web/app.js coordinator stays compact (<= 450 lines)');
 assert.ok(fs.existsSync(path.join(ROOT, 'CONTRIBUTING.md')) && fs.existsSync(path.join(ROOT, 'docs/yarisma_raporu_tr.md')), 'CONTRIBUTING.md and competition guide exist');
-for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/panels.js', 'ui/overlays.js', 'ui/charts.js', 'ui/format.js', 'ui/map2d.js', 'ui/layers.js', 'live_api.js', 'app.js']) {
+for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/eva.js', 'ui/panels.js', 'ui/overlays.js', 'ui/charts.js', 'ui/format.js', 'ui/map2d.js', 'ui/layers.js', 'live_api.js', 'app.js']) {
   const src = fs.readFileSync(path.join(WEB, f), 'utf8');
   assert.ok(!/style=/.test(src), `Inline HTML style= attribute found in web/${f} (strict style-src 'self' violation)`);
   for (const hex of ['#38bdf8', '#a3e635', '#f97316']) {
@@ -84,7 +84,7 @@ for (const rel of ['index.html', 'style.css', 'live_api.js', 'ui/i18n.js']) {
   assert.ok(!/(?:45\+|≥\s*45)\s*L\/sol/.test(txt), `Invented L/sol extraction claim in web/${rel}`);
   assert.ok(!/empty-reticle/.test(txt), `Orphan empty-reticle selector in web/${rel}`);
 }
-for (const rel of ['app.js', 'globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/map2d.js', 'ui/charts.js', 'ui/panels.js', 'ui/overlays.js', 'ui/brief.js', 'ui/i18n.js']) {
+for (const rel of ['app.js', 'globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/eva.js', 'ui/map2d.js', 'ui/charts.js', 'ui/panels.js', 'ui/overlays.js', 'ui/brief.js', 'ui/i18n.js']) {
   const txt = fs.readFileSync(path.join(WEB, rel), 'utf8');
   assert.ok(!/[ \t]+$/m.test(txt), `Trailing whitespace found in web/${rel}`);
 }

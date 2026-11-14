@@ -107,27 +107,62 @@
       draw();
     }
 
-    function draw2DGraticule(dpr) {
+    function getMapSafeBounds(dpr) {
+      const wrap = canvas.parentElement;
+      const topBar = wrap && wrap.querySelector ? wrap.querySelector('.map-top-bar') : null;
+      const botHud = wrap && wrap.querySelector ? wrap.querySelector('.map-hud') : null;
+      const topSafe = Math.max(40, (topBar ? topBar.getBoundingClientRect().height + 14 : 44)) * dpr;
+      const botSafe = canvas.height - Math.max(36, (botHud ? botHud.getBoundingClientRect().height + 16 : 38)) * dpr;
+      return { topSafe, botSafe };
+    }
+
+    function createLabelPlacer(dpr, bounds) {
+      const boxes = [];
+      const pad = 5 * dpr;
+      return {
+        reserve(x1, y1, x2, y2) { boxes.push([x1 - pad, y1 - pad, x2 + pad, y2 + pad]); },
+        canPlace(x1, y1, x2, y2) {
+          if (x1 < 6 * dpr || x2 > canvas.width - 6 * dpr || y1 < bounds.topSafe || y2 > bounds.botSafe) return false;
+          for (const b of boxes) {
+            if (x1 < b[2] && x2 > b[0] && y1 < b[3] && y2 > b[1]) return false;
+          }
+          boxes.push([x1 - pad, y1 - pad, x2 + pad, y2 + pad]);
+          return true;
+        },
+      };
+    }
+
+    function draw2DGraticule(dpr, placer, bounds) {
       const { scale, tx, ty } = S.view;
+      const cssW = canvas.width / dpr;
+      const lonStep = cssW < 420 ? 90 : cssW < 680 ? 60 : 30;
+      const fh = Math.round(9.5 * dpr);
       ctx.strokeStyle = 'rgba(148, 163, 184, 0.13)';
       ctx.lineWidth = 1;
-      ctx.font = `500 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.55)';
+      ctx.font = `500 ${fh}px "IBM Plex Mono", monospace`;
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+      ctx.textBaseline = 'middle';
       for (let lon = -180; lon <= 180; lon += 30) {
         const [x0] = toScreen(L.colOfLon(Math.min(lon, 179.99)), 0);
         ctx.beginPath(); ctx.moveTo(x0, Math.max(0, ty)); ctx.lineTo(x0, Math.min(canvas.height, ty + H * scale)); ctx.stroke();
-        if (lon > -180 && lon < 180 && x0 > 30 * dpr && x0 < canvas.width - 30 * dpr) {
+        if (lon > -180 && lon < 180 && (Math.abs(lon) % lonStep === 0)) {
           const lbl = lon === 0 ? '0°' : `${Math.abs(lon)}°${lon > 0 ? 'E' : 'W'}`;
-          ctx.textAlign = 'center'; ctx.fillText(lbl, x0, Math.max(46 * dpr, ty + 12 * dpr));
+          const tw = ctx.measureText(lbl).width;
+          const ly = Math.max(bounds.topSafe + fh * 0.7, ty + 14 * dpr);
+          if (placer.canPlace(x0 - tw / 2, ly - fh / 2, x0 + tw / 2, ly + fh / 2)) {
+            ctx.textAlign = 'center'; ctx.fillText(lbl, x0, ly);
+          }
         }
       }
       ctx.textAlign = 'left';
       for (let lat = -60; lat <= 60; lat += 30) {
         const [, y0] = toScreen(0, L.rowOfLat(lat));
         ctx.beginPath(); ctx.moveTo(tx, y0); ctx.lineTo(tx + W * scale, y0); ctx.stroke();
-        if (y0 > 48 * dpr && y0 < canvas.height - 40 * dpr) {
-          const lbl = lat === 0 ? 'EQ 0°' : `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`;
-          ctx.fillText(lbl, 12 * dpr, y0 - 4 * dpr);
+        const lbl = lat === 0 ? 'EQ 0°' : `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`;
+        const tw = ctx.measureText(lbl).width;
+        const ly = y0 - 7 * dpr;
+        if (placer.canPlace(12 * dpr, ly - fh / 2, 12 * dpr + tw, ly + fh / 2)) {
+          ctx.fillText(lbl, 12 * dpr, ly);
         }
       }
       ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
@@ -135,9 +170,12 @@
       for (const lat of [50, -50]) {
         const [, y0] = toScreen(0, L.rowOfLat(lat));
         ctx.beginPath(); ctx.moveTo(tx, y0); ctx.lineTo(tx + W * scale, y0); ctx.stroke();
-        if (y0 > 46 * dpr && y0 < canvas.height - 40 * dpr) {
-          ctx.fillStyle = 'rgba(245, 158, 11, 0.72)';
-          ctx.textAlign = 'right'; ctx.fillText(`${Math.abs(lat)}° ${lat > 0 ? 'N' : 'S'} · NASA latitude limit`, canvas.width - 16 * dpr, y0 - 4 * dpr); ctx.textAlign = 'left';
+        const lbl = cssW < 520 ? `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'} limit` : `${Math.abs(lat)}° ${lat > 0 ? 'N' : 'S'} NASA limit`;
+        const tw = ctx.measureText(lbl).width;
+        const ly = y0 - 7 * dpr;
+        if (placer.canPlace(canvas.width - 14 * dpr - tw, ly - fh / 2, canvas.width - 14 * dpr, ly + fh / 2)) {
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.78)';
+          ctx.textAlign = 'right'; ctx.fillText(lbl, canvas.width - 14 * dpr, ly); ctx.textAlign = 'left';
         }
       }
       ctx.setLineDash([]);
@@ -185,6 +223,8 @@
       if (ovDirty) buildOverlay();
       const dpr = global.devicePixelRatio || 1;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const bounds = getMapSafeBounds(dpr);
+      const placer = createLabelPlacer(dpr, bounds);
 
       if (S.viewMode === '3d' && globe) {
         globe.render({ opacity: S.opacity, showOverlay: S.overlay !== 'none' && S.globeOverlay });
@@ -205,13 +245,28 @@
             ctx.globalAlpha = 1;
           }
         }
-        draw2DGraticule(dpr);
+        draw2DGraticule(dpr, placer, bounds);
+      }
+
+      // Reserve candidate & pin label zones so place names never overwrite markers or numbers
+      S.candidates.forEach((c) => {
+        const [sx, sy, vis] = projectGrid(c.x, c.y);
+        if (vis) placer.reserve(sx - 18 * dpr, sy - 18 * dpr, sx + 34 * dpr, sy + 18 * dpr);
+      });
+      if (S.route.start) {
+        const [sx, sy, vis] = projectGrid(S.route.start.x, S.route.start.y);
+        if (vis) placer.reserve(sx - 24 * dpr, sy - 24 * dpr, sx + 48 * dpr, sy + 16 * dpr);
+      }
+      if (S.route.goal) {
+        const [sx, sy, vis] = projectGrid(S.route.goal.x, S.route.goal.y);
+        if (vis) placer.reserve(sx - 24 * dpr, sy - 24 * dpr, sx + 48 * dpr, sy + 16 * dpr);
       }
 
       const effScale = S.viewMode === '3d' && globe ? (2.8 / Math.max(0.4, globe.state.camDist - 1.0)) : S.view.scale;
       const fontPx = Math.max(9.5, Math.min(12, 8.5 + effScale * 0.8)) * dpr;
-      ctx.font = `500 ${fontPx}px "Inter", "Segoe UI", sans-serif`;
+      ctx.font = `500 ${fontPx}px "IBM Plex Sans", system-ui, sans-serif`;
       ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
       if (S.showRegions || S.showEZ) for (const r of REGIONS) {
         if (S.showEZ && !r.ez && !S.showRegions) continue;
         if (!S.showEZ && !S.showRegions) break;
@@ -227,8 +282,11 @@
           ctx.beginPath(); ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2); ctx.fill();
         }
         if (ez || effScale >= 1.5 || (r.mission && effScale >= 1.1)) {
-          ctx.fillStyle = 'rgba(3, 5, 8, 0.82)'; ctx.fillText(r.name, x + 7 * dpr, y + 1 * dpr);
-          ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.92)'); ctx.fillText(r.name, x + 6 * dpr, y);
+          const lx = x + 6 * dpr, tw = ctx.measureText(r.name).width;
+          if (placer.canPlace(lx, y - fontPx * 0.6, lx + tw, y + fontPx * 0.6)) {
+            ctx.fillStyle = 'rgba(3, 5, 8, 0.86)'; ctx.fillText(r.name, lx + 1 * dpr, y + 1 * dpr);
+            ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.94)'); ctx.fillText(r.name, lx, y);
+          }
         }
       }
 
@@ -258,6 +316,9 @@
       });
       if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
       if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
+      if (global.MDE_EVA && global.MDE_EVA.drawGlobalWalkbackOverlay && (S.mode === 'eva' || S.mode === 'route' || S.selected)) {
+        global.MDE_EVA.drawGlobalWalkbackOverlay(ctx, projectGrid, L, S, dpr);
+      }
     }
 
     function zoomBy(factor) {

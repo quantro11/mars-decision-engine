@@ -392,6 +392,28 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert(kbState.summary.includes('Plain summary') && kbState.summary.includes('mSv/yr'), `Plain summary card missing or incomplete: ${kbState.summary}`);
     assert(kbState.checksText.includes('✓') || kbState.checksText.includes('✕'), 'Constraint check badges must include non-color ✓/✕ indicator');
 
+    // Verify TES Dust Abundance never shows "no data" and Zoom to Local EVA Zone + Helmet Visor HUD work end-to-end
+    const detailText = await evalJS(`document.getElementById('detail').textContent`);
+    assert(!/TES Dust Abundance\s*no data/i.test(detailText), `TES Dust Abundance should be interpolated, not 'no data': ${detailText}`);
+    await evalJS(`document.getElementById('use-eva').click()`);
+    const evaCheck = await waitFor(() => evalJS(`(() => {
+      const p = document.getElementById('panel-eva');
+      const c = document.getElementById('eva-local-canvas');
+      if (!p || p.classList.contains('hidden') || !c) return null;
+      return { text: p.textContent, w: c.width, h: c.height };
+    })()`), 'Tactical EVA 1m/px panel & local canvas');
+    assert(evaCheck.w > 0 && evaCheck.text.includes('Walkback') && evaCheck.text.includes('kcal/h'), 'EVA panel renders Walkback & metabolic telemetry');
+    await evalJS(`document.getElementById('btn-open-hud').click()`);
+    const hudCheck = await waitFor(() => evalJS(`(() => {
+      const m = document.getElementById('hud-modal');
+      const c = document.getElementById('hud-pov-canvas');
+      if (!m || m.classList.contains('hidden') || !c) return null;
+      return { text: m.textContent, w: c.width };
+    })()`), 'Helmet Visor HUD modal & Ground POV canvas');
+    assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT'), 'Helmet Visor HUD renders Ground POV and LIBS oxides');
+    await evalJS(`document.getElementById('hud-close').click()`);
+    await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+
     await evalJS(`document.getElementById('guide-dismiss').click()`);
     assert(await evalJS(`document.getElementById('welcome-guide').classList.contains('hidden')`), '#guide-dismiss should hide the quick-start guide');
 
@@ -441,6 +463,8 @@ async function runHttpE2E(browserPath, securityHeaders) {
         const right = document.querySelector('.panel.right').getBoundingClientRect();
         const canvas = document.getElementById('map');
         const modes = document.querySelector('.modes').getBoundingClientRect();
+        const brand = document.querySelector('.brand').getBoundingClientRect();
+        const headerOverlap = !(modes.left >= brand.right - 2 || modes.top >= brand.bottom - 2 || modes.right <= brand.left + 2 || modes.bottom <= brand.top + 2);
         return {
           scrollW: doc.scrollWidth,
           innerW: window.innerWidth,
@@ -451,9 +475,11 @@ async function runHttpE2E(browserPath, securityHeaders) {
           rightTop: Math.round(right.top),
           canvasW: canvas.width,
           canvasH: canvas.height,
-          modesRight: Math.round(modes.right)
+          modesRight: Math.round(modes.right),
+          headerOverlap
         };
       })()`);
+      assert(!layout.headerOverlap, `${vp.name}: .brand and .modes overlapped in topbar`);
       assert(layout.scrollW <= layout.innerW, `${vp.name}: horizontal overflow (${layout.scrollW} > ${layout.innerW})`);
       assert(layout.modesRight <= vp.width + 1, `${vp.name}: mode nav overflowed viewport (${layout.modesRight} > ${vp.width})`);
       assert(layout.mapW >= 280 && layout.mapH >= 240, `${vp.name}: map container too small (${layout.mapW}x${layout.mapH})`);

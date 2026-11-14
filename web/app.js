@@ -17,7 +17,7 @@
   const W = META.width, H = META.height;
   const globeCanvas = $('#globe');
   const globe = (window.GLOBE3D && globeCanvas) ? window.GLOBE3D.createGlobe(globeCanvas) : null;
-  let viewport = null, panels = null;
+  let viewport = null, panels = null, eva = null;
 
   // ------------------------------------------------------------ theme & language
   function applyTheme(theme) {
@@ -38,6 +38,7 @@
     if ($('#btn-relief') && globe) $('#btn-relief').textContent = `${t('relief')} ${globe.state.exaggeration}×`;
     if ($('#ls-v')) $('#ls-v').textContent = `${S.crisis.ls}° · ${(I18N.trDomain ? I18N.trDomain(STORM.seasonName(S.crisis.ls)) : STORM.seasonName(S.crisis.ls)).split(' /')[0]}`;
     if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
+    if (eva) eva.renderPanel();
     if (globalThis.MDE_LIVE_STATE && renderHabitability) renderHabitability(false, { useCache: true });
     if (viewport) viewport.draw();
   }
@@ -65,7 +66,6 @@
   // ------------------------------------------------------------ Worker RPC + fallback
   let computeWorker = null, workerReady = false, workerSeq = 0;
   const workerPending = new Map();
-
   function initWorker() {
     if (typeof Worker === 'undefined' || location.protocol === 'file:') return;
     try {
@@ -74,51 +74,28 @@
         const msg = e.data || {}, cb = workerPending.get(msg.id);
         if (!cb) return;
         workerPending.delete(msg.id);
-        if (msg.ok) cb.resolve(msg);
-        else cb.reject(new Error(msg.error || 'Worker error'));
+        if (msg.ok) cb.resolve(msg); else cb.reject(new Error(msg.error || 'Worker error'));
       };
       computeWorker.onerror = () => {
         for (const cb of workerPending.values()) cb.reject(new Error('Worker failed'));
-        workerPending.clear();
-        workerReady = false;
-        computeWorker = null;
+        workerPending.clear(); workerReady = false; computeWorker = null;
       };
-    } catch (e) {
-      computeWorker = null;
-    }
+    } catch (e) { computeWorker = null; }
   }
-
   function workerCall(payload) {
     return new Promise((resolve, reject) => {
       if (!computeWorker) return reject(new Error('No worker'));
-      const id = ++workerSeq;
-      workerPending.set(id, { resolve, reject });
-      computeWorker.postMessage({ ...payload, id });
+      const id = ++workerSeq; workerPending.set(id, { resolve, reject }); computeWorker.postMessage({ ...payload, id });
     });
   }
-
   async function initWorkerLayers() {
-    initWorker();
-    if (!computeWorker) return;
+    initWorker(); if (!computeWorker) return;
     try {
-      await workerCall({
-        cmd: 'initLayers', width: W, height: H, meta: META,
-        elev: L.elev, slope: L.slope, rough: L.rough,
-        ice01: L.ice01 || null, ice15: L.ice15 || null, ice5: L.ice5 || null,
-        ti: L.ti, dust: L.dust, cave: L.cave || null,
-      });
+      await workerCall({ cmd: 'initLayers', width: W, height: H, meta: META, elev: L.elev, slope: L.slope, rough: L.rough, ice01: L.ice01 || null, ice15: L.ice15 || null, ice5: L.ice5 || null, ti: L.ti, dust: L.dust, cave: L.cave || null });
       workerReady = true;
-    } catch (e) {
-      workerReady = false;
-      computeWorker = null;
-    }
+    } catch (e) { workerReady = false; computeWorker = null; }
   }
-
-  function syncWorkerLayer(key) {
-    if (workerReady && computeWorker && L[key]) {
-      workerCall({ cmd: 'setLayer', key, data: L[key] }).catch(() => {});
-    }
-  }
+  function syncWorkerLayer(key) { if (workerReady && computeWorker && L[key]) workerCall({ cmd: 'setLayer', key, data: L[key] }).catch(() => {}); }
 
   // ------------------------------------------------------------ compute pipelines
   let scoreTicket = 0, routeTicket = 0;
@@ -208,8 +185,30 @@
     onSelect: select,
     onUseRoute: (x, y) => { setMode('route'); S.route.start = { x, y }; S.route.goal = null; S.route.safe = S.route.straight = null; panels.renderRoute(); viewport.draw(); },
     onUseCrisis: setCrisisSite,
+    onUseEva: (x, y, v, regionName) => {
+      if (eva) eva.zoomToZone({ lat: L.latOfRow(y), lon: L.lonOfCol(x), v, regionName });
+      setMode('eva');
+      if (S.viewMode === '2d' && viewport) {
+        S.view.scale = Math.max(S.view.scale, 6.0);
+        S.view.tx = viewport.canvas.width / 2 - x * S.view.scale;
+        S.view.ty = viewport.canvas.height / 2 - y * S.view.scale;
+        viewport.wrapView(); viewport.updateScaleBar(); viewport.draw();
+      }
+    },
     onGlobeFly: (lat, lon) => { if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon); viewport.schedule3D(); } },
   });
+
+  if (window.MDE_EVA) {
+    eva = window.MDE_EVA.createEvaController({
+      doc: document, S, layers,
+      onSelectCoord: (x, y, lat, lon) => {
+        if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon, 1.75); if (viewport) viewport.schedule3D(); }
+        if (L.elev) select(x, y, null);
+      },
+      onRedraw: () => { if (viewport && L.elev) viewport.draw(); },
+    });
+    eva.bindControls();
+  }
 
   viewport = window.MDE_MAP2D.createViewport({
     doc: document, S, layers, SCORING, REGIONS, OVERLAYS, MARKERS: window.MDE_MARKERS, FMT, globe, globeCanvas,
@@ -270,12 +269,13 @@
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    for (const k of ['score', 'route', 'crisis', 'habitability']) {
+    for (const k of ['score', 'eva', 'route', 'crisis', 'habitability']) {
       if ($('#panel-' + k)) $('#panel-' + k).classList.toggle('hidden', k !== m);
     }
-    if (m === 'route') S.overlay = 'slope'; else if (m === 'score') S.overlay = 'score';
+    if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'score') S.overlay = 'score';
     document.querySelectorAll('#overlay button').forEach(b => { const isActive = b.dataset.ov === S.overlay; b.classList.toggle('active', isActive); b.setAttribute('aria-pressed', String(isActive)); });
     updateHudLayer(); viewport.markOverlayDirty(); renderLegend();
+    if (m === 'eva' && eva) eva.renderPanel();
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
     if (m === 'habitability') renderHabitability();
@@ -378,7 +378,7 @@
   on('#btn-dl-geojson', 'onclick', () => downloadBriefGeoJSON(getBriefCtx()));
   on('#btn-print-brief', 'onclick', () => window.print());
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeModal($('#about')); closeModal($('#brief-modal')); return; }
+    if (e.key === 'Escape') { closeModal($('#about')); closeModal($('#brief-modal')); if (eva) eva.closeHudModal(); return; }
     if (e.key === 'Tab' && activeModal && !activeModal.classList.contains('hidden')) {
       const f = [...activeModal.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
       if (f.length && e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }

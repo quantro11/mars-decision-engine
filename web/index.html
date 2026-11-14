@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mars Base Decision Engine</title>
-<meta name="description" content="Where should humans land and live on Mars? A decision engine built on real MOLA, SWIM and TES data.">
+<title>Mars EVA &amp; Base Decision Engine</title>
+<meta name="description" content="Where should humans land, live, and walk on Mars? Phase 1 orbital base selection and Phase 2 hyper-local 1m/px EVA &amp; suit HUD planner built on real NASA data.">
 <link rel="canonical" href="https://mars-decision-engine.vercel.app/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Mars Base Decision Engine">
+<meta property="og:title" content="Mars EVA &amp; Base Decision Engine">
 <meta property="og:description" content="Where should humans land and live on Mars? Landing-site, rover traverse, and dust-storm survival planning built on MOLA, SWIM 2.0, TES and Viking datasets.">
 <meta property="og:url" content="https://mars-decision-engine.vercel.app/">
 <meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,16 +33,17 @@
       </svg>
     </span>
     <span class="brand-text">
-      <span class="brand-name">Mars Base Decision Engine</span>
-      <span class="brand-sub">Landing-site &amp; survival planning on real orbital data</span>
+      <span class="brand-name">Mars EVA &amp; Base Decision Engine</span>
+      <span class="brand-sub">Phase 1: Strategic Base Siting · Phase 2: Hyper-Local EVA &amp; Suit HUD</span>
     </span>
   </div>
 
   <nav class="modes" aria-label="Modules">
-    <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-idx">I</span><span class="mode-label">Site selection</span></button>
-    <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-idx">II</span><span class="mode-label">Rover route</span></button>
-    <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-idx">III</span><span class="mode-label">Dust-storm power</span></button>
-    <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-idx">IV</span><span class="mode-label">Habitability &amp; APIs</span></button>
+    <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-label">Site selection</span></button>
+    <button class="mode-btn" data-mode="eva" aria-pressed="false"><span class="mode-label">Tactical EVA · 1m/px</span></button>
+    <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-label">Rover route</span></button>
+    <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-label">Dust-storm power</span></button>
+    <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-label">Habitability &amp; APIs</span></button>
   </nav>
 
   <div class="topbar-right">
@@ -56,7 +57,7 @@
       </select>
     </div>
     <button id="btn-lang" class="btn-spec" type="button" aria-pressed="false" title="Switch interface to Turkish (Türkçe)">TR</button>
-    <button id="btn-theme" class="btn-spec" type="button" aria-pressed="false" title="Toggle high-contrast light/dark theme">Light theme</button>
+    <button id="btn-theme" class="btn-spec" type="button" aria-pressed="false" title="Toggle light/dark theme">Light theme</button>
     <button id="btn-export" class="btn-spec" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="brief-modal" title="Export the current analysis as a brief (JSON / printable)">Export brief</button>
     <button id="btn-about" class="btn-spec" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">Method</button>
   </div>
@@ -67,7 +68,7 @@
   <aside class="panel left" aria-label="Mission controls">
     <section id="panel-score" class="mode-panel">
       <div class="sec-head"><h2>Mission priority</h2></div>
-      <p class="intro-lead" id="score-intro">Choose a goal to rank landing sites across Mars, or adjust what matters most below.</p>
+      <p class="intro-lead" id="score-intro">Pick a preset or tune weights below to rank landing areas.</p>
       <div class="presets" id="presets"></div>
 
       <div class="sec-head"><h2>Criteria weights</h2><span class="hint">normalised to 100 %</span></div>
@@ -99,6 +100,36 @@
       </div>
       <div class="row"><button id="sens-run" class="ghost">Run robustness test</button></div>
       <div id="sens-result"></div>
+    </section>
+
+    <section id="panel-eva" class="mode-panel hidden">
+      <div class="sec-head"><h2>Tactical EVA / Marswalk</h2><span class="hint">1 km × 1 km · 1 m/px</span></div>
+      <p class="help" id="eva-intro">Hyper-local 1 m/px astronaut foot traverse around boulders, steep crater walls, and sand traps with xEMU suit O₂/battery/cooling telemetry, Walkback Safety Limit, and Helmet Visor HUD.</p>
+
+      <div class="control-group">
+        <label for="eva-zone-select">Local HiRISE / CTX EVA Zone
+          <select id="eva-zone-select">
+            <option value="gale_boxwork">Gale Crater · Mount Sharp Boxwork (2025)</option>
+            <option value="jezero_delta">Jezero Crater · Delta &amp; Cheyava Falls</option>
+            <option value="nili_fossae">Nili Fossae · Carbonate &amp; Clay Trough</option>
+            <option value="arcadia_ice">Arcadia Planitia · Polygon Ice Sheet</option>
+          </select>
+        </label>
+        <label for="eva-buddy-mode">EVA Crew &amp; Mobility Architecture
+          <select id="eva-buddy-mode">
+            <option value="buddy">2-Crew Buddy System (EV-1 + EV-2 Foot Pair)</option>
+            <option value="rover_eva">Pressurized Rover + Foot EVA Combination</option>
+          </select>
+        </label>
+        <label>Science equipment / sample load <span id="eva-load-v">15 kg</span>
+          <input type="range" id="eva-load" min="0" max="35" step="1" value="15"></label>
+        <label>Astronaut walking speed <span id="eva-speed-v">2.4 km/h</span>
+          <input type="range" id="eva-speed" min="10" max="45" step="1" value="24"></label>
+        <label>xEMU suit max slope <span id="eva-maxslope-v">15°</span>
+          <input type="range" id="eva-maxslope" min="8" max="24" step="1" value="15"></label>
+      </div>
+
+      <div id="eva-results"></div>
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
@@ -152,7 +183,7 @@
 
     <section id="panel-habitability" class="mode-panel hidden">
       <div class="sec-head"><h2>Planetary &amp; Habitability APIs</h2></div>
-      <p class="help">Space weather (live) and Mars surface weather (a frozen archive) from NASA Open APIs, plus Earth-vs-Mars biosphere habitability metrics. Every result is labelled with its true status — LIVE, ARCHIVE or REFERENCE — so nothing is presented as live when it is not.</p>
+      <p class="help">Live NASA DONKI space weather, InSight archive observations, and Curiosity Gale climatology.</p>
 
       <div class="api-key-box">
         <label for="nasa-api-key">NASA Open API Key <span class="hint">optional</span></label>
@@ -161,14 +192,14 @@
           <button type="button" id="btn-toggle-key" class="ghost" aria-pressed="false">Show</button>
           <button type="button" id="btn-save-key" class="ghost">Save</button>
         </div>
-        <div class="help note-sm">When this page is served by the mission console, requests go through the same-origin proxy and no key is stored in the browser. A key entered here is only used for standalone deployments. <b>DEMO_KEY</b> is a last-resort fallback only: it is rate-limited to roughly 30 requests/hour and 50/day per IP and is not a live service.</div>
+        <div class="help note-sm">Leave blank for server proxy, or add a personal NASA key for standalone use (<b>DEMO_KEY</b> has strict IP rate limits).</div>
       </div>
 
       <div class="row">
         <button id="btn-fetch-live" class="btn-spec btn-full">Fetch weather &amp; space weather</button>
       </div>
 
-      <div id="live-api-status" class="live-status" role="status" aria-live="polite">● Ready to query NASA APIs</div>
+      <div id="live-api-status" class="live-status" role="status" aria-live="polite">Ready to query NASA APIs</div>
       <div id="live-api-results"></div>
     </section>
 
@@ -200,9 +231,9 @@
     <div class="map-top-bar">
       <div class="telemetry-pill">
         <span class="status-dot"></span>
-        <span id="hud-proj">Map · equirectangular</span>
+        <span id="hud-proj">Equirectangular</span>
         <span class="hud-sep">·</span>
-        <span id="hud-layer">Overlay · suitability score</span>
+        <span id="hud-layer">Score layer</span>
       </div>
       <div class="map-controls">
         <div id="globe-tools" class="globe-tools hidden">
@@ -230,28 +261,21 @@
     <div class="map-hud">
       <span id="hud-coord">—</span>
       <span class="hud-sep">·</span>
-      <span class="hud-controls-hint" id="hud-hint">Drag to pan · scroll to zoom · click to inspect</span>
+      <span class="hud-controls-hint" id="hud-hint">Drag to pan, scroll to zoom, click to inspect</span>
     </div>
 
     <div id="loading" class="loading" role="status" aria-live="polite">
       <div class="spinner"></div>
-      <div class="loading-title">Preparing Mars</div>
-      <div class="loading-sub" id="loading-sub">Loading NASA elevation, underground water ice, and temperature maps…</div>
+      <div class="loading-title">Mars Decision Engine</div>
+      <div class="loading-sub" id="loading-sub">Loading NASA elevation, ice, and thermal layers…</div>
     </div>
   </section>
 
   <!-- RIGHT -->
   <aside class="panel right" aria-label="Candidates and site details">
-    <section id="welcome-guide" class="welcome-guide" aria-label="Quick start guide">
-      <div class="guide-head">
-        <span class="guide-title" id="guide-title">How to use this map</span>
-        <button id="guide-dismiss" class="guide-close" aria-label="Dismiss guide">Hide</button>
-      </div>
-      <ol class="guide-steps" id="guide-steps">
-        <li><b>Pick a goal</b> on the left — safer landing, near water ice, or balanced.</li>
-        <li><b>Click any bright area</b> on Mars or a ranked card below to inspect it.</li>
-        <li><b>Read the plain summary</b> under <em>Selected location</em> for safety &amp; survival facts.</li>
-      </ol>
+    <section id="welcome-guide" class="welcome-guide" aria-label="Quick tip">
+      <p class="guide-msg" id="guide-text">Pick a ranked site below or tap anywhere on Mars to inspect landing safety, water ice, and storm power.</p>
+      <button id="guide-dismiss" class="guide-close" aria-label="Dismiss tip">Hide</button>
     </section>
     <section id="candidates-sec">
       <div class="sec-head"><h2>Best candidate regions</h2><span class="hint">2°×2° blocks · ≥ 800 km apart</span></div>
@@ -361,6 +385,20 @@
   </div>
 </div>
 
+<div id="hud-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="hud-modal-title">
+  <div class="modal-box hud-modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="hint">Phase 2 · Ground POV &amp; xEMU Visor Display</div>
+        <h1 id="hud-modal-title">xEMU Helmet Visor HUD</h1>
+        <div class="help note-sm" id="hud-modal-sub">Curiosity Mastcam / Perseverance Navcam Surface Perspective</div>
+      </div>
+      <button class="modal-close" id="hud-close" aria-label="Close">Close</button>
+    </div>
+    <div id="hud-modal-body"></div>
+  </div>
+</div>
+
 <script src="layers/meta.js"></script>
 <script src="caves.js"></script>
 <script src="scoring.js"></script>
@@ -375,6 +413,7 @@
 <script src="ui/overlays.js"></script>
 <script src="ui/layers.js"></script>
 <script src="ui/i18n.js"></script>
+<script src="ui/eva.js"></script>
 <script src="ui/panels.js"></script>
 <script src="ui/map2d.js"></script>
 <script src="ui/habitability.js"></script>
