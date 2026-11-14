@@ -67,6 +67,8 @@ function loadVercelHeaders() {
 function createCdpClient(proc) {
   const writeStream = proc.stdio[3];
   const readStream = proc.stdio[4];
+  if (writeStream) writeStream.on('error', () => {});
+  if (readStream) readStream.on('error', () => {});
   let nextId = 1;
   let buf = Buffer.alloc(0);
   const pending = new Map();
@@ -410,6 +412,11 @@ async function runHttpE2E(browserPath, securityHeaders) {
     await evalJS(`document.getElementById('btn-eva-scan').click()`);
     const step8Label = await evalJS(`document.getElementById('eva-scan-step-v').textContent`);
     assert(step8Label.includes('Step 8/8') && step8Label.includes('100%'), `100% Verified button should complete 5-domain assimilation, got: ${step8Label}`);
+    const demoBtnExists = await evalJS(`!!document.getElementById('btn-eva-demo')`);
+    assert(demoBtnExists, 'Guided Jury Demo button #btn-eva-demo should be present in EVA panel');
+    await evalJS(`document.getElementById('btn-eva-demo').click()`);
+    const demoPanelTxt = await evalJS(`document.getElementById('eva-results').textContent`);
+    assert(demoPanelTxt.includes('DTEEC_') && /MISSION COMPLETION/i.test(demoPanelTxt), 'Guided Jury Demo populates HiRISE DTM ID & Mission Completion Report');
     await evalJS(`document.getElementById('btn-open-hud').click()`);
     const hudCheck = await waitFor(() => evalJS(`(() => {
       const m = document.getElementById('hud-modal');
@@ -417,7 +424,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
       if (!m || m.classList.contains('hidden') || !c) return null;
       return { text: m.textContent, w: c.width };
     })()`), 'Helmet Visor HUD modal & Ground POV canvas');
-    assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT') && hudCheck.text.includes('MGL POSE'), 'Helmet Visor HUD renders Ground POV, MGL lock, and LIBS oxides');
+    assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT') && hudCheck.text.includes('MGL POSE') && hudCheck.text.includes('CO2 RCA:') && hudCheck.text.includes('RETURN RSV:'), 'Helmet Visor HUD renders Ground POV, MGL lock, LIBS oxides, CO2 RCA, and Return Reserve');
     await evalJS(`document.getElementById('hud-close').click()`);
     await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
 
@@ -436,7 +443,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
     })`);
     assert.strictEqual(trState.lang, 'tr', 'Clicking #btn-lang should set html lang="tr"');
     assert.strictEqual(trState.modeLabel, 'Saha seçimi', 'Turkish mode button label rendered');
-    assert.strictEqual(trState.slopeLead, 'Eğim sınırı ', 'Turkish slider label preserved without clobbering input');
+    assert.strictEqual(trState.slopeLead, 'Model eğim sınırı (zemin uyarlamalı) ', 'Turkish slider label preserved without clobbering input');
     assert(trState.legendText.includes('ELENDİ/ZAYIF') || trState.legendText.includes('DİK'), `Legend should localize cleanly: ${trState.legendText}`);
     assert.strictEqual(trState.saveText, 'Kaydet', 'Module IV save button localized');
     assert(trState.aboutHtml.includes('Mühendislik Gerekçesi'), '#about-content Method modal translates to Turkish');

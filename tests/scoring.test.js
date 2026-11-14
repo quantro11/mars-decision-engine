@@ -251,7 +251,31 @@ assert.ok(rUp.ok && rDn.ok && rUp.stats.totalAscentM > 5000 && rDn.stats.totalDe
 const gCoupled = EVA.buildLocalGrid(EVA.ZONES.jezero_delta, L);
 assert.ok(gCoupled.N === 100 && gCoupled.slope.length === 10000 && gCoupled.elev[0] !== 0, 'EVA.buildLocalGrid couples 1 km micro-DEM to orbital rasters and 2D finite-difference slopes');
 const p2Bench = EVA.validatePhase2Benchmarks(L, S);
-assert.ok(p2Bench.allPass && p2Bench.checks.length === 3, 'EVA.validatePhase2Benchmarks passes Perseverance Sol 0-420, Curiosity Boxwork, and Apollo/xEMU bioenergetics checks');
+assert.ok(p2Bench.allPass && p2Bench.checks.length === 5, 'EVA.validatePhase2Benchmarks passes 4 biome traverses (Perseverance, Curiosity, Nili Fossae, Arcadia Planitia) + Apollo/xEMU bioenergetics & CO2/reserve checks');
+
+// --- Monte Carlo 100-run Wilson CI, RAD uncertainty band, soil-adjusted slope limit, & Layer Provenance
+const mcOut = S.sensitivity(L, S.PRESETS.balanced.w, true, [{ x: 10, y: 16 }], { mode: 'sum', runs: 100, spread: 0.2, n: 5, blockPx: 4, minSepPx: 10, matchPx: 6 }, S.mulberry32(2026));
+assert.strictEqual(mcOut.runs, 100, 'Monte Carlo defaults to 100 perturbed runs');
+assert.ok(Array.isArray(mcOut.ci95) && mcOut.ci95.length === 1 && mcOut.ci95[0][0] <= mcOut[0] && mcOut.ci95[0][1] >= mcOut[0], 'Wilson 95% binomial CI flanks observed stability rate');
+const radB = S.radDoseBand(-4400, 0);
+assert.ok(radB.uncMsvYr > 30 && radB.relUncPct === 18.8 && radB.min < radB.nominal && radB.max > radB.nominal, 'RAD global extrapolation includes ±18.8% uncertainty band');
+assert.ok(S.effectiveSlopeLimit(15, 70).effectiveMaxDeg < 15 && S.effectiveSlopeLimit(15, 250).effectiveMaxDeg >= 15, '15° operational slope limit adapts to soil thermal inertia');
+assert.ok(Array.isArray(S.LAYER_PROVENANCE) && S.LAYER_PROVENANCE.length >= 7 && S.LAYER_PROVENANCE.every(p => p.name && p.productCode && p.crs && p.nativeRes && p.shippedRes && p.epoch), 'Full scientific layer provenance catalog exported');
+assert.ok(typeof safe.stats.totalAscentM === 'number' && safe.stats.hazardZones && typeof safe.stats.hazardZones.steepKm === 'number' && safe.stats.returnRoute && safe.stats.returnRoute.returnKm > 0, 'ASTAR.plan exports ascent/descent, hazardZones, and returnRoute');
+assert.ok(safe.stats.evaStats && typeof safe.stats.evaStats.co2ScrubberUsedPct === 'number' && safe.stats.evaStats.returnReserveProtected === true, 'ASTAR.plan evaStats includes CO2 RCA scrubber and return reserve protection');
+assert.ok(safe.stats.safeHavens.every(h => h.vehicleScope === 'pressurized_rover_only'), '200 km rest stops explicitly restricted to pressurized rover traverses');
+
+// 5. Physics-Informed ML (PIML) 1-minute Cadence Multi-Horizon Dust & Vortex Forecaster
+assert.ok(Array.isArray(T.MDAD_CORRIDORS) && T.MDAD_CORRIDORS.length === 6, 'MDAD 6 historical storm corridors exported');
+const mlVortex = T.predictDustML({ lat: 18.4, lon: 77.5, elev: -2500, slope: 3.5, ti: 160, dust: 0.72, ls: 255, tauPeak: 7.5, telemetryRegime: 'vortex_imminent' });
+const mlCalm = T.predictDustML({ lat: 18.4, lon: 77.5, elev: -2500, slope: 3.5, ti: 320, dust: 0.25, ls: 70, tauPeak: 0.5, telemetryRegime: 'clear_calm' });
+assert.strictEqual(mlVortex.cadenceSec, 60, 'PIML runs at 1-minute (60 s) cadence');
+assert.ok(mlVortex.horizons.h1m.prob > 0.85 && mlVortex.horizons.h6m.prob > 0.80, 'Imminent vortex telemetry regime triggers >85% +1 min and >80% +6 min probability');
+assert.ok(mlCalm.horizons.h1m.prob < 0.20 && mlCalm.horizons.h6m.prob < 0.20, 'Clear calm telemetry regime keeps +1 min and +6 min probability <20%');
+assert.ok(mlVortex.horizons.h1sol.prob > mlCalm.horizons.h1sol.prob + 0.40, 'Perihelion storm corridor raises +1-3 Sol regional probability well above aphelion calm');
+assert.ok(sim15.dustMl && sim15.dustMl.cadenceSec === 60 && typeof sim15.dustMl.horizons.h1m.probPct === 'number', 'EVA.simulateEVA couples 1-minute PIML nowcast to tactical EVA telemetry');
+const mlBench = T.validateDustMLBenchmarks(L);
+assert.ok(mlBench.allPass && mlBench.meanAccuracyPct >= 95.5 && mlBench.meanRocAuc >= 0.98, 'Out-of-sample Temporal Split holdout benchmarks achieve >=95.5% accuracy and >=0.98 ROC-AUC across all 4 horizons');
 
 (async () => {
   const fail = async () => { throw new Error('net down'); };

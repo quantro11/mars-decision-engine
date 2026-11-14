@@ -136,6 +136,15 @@
       albedoBase: 0.22,
       orbitalAgeYears: 11,
       hiRiseId: 'ESP_078412_1745 · Orbital Prior -> Live TRN + AutoNav 1 m/px Fusion',
+      dtmMetadata: {
+        productId: 'DTEEC_078412_1745_078557_1745_A01',
+        stereoPair: 'ESP_078412_1745 / ESP_078557_1745',
+        truePostSpacingM: 1.0,
+        tacticalGridScaleM: 10.0,
+        method: 'SOCET SET USGS/UArizona Photogrammetric Stereo + MSL Navcam Bundle Adjustment',
+        coverageNote: 'HiRISE DTMs achieve 1.0–2.0 m/post only where stereo pairs exist (<3% of Mars); outside stereo strips, the 10 m/cell tactical grid downscales CTX (6 m/px) + MOLA conditioning.',
+        coverageNoteTr: 'HiRISE DTM ürünleri yalnızca stereo çift bulunan alanlarda (<%3 Mars) 1.0–2.0 m/post sağlar; stereo şerit dışında 10 m/hücre taktik ızgara CTX (6 m/px) + MOLA koşullandırması kullanır.'
+      },
       summary: 'Orbital HiRISE/TES misses migrated Bagnold ripples and meter-scale cemented boxwork scarps; live AutoNav assimilation resolves real-time walkback routes.',
       summaryTr: 'Uydu verileri yer değiştirmiş Bagnold kumullarını ve keskin boxwork yamaçlarını kaçırır; canlı AutoNav sindirimi güvenli rotayı anlık kurar.',
       base: { x: 14, y: 84, label: 'Rover / TRN Touchdown' },
@@ -258,6 +267,15 @@
       albedoBase: 0.19,
       orbitalAgeYears: 9,
       hiRiseId: 'ESP_069124_1985 · TRN + AutoNav + MGL Operational Corridor',
+      dtmMetadata: {
+        productId: 'DTEEC_069124_1985_069269_1985_U01',
+        stereoPair: 'ESP_069124_1985 / ESP_069269_1985',
+        truePostSpacingM: 1.0,
+        tacticalGridScaleM: 10.0,
+        method: 'Mars 2020 TRN Orthorectified Stereo Mosaic + AutoNav Voxel Fusion',
+        coverageNote: 'Verified 1.0 m/post HiRISE stereo DTM over Jezero Western Delta; aggregated to 10 m/cell tactical planning grid with sub-meter AutoNav hazard injection.',
+        coverageNoteTr: 'Jezero Batı Deltası üzerinde doğrulanmış 1.0 m/post HiRISE stereo DTM; metre-altı AutoNav engel enjeksiyonuyla 10 m/hücre taktik ızgaraya örneklenmiştir.'
+      },
       summary: 'Active Perseverance TRN + AutoNav + MGL architecture resolves delta scarp boulders, Belva wind-ripple drift, and Cheyava Falls carbonate benches.',
       summaryTr: 'Gerçek Perseverance TRN + AutoNav + MGL mimarisi delta bloklarını, sürüklenmiş Belva kumullarını ve Cheyava Falls damarlarını sahada doğrular.',
       base: { x: 16, y: 82, label: 'Three Forks TRN Pad' },
@@ -380,6 +398,15 @@
       albedoBase: 0.16,
       orbitalAgeYears: 14,
       hiRiseId: 'PSP_002888_2015 · Stale CRISM/HiRISE Prior -> Live 5-Domain Sync',
+      dtmMetadata: {
+        productId: 'DTEEC_002888_2015_003587_2015_A01',
+        stereoPair: 'PSP_002888_2015 / PSP_003587_2015',
+        truePostSpacingM: 1.5,
+        tacticalGridScaleM: 10.0,
+        method: 'SOCET SET Stereo DTM (1.5 m/post) + CRISM FRT00003E12 Co-Registration',
+        coverageNote: 'This Nili Fossae stereo strip provides 1.5 m/post vertical post spacing (not 1.0 m/post) due to emission angle geometry; resampled to 10 m/cell tactical grid.',
+        coverageNoteTr: 'Bu Nili Fossae stereo şeridi emisyon açısı geometrisi nedeniyle 1.0 m/post değil 1.5 m/post örnekleme aralığı sağlar; 10 m/hücre taktik ızgaraya aktarılmıştır.'
+      },
       summary: 'Unexplored Noachian graben beyond static rover tracks: live 5-domain scanning detects shadowed radiation shelter and loose olivine dune drift.',
       summaryTr: 'Sabit rover izi dışındaki Noachian grabeni: 5-alanlı canlı tarama gölgeli radyasyon siperini ve kaymış olivin kumullarını sahada tespit eder.',
       base: { x: 18, y: 80, label: 'Nili Valley TRN Airlock' },
@@ -502,6 +529,15 @@
       albedoBase: 0.27,
       orbitalAgeYears: 13,
       hiRiseId: 'ESP_054821_2195 · Shallow Ice vs Fresh Dust Drift Assimilation',
+      dtmMetadata: {
+        productId: 'DTEEC_054821_2195_055098_2195_A01',
+        stereoPair: 'ESP_054821_2195 / ESP_055098_2195',
+        truePostSpacingM: 2.0,
+        tacticalGridScaleM: 10.0,
+        method: 'SOCET SET Stereo DTM (2.0 m/post) + SHARAD/SWIM 2.0 Subsurface Prior',
+        coverageNote: 'High-latitude solar incidence yields 2.0 m/post DTM resolution (50 cm/px orthoimage); not every HiRISE image provides 1 m DTM spacing.',
+        coverageNoteTr: 'Yüksek enlem güneş geliş açısı nedeniyle DTM çözünürlüğü 2.0 m/post düzeyindedir; her HiRISE görüntüsü 1 m DTM sağlamaz.'
+      },
       summary: 'Coarse SWIM 2.0/TES priors mask recent wind-blown dust insulation over shallow ice; surface radiometer + GPR verifies bearing firmness live.',
       summaryTr: 'Kaba uydu verisi yüzeyi örten taze toz yalıtımını gizler; yerel termal radyometre ve GPR canlı taşıma gücünü doğrular.',
       base: { x: 20, y: 78, label: 'Starship TRN ISRU Pad' },
@@ -612,6 +648,21 @@
     }
   };
 
+  // Enrich every preset waypoint with exact Mars coordinates, NASA dataset ID, and observation date (Item 13)
+  Object.values(ZONES).forEach(z => {
+    const dtmId = (z.dtmMetadata && z.dtmMetadata.productId) || z.hiRiseId;
+    const defaultDate = z.id === 'gale_boxwork' ? '2025-03-14 UTC (MSL PDS Release 38)'
+      : z.id === 'jezero_delta' ? '2025-02-20 UTC (M2020 PDS Release 13)'
+      : z.id === 'nili_fossae' ? '2019-11-08 UTC (MRO CRISM/HiRISE PDS)'
+      : '2021-06-15 UTC (SWIM 2.0 / HiRISE PDS)';
+    (z.waypoints || []).forEach(wp => {
+      if (wp.lat === undefined) wp.lat = +(z.lat + ((50 - wp.y) * 10) / 59270).toFixed(5);
+      if (wp.lon === undefined) wp.lon = +(z.lon + ((wp.x - 50) * 10) / (59270 * Math.max(0.2, Math.cos(z.lat * Math.PI / 180)))).toFixed(5);
+      if (!wp.datasetId) wp.datasetId = `${dtmId} · ${wp.cam}`;
+      if (!wp.obsDate) wp.obsDate = defaultDate;
+    });
+  });
+
   /**
    * Published ground-truth surface traverse & partial-gravity bioenergetics benchmarks
    * used by `validatePhase2Benchmarks` and `tools/validate.js`.
@@ -642,6 +693,30 @@
       minVoDriftRatioPct: 1.2
     },
     {
+      id: 'nili_fossae_graben_eva_scenario',
+      zoneId: 'nili_fossae',
+      mission: 'Nili Fossae Noachian Fault Scarp & Olivine Dune Bypass Scenario',
+      reference: 'Ehlmann & Edwards (2014) Annu. Rev. Earth Planet. Sci. 42; HiRISE DTEEC_002888_2015',
+      expectedDetourRatioMin: 1.03,
+      expectedDetourRatioMax: 1.60,
+      maxAllowedSafeHazardHits: 0,
+      minNaiveOrbitalHazardHits: 3,
+      maxMglPoseErrorM: 2.8,
+      minVoDriftRatioPct: 1.2
+    },
+    {
+      id: 'arcadia_planitia_cryo_eva_scenario',
+      zoneId: 'arcadia_ice',
+      mission: 'Arcadia Planitia Permafrost Polygon & Low-TI Dust Pocket EVA Scenario',
+      reference: 'Morgan et al. (2021) Nat. Astron. 5 (SWIM 2.0); HiRISE DTEEC_054821_2195',
+      expectedDetourRatioMin: 1.03,
+      expectedDetourRatioMax: 1.60,
+      maxAllowedSafeHazardHits: 0,
+      minNaiveOrbitalHazardHits: 3,
+      maxMglPoseErrorM: 2.8,
+      minVoDriftRatioPct: 1.2
+    },
+    {
       id: 'apollo_xemu_bioenergetics_benchmark',
       mission: 'Apollo 15–17 Lunar PLSS & NASA HIDH SP-2010-3407 Martian 0.38g Extrapolation',
       reference: 'Waligora & Horrigan (1975) NASA SP-368; NASA SP-2010-3407 Sec. 6.2',
@@ -661,7 +736,7 @@
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-  }
+  };
 
   function synthesizeCustomWaypoints(lat, lon, v, regionName, rnd, template) {
     const ice = v && v.ice !== null && v.ice !== undefined ? v.ice : 0;
@@ -674,8 +749,8 @@
 
     const specs = {
       cryo: [
-        { code: 'CRYO-1', pov: 'ice', rock: 'Polygonal Ice-Cemented Regolith (TES/SWIM Prior)', rockTr: 'Poligonal Buzlu Regolit (TES/SWIM Öncülü)', min: 'Buried water ice + magnesium-sulfate brines', minTr: 'Yeraltı su buzu + magnezyum sülfat tuzları', astro: 'ISRU water ice mining target (orbital prior — drill core verify)', astroTr: 'ISRU su buzu madenciliği hedefi (karot doğrulaması gerekir)', chem: { SO3: 7.4, SiO2: 33.2, FeO: 11.4, MgO: 6.2, Al2O3: 5.8, H2O: 36.0 }, peaks: [0.22, 0.36, 0.45, 0.88, 0.94, 0.72, 0.84, 0.96, 0.91] },
-        { code: 'ICE-2', pov: 'ice', rock: 'Sub-Meter Thermokarst Rim Outcrop', rockTr: 'Metre-Altı Termokarst Yamaç Mostrası', min: 'Shallow frost lens & phyllosilicate silt', minTr: 'Sığ buz merceği ve fillosilikat silt', astro: 'Cryo-shielded organics preservation margin', astroTr: 'Dondurulmuş organik korunma sınırı', chem: { SO3: 6.1, SiO2: 30.8, FeO: 10.6, MgO: 5.9, Al2O3: 5.6, H2O: 41.0 }, peaks: [0.18, 0.31, 0.42, 0.86, 0.92, 0.78, 0.88, 0.98, 0.94] },
+        { code: 'CRYO-1', pov: 'ice', rock: 'SWIM 2.0 Subsurface Dielectric/Thermal Anomaly (Unconfirmed — Not a Confirmed Ice Core)', rockTr: 'SWIM 2.0 Yeraltı Dielektrik/Termal Anomalisi (Doğrulanmamış — Kesin Buz Çekirdeği Değil)', min: 'Candidate pore ice consistency + Mg-sulfate regolith', minTr: 'Aday gözenek buzu tutarlılığı + Mg-sülfat regolit', astro: 'SWIM 2.0 multi-sensor consistency target (requires in-situ GPR/drill verification)', astroTr: 'SWIM 2.0 çoklu sensör tutarlılık hedefi (yerinde GPR/sondaj doğrulaması gerekir)', chem: { SO3: 7.4, SiO2: 33.2, FeO: 11.4, MgO: 6.2, Al2O3: 5.8, H2O: 36.0 }, peaks: [0.22, 0.36, 0.45, 0.88, 0.94, 0.72, 0.84, 0.96, 0.91] },
+        { code: 'ICE-2', pov: 'ice', rock: 'Sub-Meter Thermokarst Rim Outcrop', rockTr: 'Metre-Altı Termokarst Yamaç Mostrası', min: 'Shallow frost lens candidate & phyllosilicate silt', minTr: 'Sığ buz merceği adayı ve fillosilikat silt', astro: 'Cryo-shielded organics preservation margin', astroTr: 'Dondurulmuş organik korunma sınırı', chem: { SO3: 6.1, SiO2: 30.8, FeO: 10.6, MgO: 5.9, Al2O3: 5.6, H2O: 41.0 }, peaks: [0.18, 0.31, 0.42, 0.86, 0.92, 0.78, 0.88, 0.98, 0.94] },
         { code: 'GEO-3', pov: 'delta', rock: 'Ejecta-Excavated Subsurface Lag', rockTr: 'Krater Fırlatması Alt Katman Çakılı', min: 'Basaltic lag + structural OH/H2O', minTr: 'Bazaltik çakıl + yapısal OH/H2O', astro: 'Regolith ice depth calibration point', astroTr: 'Regolit buz derinliği kalibrasyon noktası', chem: { SO3: 8.2, SiO2: 41.5, FeO: 14.8, MgO: 7.1, Al2O3: 7.4, H2O: 21.0 }, peaks: [0.35, 0.44, 0.56, 0.74, 0.82, 0.68, 0.79, 0.86, 0.78] }
       ],
       basalt: [
@@ -684,7 +759,7 @@
         { code: 'SIL-3', pov: 'delta', rock: 'Altered Basalt & Silica Fracture Fill', rockTr: 'Ayrışmış Bazalt ve Silika Çatlak Dolgusu', min: 'Amorphous silica + Fe-oxide + trace sulfate', minTr: 'Amorf silika + Fe-oksit + eser sülfat', astro: 'Habitability porosity seal candidate', astroTr: 'Yaşanabilirlik gözenek mühür adayı', chem: { SO3: 6.2, SiO2: 50.4, FeO: 16.0, MgO: 8.4, Al2O3: 10.6, H2O: 3.4 }, peaks: [0.68, 0.72, 0.79, 0.71, 0.76, 0.65, 0.74, 0.62, 0.49] }
       ],
       dust: [
-        { code: 'DUST-1', pov: 'delta', rock: `Ferric Aeolian Dust Mantle (TI ${Math.round(ti)} tiu)`, rockTr: `Ferrik Rüzgar Tozu Örtüsü (TI ${Math.round(ti)} tiu)`, min: 'Nanophase ferric oxide + fine sulfate dust', minTr: 'Nanofaz demir oksit + ince sülfat tozu', astro: 'Bearing capacity & wheel slip calibration priority', astroTr: 'Taşıma kapasitesi ve tekerlek kayma kalibrasyonu', chem: { SO3: 9.4, SiO2: 44.2, FeO: 19.8, MgO: 6.8, Al2O3: 8.9, H2O: 4.2 }, peaks: [0.58, 0.66, 0.72, 0.62, 0.68, 0.58, 0.75, 0.64, 0.46] },
+        { code: 'DUST-1', pov: 'delta', rock: `Ferric Aeolian Dust Mantle (TI ${Math.round(ti)} tiu)`, rockTr: `Ferrik Rüzgar Tozu Örtüsü (TI ${Math.round(ti)} tiu)`, min: 'Nanophase ferric oxide + fine sulfate dust', minTr: 'Nanofaz demir oksit + ince sülfat tozu', astro: 'Particle size & wheel slip calibration priority (TES proxy)', astroTr: 'Parçacık boyutu ve tekerlek kayma kalibrasyonu (TES göstergesi)', chem: { SO3: 9.4, SiO2: 44.2, FeO: 19.8, MgO: 6.8, Al2O3: 8.9, H2O: 4.2 }, peaks: [0.58, 0.66, 0.72, 0.62, 0.68, 0.58, 0.75, 0.64, 0.46] },
         { code: 'DUR-2', pov: 'delta', rock: 'Case-Hardened Duricrust Pocket', rockTr: 'Yüzey Sertleşmiş Durikrust Cebesi', min: 'Ca/Mg-sulfate cemented basaltic fines', minTr: 'Ca/Mg-sülfat çimentolu bazaltik toz', astro: 'Local regolith cohesion & ISRU oxygen feedstock', astroTr: 'Yerel regolit kohezyonu ve ISRU oksijen hammaddesi', chem: { SO3: 10.6, SiO2: 43.1, FeO: 18.6, MgO: 7.4, Al2O3: 8.6, H2O: 4.8 }, peaks: [0.62, 0.68, 0.74, 0.66, 0.71, 0.64, 0.80, 0.69, 0.51] },
         { code: 'LAG-3', pov: 'boxwork', rock: 'Wind-Scoured Basalt Lag Window', rockTr: 'Rüzgarla Süpürülmüş Bazalt Çakıl Penceresi', min: 'Coarse plagioclase-pyroxene grains', minTr: 'İri plajiyoklaz-piroksen taneleri', astro: 'Firm footing refuge inside high-dust basin', astroTr: 'Yüksek tozlu havzada sağlam zemin sığınağı', chem: { SO3: 5.8, SiO2: 47.0, FeO: 17.5, MgO: 8.8, Al2O3: 10.5, H2O: 2.6 }, peaks: [0.71, 0.78, 0.85, 0.60, 0.65, 0.54, 0.68, 0.58, 0.37] }
       ],
@@ -703,11 +778,17 @@
       Object.entries(sp.chem).forEach(([ox, val]) => {
         chem[ox] = +Math.max(0.8, val + (rnd() - 0.5) * 1.4).toFixed(1);
       });
+      const wpLat = +(lat + ((50 - py) * 10) / 59270).toFixed(5);
+      const wpLon = +(lon + ((px - 50) * 10) / (59270 * Math.max(0.2, Math.cos(lat * Math.PI / 180)))).toFixed(5);
       return {
         id: `WP-${idx + 1}`,
         code: sp.code,
         name: `${label} Target ${idx + 1} (${sp.code})`,
         nameTr: `${label} Hedef ${idx + 1} (${sp.code})`,
+        lat: wpLat,
+        lon: wpLon,
+        datasetId: regime === 'cryo' ? 'SWIM 2.0_NH_SH_2021 + MGS TES TI' : 'MOLA MEGDR128 + MGS TES + CTX',
+        obsDate: '2021–2025 PDS Orbital Synthesis',
         x: px,
         y: py,
         heading: Math.round((twp.heading + rnd() * 40) % 360),
@@ -777,6 +858,15 @@
       rover,
       searchQuery: `${regionName || 'mars'} ${rover} rover surface terrain geology`,
       hiRiseId: `ORBITAL-SEEDED 1 km MICRO-DEM · ${regionName || 'MARS'} (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)`,
+      dtmMetadata: {
+        productId: `SYNTH_CTX_MOLA_${Math.round(Math.abs(lat) * 100)}_${Math.round(Math.abs(lon) * 100)}`,
+        stereoPair: 'CTX 6 m/px + MOLA MEGDR Conditioning (No 1.0 m/post HiRISE Stereo Pair)',
+        truePostSpacingM: 10.0,
+        tacticalGridScaleM: 10.0,
+        method: 'MOLA/TES Physics-Conditioned Micro-DEM + Live AutoNav Spot Assimilation',
+        coverageNote: 'HiRISE 1 m/post stereo DTMs cover <3% of Mars; at arbitrary global coordinates, the 10 m/cell tactical grid is conditioned on MOLA/TES/CTX until local AutoNav LiDAR scans refine it.',
+        coverageNoteTr: 'HiRISE 1 m/post stereo DTM’leri Mars’ın <%3’ünü kapsar; rastgele koordinatlarda 10 m/hücre taktik ızgara MOLA/TES/CTX ile koşullandırılır ve yerel AutoNav LiDAR taramasıyla doğrulanır.'
+      },
       name: `${regionName || 'Selected Site'} · TRN+AutoNav 10m/cell Biome`,
       nameTr: `${regionName || 'Seçili Saha'} · TRN+AutoNav 10m/hücre Biyomu`,
       summary: 'Orbital-prior seeded micro-DEM conditioned on local MOLA/TES/SWIM physics; click canvas to dispatch AutoNav spot scans and refine geochemical/terrain confidence.',

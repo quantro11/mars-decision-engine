@@ -18,9 +18,16 @@
   // Current 2025–2026 active surface meteorology from MSL Curiosity (REMS) and Mars 2020 Perseverance (MEDA)
   const ACTIVE_ROVER_WEATHER_2026 = [
     {
+      id: 'msl_rems',
       mission: 'MSL Curiosity · REMS (Gale Crater · Mount Sharp Boxwork)',
       missionTr: 'MSL Curiosity · REMS (Gale Krateri · Mount Sharp Boxwork)',
+      instrument: 'REMS (Rover Environmental Monitoring Station)',
+      lat: -4.59,
+      lon: 137.44,
+      elev_m: -4120,
       sol: 4485,
+      earthDate: '2025-03-18 UTC',
+      dataType: 'ARCHIVE_TELEMETRY (PDS Atmospheres Node)',
       period: '2025–2026 Campaign',
       air_temp_c: { min: -74, mean: -41, max: -7 },
       pressure_pa: 752,
@@ -29,9 +36,16 @@
       rad_ugy_sol: 640
     },
     {
+      id: 'm2020_meda',
       mission: 'Mars 2020 Perseverance · MEDA (Jezero Western Rim · Witch Hazel Hill)',
       missionTr: 'Mars 2020 Perseverance · MEDA (Jezero Batı Kenarı · Witch Hazel Hill)',
+      instrument: 'MEDA (Mars Environmental Dynamics Analyzer)',
+      lat: 18.38,
+      lon: 77.58,
+      elev_m: -2540,
       sol: 1468,
+      earthDate: '2025-04-02 UTC',
+      dataType: 'ARCHIVE_TELEMETRY (PDS Atmospheres Node)',
       period: '2025–2026 Campaign',
       air_temp_c: { min: -81, mean: -50, max: -13 },
       pressure_pa: 734,
@@ -40,6 +54,79 @@
       rad_ugy_sol: 685
     }
   ];
+
+  // Spatial extrapolation model: projects point rover telemetry (REMS/MEDA) to a selected Mars landing/EVA site
+  // using hydrostatic scale height (H = 11.1 km) and meridional thermal gradient (-0.65 K/deg poleward).
+  function extrapolateWeatherToSite(station, targetLat, targetLon, targetElevM) {
+    const st = station || ACTIVE_ROVER_WEATHER_2026[1];
+    const tLat = Number.isFinite(targetLat) ? targetLat : 18.38;
+    const tLon = Number.isFinite(targetLon) ? targetLon : 77.58;
+    const tElev = Number.isFinite(targetElevM) ? targetElevM : -2540;
+    const R = 3389.5;
+    const dLat = (tLat - st.lat) * Math.PI / 180;
+    const dLon = (tLon - st.lon) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(st.lat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    const distKm = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a))));
+    const deltaElevM = Math.round(tElev - st.elev_m);
+    const deltaLatDeg = +(Math.abs(tLat) - Math.abs(st.lat)).toFixed(1);
+    const projectedPressurePa = Math.round(st.pressure_pa * Math.exp(-deltaElevM / 11100));
+    const dTemp = -0.0018 * deltaElevM - 0.65 * deltaLatDeg;
+    const projectedMeanTempC = Math.round(st.air_temp_c.mean + dTemp);
+    return {
+      stationMission: st.mission,
+      stationCoords: `${st.lat.toFixed(2)}°N, ${st.lon.toFixed(2)}°E (${st.elev_m} m)`,
+      sol: st.sol,
+      earthDate: st.earthDate,
+      dataType: st.dataType,
+      targetCoords: `${tLat.toFixed(2)}°N, ${tLon.toFixed(2)}°E (${Math.round(tElev)} m)`,
+      distKm,
+      deltaElevM,
+      deltaLatDeg,
+      projectedPressurePa,
+      projectedMeanTempC,
+      disclaimer: `Point measurement from ${st.instrument} at (${st.lat}°N, ${st.lon}°E, Sol ${st.sol}, ${st.earthDate}). Extrapolated ${distKm} km (Δh=${deltaElevM >= 0 ? '+' : ''}${deltaElevM} m) via hydrostatic scale height (H=11.1 km) & latitudinal gradient.`,
+      disclaimerTr: `${st.instrument} nokta ölçümü (${st.lat}°K, ${st.lon}°D, Sol ${st.sol}, ${st.earthDate}). Seçilen rotaya ${distKm} km (Δh=${deltaElevM >= 0 ? '+' : ''}${deltaElevM} m) hidrostatik ölçek yüksekliği (H=11.1 km) ve enlem gradyanı ile aktarılmıştır.`
+    };
+  }
+
+  // Separate Heliocentric Propagation & Martian Surface Radiation Model (Item 11):
+  // DONKI events are 1 AU solar/coronal observations, NOT instantaneous Mars surface dosimetry.
+  // Models DBM transit time to 1.524 AU, 1/r² flux dilution (0.431×), and Mars CO₂ column attenuation.
+  function estimateMarsSpaceWeatherImpact(events, flareRes, siteElevM) {
+    const latestCme = Array.isArray(events) && events.length ? events[0] : null;
+    const speedKms = (latestCme && Number.isFinite(latestCme.speed_kms) && latestCme.speed_kms > 0) ? latestCme.speed_kms : 1510;
+    const elevM = Number.isFinite(siteElevM) ? siteElevM : -2540;
+    const marsDistKm = 1.524 * 149597870.7; // 2.2799e8 km
+    // Drag-based effective propagation speed to 1.524 AU (Vrsnak et al. 2013 DBM approximation)
+    const effSpeedKms = 0.72 * speedKms + 115;
+    const transitHoursToMars = +(marsDistKm / (effSpeedKms * 3600)).toFixed(1);
+    const fluxScalingFactor = 0.431; // (1 / 1.524)^2
+    const columnMassGcm2 = +(16.0 * Math.exp(-elevM / 11100)).toFixed(1);
+    const atmAttenuation = Math.exp(-columnMassGcm2 / 28.0);
+    const flrClass = (flareRes && flareRes.classType) ? String(flareRes.classType).toUpperCase() : 'M2.4';
+    const base1AuPeakUsvHr = flrClass.startsWith('X') ? 420 : (flrClass.startsWith('M') ? 95 : 18);
+    const modeledSurfaceDoseRateUsvHr = +(base1AuPeakUsvHr * fluxScalingFactor * atmAttenuation).toFixed(1);
+    let arrivalIso = 'N/A';
+    if (latestCme && latestCme.startTime) {
+      const t0 = Date.parse(latestCme.startTime);
+      if (Number.isFinite(t0)) {
+        arrivalIso = new Date(t0 + transitHoursToMars * 3600000).toISOString().slice(0, 16) + 'Z (±12h)';
+      }
+    }
+    return {
+      heliocentricDistanceAU: 1.524,
+      fluxScalingFactor,
+      cmeSpeedKms: speedKms,
+      effTransitSpeedKms: Math.round(effSpeedKms),
+      transitHoursToMars,
+      estimatedMarsArrivalWindow: arrivalIso,
+      columnMassGcm2,
+      modeledSurfaceDoseRateUsvHr,
+      uncertaintyPct: 35,
+      modelDisclaimer: 'MODEL OUTPUT (NOT DIRECT SURFACE TELEMETRY): NASA DONKI reports solar/1 AU coronal events. Mars arrival time (DBM at 1.524 AU) and surface dose rate (0.431× radial dilution + CO₂ column shielding) are computed by a separate propagation model.',
+      modelDisclaimerTr: 'MODEL ÇIKTISI (DOĞRUDAN YÜZEY ÖLÇÜMÜ DEĞİLDİR): NASA DONKI 1 AU güneş olaylarını bildirir. Mars’a ulaşma süresi (1.524 AU DBM) ve yüzey radyasyon etkisi (0.431× akı seyrelmesi + CO₂ kolon zırhlaması) ayrı bir fiziksel yayılım modeliyle hesaplanmıştır.'
+    };
+  }
 
   const MARS_HABITABILITY_CRITERIA = [
     {
@@ -484,6 +571,8 @@
     fetchRoverPovFrames,
     parseInsight,
     INSIGHT_REFERENCE,
-    INSIGHT_FROZEN
+    INSIGHT_FROZEN,
+    extrapolateWeatherToSite,
+    estimateMarsSpaceWeatherImpact
   };
 })(typeof window !== 'undefined' ? window : module.exports);

@@ -158,11 +158,13 @@ assert.ok(payload.tactical_eva_plan.architecture.includes('xGDS') && payload.tac
 assert.ok(Array.isArray(payload.traverse_plan.candidate_rest_stops));
 assert.ok(payload.dust_storm_simulation.spe_design_basis_assumption.shielded_dose_msv <= 100);
 assert.strictEqual(payload.dust_storm_simulation.survives_blackout, true);
+assert.ok(payload.dust_storm_simulation.ml_dust_forecast && payload.dust_storm_simulation.ml_dust_forecast.cadence_sec === 60 && payload.dust_storm_simulation.ml_dust_forecast.holdout_mean_accuracy_pct >= 95.5, 'Brief payload includes 1-minute PIML dust forecast with holdout accuracy >= 95.5%');
+assert.ok(evaSimMock.dustMl && evaSimMock.dustMl.cadenceSec === 60, 'Tactical EVA simulation includes 1-minute PIML nowcast');
 assert.strictEqual(payload.top_candidates[0].robust_pct, 90);
 const htmlOut = BR.renderBriefHTML(payload, FMT);
 assert.ok(!htmlOut.includes('<img src=x'), 'Brief HTML escapes malicious tags');
 assert.ok(htmlOut.includes('&lt;img src=x'), 'Escaped markup rendered safely');
-assert.ok(htmlOut.includes('TRN') && htmlOut.includes('xGDS'), 'Brief HTML summarizes TRN + AutoNav + MGL + xGDS localization');
+assert.ok(htmlOut.includes('TRN') && htmlOut.includes('xGDS') && htmlOut.includes('PIML'), 'Brief HTML summarizes TRN + AutoNav + MGL + xGDS localization and PIML forecast');
 
 // --- 6b. GIS GeoJSON export (FeatureCollection + antimeridian split) & Bilingual TR/EN i18n
 const I18N = require('../web/ui/i18n.js').MDE_I18N;
@@ -201,7 +203,7 @@ assert.strictEqual(I18N.trDomain('LIKELY'), 'YÜKSEK OLASILIK');
 assert.ok(fakeAbout.innerHTML.includes('Veri Seti') && !fakeAbout.innerHTML.includes('style='), '#about-content swaps cleanly to Turkish');
 assert.ok(OV.renderLegendHTML('score', 'tr').includes('ELENDİ/ZAYIF'), 'Map legend renders Turkish scale labels');
 assert.strictEqual(fakeBrand.textContent, 'Mars EVA & Üs Karar Motoru');
-assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Eğim sınırı ');
+assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Model eğim sınırı (zemin uyarlamalı) ');
 I18N.setLang('en', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Site selection');
 assert.strictEqual(fakeAbout.innerHTML, '<h3>English</h3>', 'Reverting to English restores original #about-content cleanly');
@@ -329,6 +331,39 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   ctxLost = false;
   glListeners.webglcontextrestored();
   assert.ok(!globe.state.contextLost && restoredCount === 1, 'restores WebGL resources cleanly on webglcontextrestored');
+
+  // --- 9. 6 Core Operational EVA Capabilities, Live Weather/DONKI Models, Provenance, & Guided Jury Demo
+  const EVA = require('../web/ui/eva.js').MDE_EVA;
+  const demoRes = EVA.simulateEVA(EVA.ZONES.jezero_delta, { loadKg: 18, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 8, mglLocked: true });
+  assert.ok(demoRes.realTimeTracking && demoRes.realTimeTracking.traveledDistM >= 0 && demoRes.realTimeTracking.remainDistM >= 0 && Array.isArray(demoRes.realTimeTracking.evaRestStops) && demoRes.realTimeTracking.turnaroundDistM > 0, 'Core 1: realTimeTracking computed with EVA rest stops & turnaround bound');
+  assert.ok(Array.isArray(demoRes.hazardsDetected) && demoRes.hazardsDetected.length > 0, 'Core 2: dynamic hazards detected on local micro-DEM');
+  const injPt = demoRes.safePath[Math.floor(demoRes.safePath.length / 2)];
+  const rerouteRes = EVA.simulateEVA(EVA.ZONES.jezero_delta, { scanStep: 8, dynamicHazards: [{ x: injPt[0], y: injPt[1], r: 4, label: 'rockfall' }] });
+  assert.ok(rerouteRes.rerouteExplanation && rerouteRes.rerouteExplanation.cancelledHazardHits > 0 && rerouteRes.rerouteExplanation.reasonEn.length > 10, 'Core 3: automatic alternative route + explicit justification');
+  assert.ok(demoRes.lifeSupport && typeof demoRes.lifeSupport.co2ScrubberRemainPct === 'number' && demoRes.lifeSupport.returnReserveProtected === true && /Lunar surface reference/i.test(demoRes.lifeSupport.xemuArchitectureNote), 'Core 4: full PLSS (CO2 RCA, 25% return reserve, Lunar xEMU note)');
+  assert.ok(demoRes.envConditions && typeof demoRes.envConditions.ambientTempC === 'number' && demoRes.envConditions.radBand && demoRes.envConditions.slopeLimitInfo, 'Core 5: environmental conditions & RAD uncertainty coupled into EVA');
+  assert.ok(demoRes.completionReport && demoRes.completionReport.durationH > 0 && demoRes.completionReport.distanceM > 0 && typeof demoRes.completionReport.hazardsEncounteredAndBypassed === 'number' && demoRes.completionReport.returnStatus, 'Core 6: mission completion report generated');
+  assert.ok(EVA.ZONES.jezero_delta.dtmMetadata && /DTEEC_/.test(EVA.ZONES.jezero_delta.dtmMetadata.productId) && EVA.ZONES.jezero_delta.waypoints.every(w => typeof w.lat === 'number' && typeof w.lon === 'number' && w.datasetId && w.obsDate), 'HiRISE DTM metadata & POI coord/dataset/obsDate provenance present');
+
+  const extW = Live.extrapolateWeatherToSite(Live.ACTIVE_ROVER_WEATHER_2026[1], -42, 70, -6500);
+  assert.ok(extW && extW.projectedPressurePa > 734 && typeof extW.deltaElevM === 'number', 'Weather extrapolation computes hydrostatic pressure & temperature shift');
+  const spImpact = Live.estimateMarsSpaceWeatherImpact([{ speed_kms: 1400, startTime: '2026-11-05T00:00Z' }], { classType: 'X1.2' }, -2500);
+  assert.ok(spImpact && spImpact.transitHoursToMars > 0 && spImpact.heliocentricDistanceAU === 1.524, 'DONKI 1.524 AU propagation & attenuation separated from surface dosimetry');
+
+  payload.tactical_eva_plan = {
+    ...payload.tactical_eva_plan,
+    dtm_metadata: EVA.ZONES.jezero_delta.dtmMetadata,
+    co2_scrubber_remain_pct: demoRes.lifeSupport.co2ScrubberRemainPct,
+    return_reserve_protected: true,
+    suit_architecture_note: demoRes.lifeSupport.xemuArchitectureNote,
+    real_time_tracking: demoRes.realTimeTracking,
+    reroute_explanation: rerouteRes.rerouteExplanation,
+    env_conditions: demoRes.envConditions,
+    completion_report: demoRes.completionReport,
+  };
+  payload.layer_provenance = S.LAYER_PROVENANCE;
+  const fullHtml = BR.renderBriefHTML(payload, FMT);
+  assert.ok(fullHtml.includes('DTEEC_') && fullHtml.includes('Mission Completion Report') && fullHtml.includes('Scientific Dataset Traceability'), 'Mission Brief HTML renders HiRISE DTM ID, Completion Report, and Traceability table');
 
   console.log('All UI module / A* window / brief / habitability XSS / markers / WebGL 3D tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

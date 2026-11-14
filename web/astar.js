@@ -206,7 +206,8 @@
       profile.push({ km, x, y, elev, slope: s, rough: r, ti, ice, radMsvYr });
     }
 
-    // Candidate rest stops along traverse: flat (<= 4 deg), smooth (sigma <= 35 m), firm (TI >= 160), >= 200 km apart (terrain only; no shelter implied)
+    const H = L.height || (L.elev ? (L.elev.length / W) | 0 : 2048);
+    // Candidate rest stops along traverse: flat (<= 4 deg), smooth (sigma <= 35 m), firm (TI >= 160), >= 200 km apart (pressurized rover parking only; no shelter implied)
     const safeHavens = [];
     let lastHavenKm = 0;                       // first stop at least 200 km from the start
     for (let i = 0; i < profile.length; i++) {
@@ -216,17 +217,19 @@
           km: Math.round(q.km),
           elev: Math.round(q.elev),
           slope: q.slope.toFixed(1),
-          name: `Stop #${safeHavens.length + 1}`,
-          type: 'Flat, smooth, firm terrain (no shelter implied)',
+          name: `Rover Stop #${safeHavens.length + 1}`,
+          vehicleScope: 'pressurized_rover_only',
+          intervalRule: '≥ 200 km Pressurized Rover Parking / Recharge Haven',
+          type: 'Flat, smooth, firm terrain for pressurized rover parking (no shelter implied)',
         });
         lastHavenKm = q.km;
       }
     }
 
-    // Science Waypoints (POI) along the route:
-    // 1. SWIM 2.0 Ice Core Drilling Site
-    // 2. Mount Sharp Boxwork / Polygonal Fracture Formation Site
-    // 3. TES Thermal Anomaly / Hydrothermal Mineral Sampling Site
+    // Science Waypoints (POI) along the route with full NASA dataset provenance, coordinates & non-core SWIM naming:
+    // 1. SWIM 2.0 Subsurface Ice-Consistency Anomaly (Unconfirmed — Requires Drill Verification)
+    // 2. Boxwork Fracture Network & Diagenetic Ridge Candidate
+    // 3. MGS TES High-Thermal-Inertia Bedrock Exposure
     const nPts = profile.length;
     const pickIdx = (fracStart, fracEnd, scoreFn) => {
       const i0 = Math.max(0, Math.floor(nPts * fracStart));
@@ -241,15 +244,23 @@
     const pIce = pickIdx(0.15, 0.42, (q) => (q.ice !== null ? q.ice * 100 : 0) - q.elev * 0.005 - q.slope);
     const pBox = pickIdx(0.43, 0.72, (q) => (12 - Math.abs(q.slope - 5.5)) * 4 + (q.ti || 200) * 0.08);
     const pTes = pickIdx(0.73, 0.94, (q) => (q.ti || 200) * 0.25 - q.slope * 2);
+    const coordOf = (p) => ({
+      lat: +(L.latOfRow ? L.latOfRow(p.y) : (90 - (p.y + 0.5) * 180 / H)).toFixed(2),
+      lon: +(L.lonOfCol ? L.lonOfCol(p.x) : (-180 + (p.x + 0.5) * 360 / W)).toFixed(2),
+    });
+    const cIce = coordOf(pIce), cBox = coordOf(pBox), cTes = coordOf(pTes);
 
     const scienceWaypoints = [
       {
         id: 'POI-1',
-        code: 'SWIM-ICE',
-        name: 'SWIM 2.0 Ice Core Drilling Site',
-        nameTr: 'SWIM 2.0 Buz Çekirdeği Sondaj Noktası',
-        target: '1.5 m cryogenic regolith core for H₂O/D-H isotope & ISRU volatile assay',
-        targetTr: 'H₂O/D-H izotop ve ISRU uçucu analizi için 1.5 m kriyojenik buz sondajı',
+        code: 'SWIM-ANOM',
+        name: 'SWIM 2.0 Subsurface Ice-Consistency Anomaly (Unconfirmed)',
+        nameTr: 'SWIM 2.0 Yeraltı Buz Tutarlılık Anomalisi (Doğrulanmamış Aday)',
+        dataset: 'PSI SWIM 2.0 Composite (SHARAD + MONS + THEMIS + TES)',
+        obsDate: '2021 Release (Morgan et al., Nat. Astron. 5)',
+        lat: cIce.lat, lon: cIce.lon,
+        target: 'Multi-sensor dielectric/thermal consistency candidate — requires GPR & auger drill verification (not a confirmed ice core)',
+        targetTr: 'Çoklu-sensör dielektrik/termal tutarlılık adayı — kesin buz yatağı değildir, GPR ve burgu sondaj doğrulaması gerekir',
         x: pIce.x, y: pIce.y, km: +pIce.km.toFixed(1), elev: Math.round(pIce.elev),
         slope: +pIce.slope.toFixed(1), ti: Math.round(pIce.ti || 215),
         ice: pIce.ice !== null ? +pIce.ice.toFixed(2) : 0.35,
@@ -258,10 +269,13 @@
       {
         id: 'POI-2',
         code: 'BOXWORK',
-        name: 'Boxwork Geological Formation Inspection Site',
-        nameTr: 'Boxwork Jeolojik Formasyon İnceleme Noktası',
-        target: 'Cemented polygonal fracture ridges (Curiosity 2025 Mount Sharp analog; sulfate-clay veins)',
-        targetTr: 'Yeraltı sularıyla çimentolanmış çokgen kutu (boxwork) sırtları ve sülfat-kil damarları',
+        name: 'Boxwork Fracture Network & Diagenetic Ridge Candidate',
+        nameTr: 'Boxwork Kırık Ağı & Diyajenetik Sırt İnceleme Noktası',
+        dataset: 'MGS MOLA 16-bit MEGDR + MRO CTX / HiRISE Structural Analog',
+        obsDate: 'PDS3/PDS4 Orbital Mosaic (2024–2026 MSL Analog)',
+        lat: cBox.lat, lon: cBox.lon,
+        target: 'Intermediate-TI indurated fracture ridges preserving late Hesperian groundwater circulation history',
+        targetTr: 'Geç Hesperian yeraltı suyu dolaşım izlerini koruyan orta-TI çimentolu kırık sırtları',
         x: pBox.x, y: pBox.y, km: +pBox.km.toFixed(1), elev: Math.round(pBox.elev),
         slope: +pBox.slope.toFixed(1), ti: Math.round(pBox.ti || 240),
         ice: pBox.ice !== null ? +pBox.ice.toFixed(2) : 0.18,
@@ -269,11 +283,14 @@
       },
       {
         id: 'POI-3',
-        code: 'TES-MIN',
-        name: 'TES Thermal Anomaly & Mineral Sampling Site',
-        nameTr: 'TES Termal Anomali / Mineral Örnekleme Noktası',
-        target: 'High-TI indurated bedrock outcrop for LIBS/APXS carbonate & phyllosilicate spectroscopy',
-        targetTr: 'LIBS/APXS karbonat ve fillosilikat spektroskopisi için yüksek-TI sert ana kaya mostrası',
+        code: 'TES-THERM',
+        name: 'MGS TES High-Thermal-Inertia Bedrock Exposure',
+        nameTr: 'MGS TES Yüksek Termal Ataletli Ana Kaya Mostrası',
+        dataset: 'MGS TES Thermal Inertia (ASU JMARS Putzig/Mellon 8 ppd)',
+        obsDate: 'PDS TES Bolometric Archive (Putzig et al. 2005)',
+        lat: cTes.lat, lon: cTes.lon,
+        target: 'Coarse/indurated high-TI surface exposure (thermophysical proxy for bedrock/duricrust; LIBS/VNIR spectroscopy target)',
+        targetTr: 'Yüksek-TI iri taneli/sertleşmiş yüzey mostrası (ana kaya/durikrast termofiziksel göstergesi; LIBS/VNIR hedefi)',
         x: pTes.x, y: pTes.y, km: +pTes.km.toFixed(1), elev: Math.round(pTes.elev),
         slope: +pTes.slope.toFixed(1), ti: Math.round(pTes.ti || 275),
         ice: pTes.ice !== null ? +pTes.ice.toFixed(2) : 0.22,
@@ -285,9 +302,7 @@
       82 + (pIce.ice !== null ? pIce.ice * 8 : 3) + Math.min(8, (pTes.ti || 215) / 45) - Math.max(0, meanS - 8)
     )));
 
-    // Spacesuit (xEMU) Marswalk Bioenergetics & Radiation Dose along the traverse
-    // Uses 0.38g Martian Pandolf equation with terrain-degraded walking speed so hazardous/steep/dusty corridors
-    // require genuinely longer sortie durations and higher metabolic/O2 budgets than safe A* corridors.
+    // Spacesuit (Mars-adapted xEMU reference) Bioenergetics & Strict Separation of Rover (20 km/sol) vs. Foot EVA (2.4 km/h)
     const meanR = sumR / path.length;
     const dustFrac = dustKm / Math.max(1, km);
     const hazFrac = hazardKm / Math.max(1, km);
@@ -299,6 +314,8 @@
     const maxEvaLimitH = 8.0;
     const totalEvaHoursAll = +(km / effWalkSpeedKmh + 1.2).toFixed(1);
     const evaSorties = Math.max(1, Math.ceil(totalEvaHoursAll / 6.5));
+    const requiresRover = km > 10.0;
+    const evaRestCount = Math.max(1, Math.floor(sortieKm / 1.5)); // 1.5 km astronaut hydration/thermal rest interval
     const MARS_G = 3.71, bodyKg = 80, suitKg = 82, effLoadKg = 15 * 0.90;
     const vMps = 2.4 / 3.6;
     const effMassMars = (bodyKg + suitKg + effLoadKg) * (MARS_G / 9.81);
@@ -312,17 +329,28 @@
     const sortieKcal = Math.round(metabolicKcalH * walkHours);
     const o2UsedG = Math.round(0.255 * metabolicW * walkHours);
     const o2UsedPct = Math.min(99, Math.round((o2UsedG / 850) * 100));
+    const o2RemainPct = Math.max(1, 100 - o2UsedPct);
+    const co2ProducedG = Math.round(o2UsedG * 1.17);
+    const co2ScrubberUsedPct = Math.min(99, Math.round((co2ProducedG / 920) * 100));
+    const co2ScrubberRemainPct = Math.max(1, 100 - co2ScrubberUsedPct);
     const waterUsedL = +((Math.max(0.08, 0.72 * metabolicW / 675)) * walkHours).toFixed(2);
     const waterUsedPct = Math.min(99, Math.round((waterUsedL / 4.2) * 100));
+    const waterRemainPct = Math.max(1, 100 - waterUsedPct);
     const meanRadMsvYr = km > 0 ? (radWeightedKm / km) : (profile[0] ? profile[0].radMsvYr : 235);
     const radDoseMsv = +((meanRadMsvYr / (365.25 * 24)) * walkHours).toFixed(3);
     const corridorRadDoseMsv = +((meanRadMsvYr / (365.25 * 24)) * totalEvaHoursAll).toFixed(2);
+    const returnReserveProtected = Math.min(o2RemainPct, co2ScrubberRemainPct, waterRemainPct) >= 25;
 
     const evaStats = {
       sortieKm: +sortieKm.toFixed(1),
       walkHours,
+      effWalkSpeedKmh: +effWalkSpeedKmh.toFixed(2),
       maxEvaLimitH,
-      withinEvaLimit: walkHours <= maxEvaLimitH,
+      withinEvaLimit: walkHours <= maxEvaLimitH && !requiresRover,
+      WithinSortieWindow: walkHours <= maxEvaLimitH,
+      requiresRover,
+      evaRestIntervalKm: 1.5,
+      evaRestCount,
       evaSorties,
       totalEvaHoursAll,
       metabolicW,
@@ -330,13 +358,31 @@
       sortieKcal,
       o2UsedG,
       o2UsedPct,
-      o2RemainPct: Math.max(1, 100 - o2UsedPct),
+      o2RemainPct,
+      co2ProducedG,
+      co2ScrubberUsedPct,
+      co2ScrubberRemainPct,
       waterUsedL,
       waterUsedPct,
-      waterRemainPct: Math.max(1, 100 - waterUsedPct),
+      waterRemainPct,
+      returnReserveProtected,
       meanRadMsvYr: Math.round(meanRadMsvYr),
+      radUncMsvYr: Math.round(meanRadMsvYr * 0.1875),
       radDoseMsv,
       corridorRadDoseMsv,
+    };
+
+    const hazardZones = {
+      steepKm: +hazardKm.toFixed(1),
+      dustTrapKm: +dustKm.toFixed(1),
+      roughMeanM: Math.round(meanR),
+      summary: `${hazardKm.toFixed(0)} km >10° slope · ${dustKm.toFixed(0)} km low-TI (<100 tiu) dust · σ=${Math.round(meanR)} m`
+    };
+    const returnRoute = {
+      returnKm: +km.toFixed(1),
+      returnAscentM: Math.round(totalDescentM),
+      returnDescentM: Math.round(totalAscentM),
+      roundTripKm: +(km * 2).toFixed(1),
     };
 
     return {
@@ -345,6 +391,7 @@
       maxUphillDeg: +maxUphillDeg.toFixed(1),
       meanCrossSlope: +(sumCrossS / Math.max(1, path.length - 1)).toFixed(1),
       meanRough: meanR, profile, safeHavens,
+      hazardZones, returnRoute,
       scienceWaypoints, scienceScore, evaStats,
     };
   }

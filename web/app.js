@@ -141,10 +141,12 @@
     const show = (rob) => {
       S.candidates.forEach((c, i) => { c.robust = rob[i]; });
       const mean = rob.reduce((a, b) => a + b, 0) / rob.length, pct = (mean * 100).toFixed(0), sp = Math.round(S.sensSpread * 100);
-      out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">${tr ? `Ağırlıklar ±%${sp} × 30 koşu: İlk-5 aday ort. %${pct} oranında İlk-5’te kalır.` : `Weights ±${sp}% × 30 runs: top-5 stay top-5 (within 400 km) in ${pct}% of runs.`} ${t(mean >= 0.8 ? 'sensRobust' : 'sensSensitive')}</div>`;
+      const meanCi = SCORING.wilson95CI ? SCORING.wilson95CI(Math.round(mean * 100), 100) : null;
+      const ciStr = meanCi ? ` [95% CI ${(meanCi[0] * 100).toFixed(0)}–${(meanCi[1] * 100).toFixed(0)}%]` : '';
+      out.innerHTML = `<div class="verdict ${mean >= 0.8 ? 'ok' : mean >= 0.5 ? '' : 'bad'}">${tr ? `Ağırlıklar ±%${sp} × 100 koşu: İlk-5 aday ort. %${pct}${ciStr} oranında İlk-5’te kalır.` : `Weights ±${sp}% × 100 runs: top-5 stay top-5 (within 400 km) in ${pct}%${ciStr} of runs.`} ${t(mean >= 0.8 ? 'sensRobust' : 'sensSensitive')}</div>`;
       panels.renderCandidates(); btn.disabled = false;
     };
-    const runSyncSens = () => { L.ice = L[S.iceBand]; show(SCORING.sensitivity(L, S.weights, S.hard, S.candidates, { mode: S.agg, runs: 30, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx }, SCORING.mulberry32(2026))); };
+    const runSyncSens = () => { L.ice = L[S.iceBand]; show(SCORING.sensitivity(L, S.weights, S.hard, S.candidates, { mode: S.agg, runs: 100, spread: S.sensSpread, n: 5, blockPx, minSepPx: sepPx, matchPx }, SCORING.mulberry32(2026))); };
     if (workerReady) { workerCall({ cmd: 'sensitivity', weights: S.weights, hard: S.hard, candidates: S.candidates, spread: S.sensSpread, agg: S.agg, iceBand: S.iceBand, blockPx, sepPx, matchPx }).then(r => show(r.robust)).catch(runSyncSens); return; }
     setTimeout(runSyncSens, 20);
   }
@@ -175,6 +177,7 @@
   function setRouteMode(rm) {
     S.route.travelMode = rm;
     document.querySelectorAll('#route-mode-seg button').forEach(b => { const a = b.dataset.rmode === rm; b.classList.toggle('active', a); b.setAttribute('aria-pressed', String(a)); });
+    const si = $('#speed'), sv = $('#speed-v'); if (si) si.disabled = rm === 'marswalk'; if (sv) sv.textContent = rm === 'marswalk' ? '2.4 km/h (Foot EVA)' : S.route.speed + ' km/sol';
     panels.renderRoute(); if (viewport) viewport.draw();
   }
   panels = window.MDE_PANELS.createPanels({
@@ -304,7 +307,7 @@
   bindRange('sens', v => '±' + v + '%', v => { S.sensSpread = v / 100; });
   bindRange('maxslope', v => v + '°', v => { S.route.maxSlope = v; computeRoute(); });
   bindRange('kslope', v => (v / 100).toFixed(2), v => { S.route.k = v / 100; computeRoute(); });
-  bindRange('speed', v => v + ' km/sol', v => { S.route.speed = v; panels.renderRoute(); });
+  bindRange('speed', v => (S.route.travelMode === 'marswalk' ? '2.4 km/h (Foot EVA)' : v + ' km/sol'), v => { S.route.speed = v; panels.renderRoute(); });
   document.querySelectorAll('#route-mode-seg button').forEach(b => b.onclick = () => setRouteMode(b.dataset.rmode));
   on('#route-sci-poi', 'onchange', (e) => { S.route.viaSciencePoi = e.target.checked; computeRoute(); });
   on('#route-clear', 'onclick', () => { S.route.start = S.route.goal = S.route.safe = S.route.straight = null; panels.renderRoute(); viewport.draw(); });

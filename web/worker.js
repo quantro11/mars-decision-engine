@@ -82,7 +82,7 @@
       if (!L.ice) return { id, ok: false, cmd, error: 'Missing ice band ' + iceBand };
       const robust = S.sensitivity(L, weights, hard, candidates, {
         mode: agg,
-        runs: 30,
+        runs: 100,
         spread,
         n: 5,
         blockPx,

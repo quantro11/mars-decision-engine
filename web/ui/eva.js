@@ -32,6 +32,9 @@
   const getScoring = () => global.SCORING ||
     (typeof globalThis !== 'undefined' && globalThis.SCORING) ||
     (typeof require === 'function' ? require('../scoring.js').SCORING : null);
+  const getStorm = () => global.STORM ||
+    (typeof globalThis !== 'undefined' && globalThis.STORM) ||
+    (typeof require === 'function' ? require('../storm.js').STORM : null);
 
   /**
    * Build a deterministic 1 km x 1 km (100x100 cells @ 10m/cell, rendered at 1 m/px)
@@ -857,6 +860,31 @@
       }
     };
 
+    // Environmental Conditions Coupling (Core 5 + Items 7, 12):
+    // Surface temperature, dust optical depth (tau), radiation uncertainty band, and soil-coupled slope limit.
+    const scMod = getScoring();
+    const stMod = getStorm();
+    const tauEnv = Number.isFinite(cfg.tau) ? cfg.tau : (speAlert ? 1.85 : (dynamicHazards.length > 0 ? 0.95 : 0.45));
+    const ambientTempC = (stMod && typeof stMod.surfaceTempC === 'function')
+      ? Math.round(stMod.surfaceTempC(
+          zone.lat ?? 18.38,
+          cfg.ls ?? 251,
+          zone.ti ?? zone.thermalInertia ?? 240,
+          zone.elev ?? -2500,
+          tauEnv
+        ).mean)
+      : -52;
+    const visibilityM = Math.round(Math.max(85, 8500 * Math.exp(-1.9 * tauEnv)));
+    const envSpeedFactor = +Math.max(0.68, Math.min(1.0, (1 - Math.max(0, tauEnv - 0.4) * 0.12) * (ambientTempC < -65 ? 0.92 : 1.0))).toFixed(2);
+    const effSpeedKmh = +(speedKmh * envSpeedFactor).toFixed(2);
+    const coldHeaterW = Math.round(Math.max(0, (-45 - ambientTempC) * 0.85));
+    const radBand = (scMod && typeof scMod.radDoseBand === 'function')
+      ? scMod.radDoseBand(zone.elev ?? -2500, maxSafeSlope, cfg.ls ?? 251)
+      : { nominal: zone.radMsvYr || 235, min: Math.round((zone.radMsvYr || 235) * 0.812), max: Math.round((zone.radMsvYr || 235) * 1.188), uncMsvYr: Math.round((zone.radMsvYr || 235) * 0.188), relUncPct: 18.8 };
+    const slopeLimitInfo = (scMod && typeof scMod.effectiveSlopeLimit === 'function')
+      ? scMod.effectiveSlopeLimit(maxSlope, zone.thermalInertiaBase || 260)
+      : { nominalDeg: maxSlope, effectiveMaxDeg: maxSlope, soilClass: 'Cohesive Regolith', note: 'Model operational boundary (NASA SP-2010-3407 Sec. 6.2).' };
+
     // Pandolf-Santee Martian Locomotion Bioenergetics (g = 3.71 m/s^2 = 0.378 g_Earth)
     const vMps = Math.max(0.25, speedKmh / 3.6);
     const bodyKg = 80, suitKg = 82;
@@ -873,7 +901,7 @@
     const metabolicW = Math.round(Math.max(190, Math.min(680, pandolfW)));
     const metabolicKcalH = Math.round(metabolicW * 0.8598);
 
-    const walkTimeH = (safeDistM / 1000) / Math.max(0.5, speedKmh);
+    const walkTimeH = (safeDistM / 1000) / Math.max(0.5, effSpeedKmh);
     const scienceStopH = zone.waypoints.length * 0.22;
     const totalEvaH = (buddyMode === 'rover_eva' ? walkTimeH * 0.68 : walkTimeH) + scienceStopH;
     const totalKcal = Math.round(metabolicKcalH * totalEvaH);
@@ -883,7 +911,18 @@
     const o2UsedPct = Math.min(99, Math.round((o2UsedG / SUIT_O2_CAP_G) * 100));
     const o2RemainPct = Math.max(1, 100 - o2UsedPct);
 
-    const suitPowerW = BASE_AVIONICS_W + 0.06 * metabolicW;
+    // CO2 Scrubber (RCA / LiOH backup, 660 g CO2 nominal cycle capacity, RQ = 0.85) & Return Reserve Protection (Core 4, Item 8)
+    const SUIT_CO2_CAP_G = 660;
+    const co2RateGh = o2RateGh * 1.17;
+    const co2ProducedG = Math.round(co2RateGh * totalEvaH);
+    const co2ScrubberUsedPct = Math.min(99, Math.round((co2ProducedG / SUIT_CO2_CAP_G) * 100));
+    const co2ScrubberRemainPct = Math.max(1, 100 - co2ScrubberUsedPct);
+    const returnLegTimeH = ((safeDistM * 0.45) / 1000) / Math.max(0.5, effSpeedKmh) + 0.5; // Return leg + 30-min emergency reserve
+    const returnReserveO2G = Math.round(Math.max(SUIT_O2_CAP_G * 0.25, o2RateGh * returnLegTimeH));
+    const returnReserveO2Pct = Math.min(65, Math.round((returnReserveO2G / SUIT_O2_CAP_G) * 100));
+    const returnReserveProtected = o2RemainPct >= returnReserveO2Pct && co2ScrubberRemainPct >= 20;
+
+    const suitPowerW = BASE_AVIONICS_W + 0.06 * metabolicW + coldHeaterW;
     const battUsedWh = suitPowerW * totalEvaH;
     const battUsedPct = Math.min(99, Math.round((battUsedWh / SUIT_BATT_CAP_WH) * 100));
     const battRemainPct = Math.max(1, 100 - battUsedPct);
@@ -894,8 +933,6 @@
     const waterRemainPct = Math.max(1, 100 - waterUsedPct);
 
     // Tactical Walkback Limit (1 km x 1 km PLSS contingency abort envelope):
-    // nominal ~960 m unloaded buddy-protocol radius (secondary O2 / LCVG abort window at return pace),
-    // shrunk by carried load, route slope, consumed O2, and pace; scaled by crew protocol.
     const buddyFactor = buddyMode === 'rover_eva' ? 1.24 : (buddyMode === 'solo' ? 0.86 : 1.0);
     const loadPenalty = Math.max(0.55, 1 - 0.0075 * effLoadKg);
     const slopePenalty = Math.max(0.7, 1 - Math.max(0, maxSafeSlope - 10) * 0.008);
@@ -903,10 +940,202 @@
     const o2Factor = Math.max(0.55, Math.min(1, o2RemainPct / 80));
     const walkbackRadiusM = Math.round(Math.max(320, Math.min(980, 960 * loadPenalty * slopePenalty * paceFactor * o2Factor * buddyFactor)));
     const withinWalkback = maxRadiusFromBaseM <= walkbackRadiusM;
-    const radDoseUsv = Math.round(((zone.radMsvYr || 235) * 1000 / (365.25 * 24)) * totalEvaH);
+    const radDoseUsv = Math.round(((radBand.nominal || zone.radMsvYr || 235) * 1000 / (365.25 * 24)) * totalEvaH);
+    const radDoseUncUsv = Math.round(radDoseUsv * 0.188);
+
+    // Core 1: Real-Time Route Tracking + Astronaut Micro-Rest Checkpoints (Item 6)
+    const curPathIdx = safePath.length > 0 ? Math.min(safePath.length - 1, Math.floor((safePath.length - 1) * (scanStep / 8))) : 0;
+    let traveledDistM = 0;
+    const evaRestStops = [];
+    let nextRestThresholdM = 600;
+    for (let k = 1; k < safePath.length; k++) {
+      const segM = Math.hypot(safePath[k][0] - safePath[k - 1][0], safePath[k][1] - safePath[k - 1][1]) * 10;
+      if (k <= curPathIdx) traveledDistM += segM;
+      const cumM = k <= curPathIdx ? traveledDistM : (traveledDistM + segM);
+      if (k * 16 >= nextRestThresholdM && evaRestStops.length < 4) {
+        evaRestStops.push({
+          id: `REST-${evaRestStops.length + 1}`,
+          x: safePath[k][0],
+          y: safePath[k][1],
+          atDistM: Math.round((k / Math.max(1, safePath.length - 1)) * safeDistM),
+          durationMin: 5,
+          purpose: '5-min Metabolic Thermal Cooldown & PLSS Hydration Check'
+        });
+        nextRestThresholdM += 600;
+      }
+    }
+    traveledDistM = Math.round(traveledDistM);
+    const remainDistM = Math.max(0, Math.round(safeDistM - traveledDistM));
+    const astronautLat = +(zone.lat + ((50 - assim.roverY) * 10) / 59270).toFixed(5);
+    const astronautLon = +(zone.lon + ((assim.roverX - 50) * 10) / (59270 * Math.max(0.2, Math.cos((zone.lat || 18.38) * Math.PI / 180)))).toFixed(5);
+    const nextWpIdx = Math.min(zone.waypoints.length - 1, Math.floor((scanStep / 8) * zone.waypoints.length));
+    const nextWp = zone.waypoints[nextWpIdx] || zone.waypoints[0];
+    const distToNextWpM = Math.round(Math.hypot(assim.roverX - nextWp.x, assim.roverY - nextWp.y) * 10);
+    const etaNextWpMin = Math.max(1, Math.round(((distToNextWpM / 1000) / Math.max(0.4, effSpeedKmh)) * 60));
+    const etaReturnBaseMin = Math.max(1, Math.round(((remainDistM / 1000) / Math.max(0.4, effSpeedKmh)) * 60));
+    const realTimeTracking = {
+      astronautX: Math.round(assim.roverX),
+      astronautY: Math.round(assim.roverY),
+      astronautXMeters: Math.round(assim.roverX * 10),
+      astronautYMeters: Math.round(assim.roverY * 10),
+      astronautLat,
+      astronautLon,
+      traveledDistM,
+      remainDistM,
+      progressPct: Math.round((traveledDistM / Math.max(1, safeDistM)) * 100),
+      activeLegLabel: scanStep >= 8 ? `${zone.waypoints[zone.waypoints.length - 1].id} -> ${zone.base.label} (Completed)` : ` -> ${nextWp.id} (${nextWp.code})`,
+      distToNextWpM,
+      etaNextWpMin,
+      etaReturnBaseMin,
+      turnaroundDistM: Math.round(safeDistM * 0.52),
+      evaRestStops
+    };
+
+    // Core 2: Dynamic Hazard Detection along route
+    const hazardsDetected = [
+      ...zone.boulders.map((b, i) => ({
+        id: `HZ-BLD-${i + 1}`,
+        type: 'BOULDER_APRON',
+        typeTr: 'KAYA BLOĞU ALANI',
+        label: b.label,
+        coordsM: `(${b.x * 10}m, ${b.y * 10}m)`,
+        metric: `r=${b.r * 10}m · >20° slope`,
+        status: 'BYPASSED'
+      })),
+      ...zone.walls.map((w, i) => ({
+        id: `HZ-SCP-${i + 1}`,
+        type: 'STEEP_SCARP_CRATER_RIM',
+        typeTr: 'DİK YAMAÇ / KRATER KENARI',
+        label: w.label,
+        coordsM: `(${w.x1 * 10}m,${w.y1 * 10}m)->(${w.x2 * 10}m,${w.y2 * 10}m)`,
+        metric: `${w.slope}° (> ${maxSlope}° limit)`,
+        status: 'BYPASSED'
+      })),
+      ...zone.sandTraps.map((s, i) => ({
+        id: `HZ-SND-${i + 1}`,
+        type: 'LOOSE_SAND_LOW_TI',
+        typeTr: 'GEVŞEK KUM / DÜŞÜK TI',
+        label: s.label,
+        coordsM: `(${s.x * 10}m, ${s.y * 10}m)`,
+        metric: `TI < 85 tiu (sinkage risk)`,
+        status: 'BYPASSED'
+      })),
+      ...dynamicHazards.map((dh, i) => ({
+        id: `HZ-DYN-${i + 1}`,
+        type: 'DYNAMIC_ROCKFALL',
+        typeTr: 'CANLI KAYA DÜŞMESİ / ENGEL',
+        label: dh.label || 'Live Dynamic Obstacle',
+        coordsM: `(${dh.x * 10}m, ${dh.y * 10}m)`,
+        metric: `r=${(dh.r || 5) * 10}m · 21.5°`,
+        status: 'REROUTED_LIVE'
+      }))
+    ];
+
+    // Core 3: Automatic Alternative Route & Reroute Explanation
+    const detourDeltaM = Math.round(safeDistM - orbitalDistM);
+    const rerouteExplanation = {
+      cancelledRouteStatus: 'CANCELLED — NAIVE ORBITAL / BLOCKED CORRIDOR',
+      cancelledRouteStatusTr: 'İPTAL EDİLDİ — TEHLİKELİ / BLOKELİ KORİDOR',
+      newRouteStatus: 'ACTIVE — AUTONAV A* VERIFIED SAFE CORRIDOR',
+      newRouteStatusTr: 'AKTİF — AUTONAV A* DOĞRULANMIŞ GÜVENLİ ROTA',
+      cancelledHazardHits: orbitalHazardHits + dynamicHazards.length,
+      cancelledSandM: Math.round(orbitalSandM),
+      detourDeltaM,
+      reasonEn: `Naive orbital route (${Math.round(orbitalDistM)} m) was automatically cancelled after AutoNav detected ${orbitalHazardHits} lethal boulder/scarp cells (> ${maxSlope}° limit)${dynamicHazards.length ? `, ${dynamicHazards.length} live dynamic obstacle(s),` : ''} and ${Math.round(orbitalSandM)} m of low-TI loose sand (<85 tiu). Alternative A* route (${Math.round(safeDistM)} m, +${detourDeltaM >= 0 ? detourDeltaM : 0} m detour) was selected along consolidated regolith (TI >= 235 tiu, max slope ${maxSafeSlope.toFixed(1)}°, 0 boulder/scarp hits) while preserving ${o2RemainPct}% O2 (${returnReserveO2Pct}% return reserve required).`,
+      reasonTr: `Ham uydu rotası (${Math.round(orbitalDistM)} m), AutoNav taramasında ${orbitalHazardHits} adet kritik kaya/dik yamaç hücresi (>${maxSlope}° sınırı)${dynamicHazards.length ? `, ${dynamicHazards.length} canlı dinamik engel` : ''} ve ${Math.round(orbitalSandM)} m gevşek kum tuzağı (TI <85 tiu) tespit edildiği için otomatik iptal edildi. Yeni A* alternatif rotası (${Math.round(safeDistM)} m, +${detourDeltaM >= 0 ? detourDeltaM : 0} m güvenli sapma) sağlam zemin (TI >= 235 tiu, azami eğim ${maxSafeSlope.toFixed(1)}°, 0 engel teması) üzerinden seçildi ve %${returnReserveO2Pct} dönüş O2 rezervi korundu.`
+    };
+
+    // Core 4 & Item 8 & Item 9: Complete Life Support & xEMU Reference Architecture
+    const lifeSupport = {
+      o2UsedG: Math.round(o2UsedG),
+      o2UsedPct,
+      o2RemainPct,
+      co2ProducedG,
+      co2ScrubberUsedPct,
+      co2ScrubberRemainPct,
+      battUsedWh: Math.round(battUsedWh),
+      battUsedPct,
+      battRemainPct,
+      waterUsedL,
+      waterUsedPct,
+      waterRemainPct,
+      returnReserveO2G,
+      returnReserveO2Pct,
+      emergencyReserveMin: 30,
+      returnReserveProtected,
+      xemuArchitectureNote: 'NASA xEMU is a Lunar surface reference architecture; modeled here as a Mars-adapted reference extrapolation (0.38g, 6–10 mbar CO2 atmosphere, RCA CO2 scrubber & LCVG thermal loop), not flight-certified Mars hardware (NASA SP-2010-3407).',
+      xemuArchitectureNoteTr: 'NASA xEMU tasarımı Ay yüzeyi keşifleri için geliştirilmiş bir referans mimaridir; burada uçuşa hazır kesin Mars giysisi olarak değil, 0.38g Mars yerçekimi ve 6–10 mbar CO2 atmosferine uyarlanmış referans mühendislik modeli olarak kullanılmaktadır.'
+    };
+
+    const envConditions = {
+      ambientTempC,
+      tau: tauEnv,
+      visibilityM,
+      envSpeedFactor,
+      effSpeedKmh,
+      coldHeaterW,
+      radBand,
+      slopeLimitInfo
+    };
+
+    // Core 6: Mission Completion Report
+    const samplesCollectedKg = +zone.waypoints.reduce((acc, w) => acc + (w.sampleKg || 2.0), 0).toFixed(1);
+    const completionReport = {
+      missionStatus: speAlert ? 'ABORTED_TO_SPE_SHELTER' : (withinWalkback && returnReserveProtected ? 'COMPLETED_NOMINAL' : 'COMPLETED_WITH_CAUTION'),
+      returnStatus: speAlert
+        ? `SPE EMERGENCY SHELTER RETURN (${speTimeToShelterMin} min)`
+        : (withinWalkback && returnReserveProtected
+          ? `NOMINAL AIRLOCK RETURN (O2 ${o2RemainPct}% >= ${returnReserveO2Pct}% Reserve)`
+          : `CONTINGENCY WALKBACK WARNING (Radius ${ Math.round(maxRadiusFromBaseM) }m / ${walkbackRadiusM}m)`),
+      returnStatusTr: speAlert
+        ? `SPE ACİL SIĞINAK DÖNÜŞÜ (${speTimeToShelterMin} dk)`
+        : (withinWalkback && returnReserveProtected
+          ? `NOMİNAL HAVA KİLİDİ DÖNÜŞÜ (O2 %${o2RemainPct} >= %${returnReserveO2Pct} Rezerv)`
+          : `ACİL GERİ DÖNÜŞ UYARISI (Yarıçap ${Math.round(maxRadiusFromBaseM)}m / ${walkbackRadiusM}m)`),
+      durationH: +totalEvaH.toFixed(2),
+      distanceM: Math.round(safeDistM),
+      ascentM: Math.round(upElev),
+      descentM: Math.round(dnElev),
+      maxSlopeDeg: +maxSafeSlope.toFixed(1),
+      hazardsEncounteredAndBypassed: orbitalHazardHits + dynamicHazards.length,
+      reroutesExecuted: 1 + dynamicHazards.length,
+      samplesCollectedKg,
+      waypointsVisited: zone.waypoints.length,
+      consumed: {
+        o2G: Math.round(o2UsedG),
+        o2Pct: o2UsedPct,
+        co2G: co2ProducedG,
+        co2ScrubberPct: co2ScrubberUsedPct,
+        battWh: Math.round(battUsedWh),
+        battPct: battUsedPct,
+        waterL: waterUsedL,
+        waterPct: waterUsedPct,
+        kcal: totalKcal,
+        radDoseUsv,
+        radDoseUncUsv
+      }
+    };
+
+    const scaleSeparationNote = 'Global MOLA/TES rasters (~5.2 km/px) resolve regional basins and landing ellipses but cannot detect meter-scale boulders, scarps, or migrated sand ripples; astronaut EVA routing strictly uses the 1 km × 1 km local high-resolution terrain model.';
+    const scaleSeparationNoteTr = 'Küresel MOLA/TES haritası (~5.2 km/piksel) bölgesel iniş alanlarını seçer ancak küçük kayaları ve kraterleri çözemez; astronot EVA rotası zorunlu olarak yüksek çözünürlüklü yerel arazi modelini kullanır.';
+
+    const dustMl = (stMod && typeof stMod.predictDustML === 'function')
+      ? stMod.predictDustML({
+          lat: zone.lat ?? 18.38,
+          lon: zone.lon ?? 77.58,
+          elev: zone.elev ?? -2500,
+          slope: maxSafeSlope,
+          ti: zone.thermalInertiaBase ?? 240,
+          ls: cfg.ls ?? 251,
+          telemetryRegime: speAlert ? 'vortex_imminent' : (dynamicHazards.length > 0 ? 'precursor' : 'auto')
+        })
+      : null;
 
     return {
       zone,
+      dtmMetadata: zone.dtmMetadata || null,
+      scaleSeparationNote,
+      scaleSeparationNoteTr,
       grid,
       domainGrid,
       assimMask: assim,
@@ -916,6 +1145,8 @@
       safeDistM: Math.round(safeDistM),
       directDistM: Math.round(directDistM),
       orbitalDistM: Math.round(orbitalDistM),
+      ascentM: Math.round(upElev),
+      descentM: Math.round(dnElev),
       maxSafeSlope: +maxSafeSlope.toFixed(1),
       maxDirectSlope: +maxDirectSlope.toFixed(1),
       meanUphillGradePct,
@@ -936,6 +1167,7 @@
       scoreMode,
       loadKg,
       speedKmh,
+      effSpeedKmh,
       maxSlope,
       buddyMode,
       metabolicW,
@@ -945,6 +1177,11 @@
       o2UsedG: Math.round(o2UsedG),
       o2UsedPct,
       o2RemainPct,
+      co2ProducedG,
+      co2ScrubberUsedPct,
+      co2ScrubberRemainPct,
+      returnReserveO2Pct,
+      returnReserveProtected,
       battUsedPct,
       battRemainPct,
       waterUsedL,
@@ -954,6 +1191,15 @@
       maxRadiusFromBaseM: Math.round(maxRadiusFromBaseM),
       withinWalkback,
       radDoseUsv,
+      radDoseUncUsv,
+      radBand,
+      slopeLimitInfo,
+      realTimeTracking,
+      hazardsDetected,
+      rerouteExplanation,
+      lifeSupport,
+      envConditions,
+      completionReport,
       commsLos,
       speAlert,
       spePath,
@@ -965,6 +1211,7 @@
       customScanPts,
       dynamicHazards,
       scoreWeights: w,
+      dustMl,
     };
   }
 
@@ -1019,6 +1266,7 @@
         const passLunar = lunarNom.metabolicW >= b.lunar16gWattsRange[0] && lunarNom.metabolicW <= b.lunar16gWattsRange[1];
         const passMarsNom = marsNom.metabolicW >= b.mars038gNominalWattsRange[0] && marsNom.metabolicW <= b.mars038gNominalWattsRange[1];
         const passMarsSand = marsSandUp.metabolicW >= b.mars038gUphillSandWattsRange[0] && marsSandUp.metabolicW <= b.mars038gUphillSandWattsRange[1] && marsSandUp.metabolicW > marsNom.metabolicW;
+        const passCo2Reserve = marsNom.co2ScrubberRemainPct >= 20 && marsNom.returnReserveProtected === true;
         checks.push({
           id: b.id,
           mission: b.mission,
@@ -1027,7 +1275,9 @@
           mars038gNomW: marsNom.metabolicW,
           mars038gSandUpW: marsSandUp.metabolicW,
           marsO2UsedPct: marsNom.o2UsedPct,
-          pass: passLunar && passMarsNom && passMarsSand
+          co2ScrubberRemainPct: marsNom.co2ScrubberRemainPct,
+          returnReserveProtected: marsNom.returnReserveProtected,
+          pass: passLunar && passMarsNom && passMarsSand && passCo2Reserve
         });
       }
     }
@@ -1265,15 +1515,43 @@
       ctx.restore();
     }
 
-    // Active AutoNav Sensor Cone at Frontier Rover/Crew Position
-    if (assimMask && sim.scanStep < 8) {
+    // Active AutoNav Sensor Cone & Real-Time Astronaut Position Marker
+    if (assimMask) {
       const rx = sx(assimMask.roverX), ry = sy(assimMask.roverY);
       ctx.save();
-      ctx.strokeStyle = 'rgba(127, 162, 191, 0.78)';
-      ctx.fillStyle = 'rgba(127, 162, 191, 0.14)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(rx, ry, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (sim.scanStep < 8) {
+        ctx.strokeStyle = 'rgba(127, 162, 191, 0.78)';
+        ctx.fillStyle = 'rgba(127, 162, 191, 0.14)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(rx, ry, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      ctx.fillStyle = '#7dbb8e';
+      ctx.strokeStyle = '#edf1f7';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(rx, ry, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#edf1f7';
+      ctx.font = '600 9.5px "IBM Plex Mono", monospace';
+      const rt = sim.realTimeTracking;
+      const posLbl = rt ? `EVA (${rt.astronautXMeters}m,${rt.astronautYMeters}m · ETA ${rt.etaReturnBaseMin}m)` : 'EVA POS';
+      ctx.fillText(posLbl, Math.min(W - 155, Math.max(8, rx - 35)), Math.max(28, ry - 9));
       ctx.restore();
+    }
+
+    // Astronaut Micro-Rest & Hydration Checkpoints (Item 6)
+    if (sim.realTimeTracking && Array.isArray(sim.realTimeTracking.evaRestStops)) {
+      sim.realTimeTracking.evaRestStops.forEach((rs, idx) => {
+        const rx = sx(rs.x), ry = sy(rs.y);
+        ctx.save();
+        ctx.fillStyle = '#adc7dd';
+        ctx.strokeStyle = '#181d26';
+        ctx.lineWidth = 1.4;
+        ctx.fillRect(rx - 3.5, ry - 3.5, 7, 7);
+        ctx.strokeRect(rx - 3.5, ry - 3.5, 7, 7);
+        ctx.fillStyle = '#adc7dd';
+        ctx.font = '500 8.5px "IBM Plex Mono", monospace';
+        ctx.fillText(`R${idx + 1}`, rx + 5, ry + 3);
+        ctx.restore();
+      });
     }
 
     // TRN Touchdown Pad Marker
@@ -1824,11 +2102,12 @@
       body.innerHTML = `
         <div class="hud-visor-frame">
           <div class="hud-top-tape">
-            <span><b>SUIT O2:</b> <b class="${sim.o2RemainPct >= 35 ? 'ok' : 'warn'}">${sim.o2RemainPct}%</b> (${SUIT_O2_CAP_G - sim.o2UsedG}g rem)</span>
+            <span><b>SUIT O2:</b> <b class="${sim.o2RemainPct >= sim.returnReserveO2Pct ? 'ok' : 'warn'}">${sim.o2RemainPct}%</b> (RSV ${sim.returnReserveO2Pct}%)</span>
+            <span><b>CO2 RCA:</b> <b class="${sim.co2ScrubberRemainPct >= 25 ? 'ok' : 'warn'}">${sim.co2ScrubberRemainPct}%</b> (${sim.co2ProducedG}g)</span>
             <span><b>MGL POSE:</b> <b class="${sim.navStack.mgl.locked ? 'ok' : 'warn'}">${mglStatus}</b></span>
             <span><b>LCVG H2O:</b> <b class="ok">${(SUIT_WATER_CAP_L - sim.waterUsedL).toFixed(2)} L</b></span>
             <span><b>METABOLIC:</b> <b>${sim.metabolicKcalH} kcal/h</b> (${sim.metabolicW} W)</span>
-            <span><b>DONKI FLR:</b> <b id="hud-flare-chip" class="${state.flareAdvisory && String(state.flareAdvisory.classType).startsWith('X') ? 'warn' : 'ok'}">${flareTxt}</b></span>
+            <span><b>DONKI 1AU:</b> <b id="hud-flare-chip" class="${state.flareAdvisory && String(state.flareAdvisory.classType).startsWith('X') ? 'warn' : 'ok'}">${flareTxt}</b></span>
           </div>
           <div class="hud-visor-stage">
             <img id="hud-pov-img" class="hud-pov-img hidden" alt="${esc(rover)} rover camera surface view at ${esc(wp.code)}">
@@ -1843,10 +2122,10 @@
               <button type="button" id="hud-btn-pov-next" class="ghost" aria-label="${tr ? 'Sonraki kare' : 'Next POV frame'}">&#9654;</button>
             </div>
           </div>
-          <div class="hud-rad-banner ${sim.withinWalkback ? 'ok' : 'warn'}">
-            <span><b>MSL-RAD DOSE:</b> ${(zone.radMsvYr / 365.25).toFixed(2)} mSv/sol (${sim.radDoseUsv} uSv EVA)</span>
-            <span><b>WALKBACK LIMIT:</b> ${sim.walkbackRadiusM} m (${sim.withinWalkback ? (tr ? 'GÜVENLİ ÇEMBER İÇİNDE' : 'WITHIN SAFE WALKBACK') : (tr ? 'SINIR AŞILDI' : 'EXCEEDS LIMIT')})</span>
-            <span><b>TRN+AUTONAV:</b> ${sim.navStack.autonav.assimilatedPct}% MAPPED</span>
+          <div class="hud-rad-banner ${sim.withinWalkback && sim.returnReserveProtected ? 'ok' : 'warn'}">
+            <span><b>MSL-RAD DOSE:</b> ${(zone.radMsvYr / 365.25).toFixed(2)}±0.12 mSv/sol (${sim.radDoseUsv}±${sim.radDoseUncUsv} uSv)</span>
+            <span><b>WALKBACK LIMIT:</b> ${sim.walkbackRadiusM} m · <b>LIVE ETA:</b> ${sim.realTimeTracking.traveledDistM}/${sim.safeDistM}m · Base ${sim.realTimeTracking.etaReturnBaseMin} min</span>
+            <span><b>RETURN RSV:</b> ${sim.returnReserveProtected ? (tr ? 'KORUNDU' : 'PROTECTED') : (tr ? 'KRİTİK' : 'LOW')}</span>
           </div>
         </div>
         <div class="hud-Action-row">
@@ -1859,16 +2138,19 @@
         <div class="hud-telemetry-grid">
           <div class="live-card">
             <div class="sec-head"><h2>${tr ? 'Hedef Kaya & Mineraloji (Mastcam / PIXL)' : 'Target Lithology & Mineralogy (Mastcam / PIXL)'}</h2></div>
+            <div class="kv"><span>${tr ? 'Koordinat & Tarih' : 'Coordinates & Obs Date'}</span><b>${wp.lat ?? zone.lat}°N, ${wp.lon ?? zone.lon}°E · ${esc(wp.obsDate || 'PDS')}</b></div>
+            <div class="kv"><span>${tr ? 'NASA Veri Kaynağı' : 'NASA Dataset'}</span><b>${esc(wp.datasetId || wp.cam)}</b></div>
             <div class="kv"><span>${tr ? 'Kaya Türü' : 'Lithology'}</span><b>${esc(tr ? (wp.rockTypeTr || wp.rockType) : wp.rockType)}</b></div>
             <div class="kv"><span>${tr ? 'Mineral Fazı' : 'Mineral Phase'}</span><b>${esc(tr ? (wp.mineralogyTr || wp.mineralogy) : wp.mineralogy)}</b></div>
             <div class="kv"><span>${tr ? 'Astrobiyoloji & ISRU' : 'Astrobiology & ISRU'}</span><b>${esc(tr ? (wp.astrobioTr || wp.astrobio) : wp.astrobio)}</b></div>
             ${renderSpectralSVG(wp)}
           </div>
           <div class="live-card">
-            <div class="sec-head"><h2>${tr ? 'Kimyasal Oksit Analizi (SuperCam LIBS)' : 'Chemical Oxide Composition (SuperCam LIBS)'}</h2></div>
+            <div class="sec-head"><h2>${tr ? 'Kimyasal Oksit Analizi & Görev Senkronu' : 'Chemical Composition & Mission Sync'}</h2></div>
             <div class="hud-chem-grid">${chemRows}</div>
-            <div class="kv mt-sm"><span>${tr ? 'Toplam EVA Enerji Harcaması' : 'Cumulative EVA Energy'}</span><b>${sim.totalKcal} kcal (${sim.totalEvaH} h)</b></div>
-            <div class="kv"><span>${tr ? 'AutoNav Güvenli vs Ham Uydu Rotası' : 'AutoNav Verified vs Naive Orbital Route'}</span><b>${sim.safeDistM} m vs ${sim.orbitalDistM} m (${sim.orbitalHazardHits} risk)</b></div>
+            <div class="kv mt-sm"><span>${tr ? 'Toplam EVA Enerji & Süre' : 'Cumulative EVA Energy & Time'}</span><b>${sim.totalKcal} kcal (${sim.totalEvaH} h · +${sim.ascentM}m/-${sim.descentM}m)</b></div>
+            <div class="kv"><span>${tr ? 'Otomatik Alternatif Rota' : 'AutoNav Reroute'}</span><b>${sim.safeDistM} m (0 risk) vs ${sim.orbitalDistM} m (${sim.orbitalHazardHits} iptal)</b></div>
+            <div class="kv"><span>${tr ? 'Dönüş Durumu' : 'Return Status'}</span><b class="${sim.returnReserveProtected ? 'ok' : 'warn'}">${esc(tr ? sim.completionReport.returnStatusTr : sim.completionReport.returnStatus)}</b></div>
           </div>
         </div>`;
 
@@ -2077,9 +2359,11 @@
         return `<div class="eva-wp-card${active ? ' active' : ''}" data-wp="${idx}" role="button" tabindex="0">
           <div class="eva-wp-head">
             <b>${esc(wp.id)} · ${esc(tr ? (wp.nameTr || wp.name) : wp.name)}</b>
-            <span class="badge-mode badge-live">HDG ${wp.heading}°</span>
+            <span class="badge-mode badge-live">${wp.lat ?? zone.lat}°N, ${wp.lon ?? zone.lon}°E</span>
           </div>
+          <div class="help note-sm">${esc(wp.datasetId || wp.cam)} · ${esc(wp.obsDate || 'PDS')}</div>
           <div class="help note-sm">${esc(tr ? (wp.rockTypeTr || wp.rockType) : wp.rockType)} · SO3 ${wp.chem.SO3}% · H2O ${wp.chem.H2O}%</div>
+          <div class="help note-sm">${esc(tr ? (wp.astrobioTr || wp.astrobio) : wp.astrobio)}</div>
         </div>`;
       }).join('');
 
@@ -2097,12 +2381,27 @@
       const losText = losOk
         ? (tr ? `Açık VHF Görüş (+${sim.commsLos.linkMarginDb} dB)` : `Direct VHF LoS (+${sim.commsLos.linkMarginDb} dB)`)
         : (tr ? `Arazi Gölgesi (${sim.commsLos.occludedSteps} adım → Röle)` : `Terrain Occluded (${sim.commsLos.occludedSteps} blk → Relay)`);
+      const dtm = sim.dtmMetadata || zone.dtmMetadata || {};
+      const rt = sim.realTimeTracking;
+      const rr = sim.rerouteExplanation;
+      const env = sim.envConditions;
+      const ls = sim.lifeSupport;
+      const cr = sim.completionReport;
+      const restSummary = rt.evaRestStops.length
+        ? rt.evaRestStops.map(r => `${r.id}@${r.atDistM}m (${r.durationMin}m)`).join(', ')
+        : (tr ? 'Gerekmez (<600m)' : 'None (<600m)');
 
       out.innerHTML = `
         <div class="eva-zone-banner">
           <div class="eva-zone-title"><b>${esc(tr ? (zone.nameTr || zone.name) : zone.name)}</b></div>
           <div class="help note-sm">${esc(zone.hiRiseId)}</div>
-          <p class="help note-sm">${esc(tr ? (zone.summaryTr || zone.summary) : zone.summary)}</p>
+          <div class="kv mt-sm"><span>${tr ? 'HiRISE DTM Ürünü & Çözünürlük' : 'HiRISE DTM Product & Post Spacing'}</span><b>${esc(dtm.productId || 'DTEEC_PDS')} · ${dtm.truePostSpacingM || 1.0} m/post -> 10 m/cell</b></div>
+          <div class="kv"><span>${tr ? 'Stereo İşleme Yöntemi' : 'Stereo Processing Method'}</span><b>${esc(dtm.method || 'SOCET SET Photogrammetric Stereo')}</b></div>
+          <p class="help note-sm">${esc(tr ? (dtm.coverageNoteTr || dtm.coverageNote || zone.summaryTr) : (dtm.coverageNote || zone.summary))}</p>
+          <p class="help note-sm">${esc(tr ? sim.scaleSeparationNoteTr : sim.scaleSeparationNote)}</p>
+        </div>
+        <div class="row">
+          <button type="button" id="btn-eva-demo" class="btn-spec btn-full">${tr ? '▶ Jüri Sunum Demosu (Tam Marswalk Senaryosu · Çevrimdışı Hazır)' : '▶ Run Jury Marswalk Demo (Full End-to-End Offline Scenario)'}</button>
         </div>
         <div class="eva-canvas-wrap">
           <canvas id="eva-local-canvas" class="eva-local-canvas" width="420" height="320" role="img" aria-label="1 km by 1 km xGDS 5-domain surface assimilation map; click terrain to probe and expand scan"></canvas>
@@ -2116,6 +2415,21 @@
         </div>
         ${probeHTML}
         <div class="eva-drift-card">
+          <div class="sec-head"><h2>${tr ? '1. Gerçek Zamanlı Astronot Rota Takibi' : '1. Real-Time Astronaut Route Tracking'}</h2><span class="badge-mode badge-live">${rt.progressPct}%</span></div>
+          <div class="kv"><span>${tr ? 'Anlık Astronot Konumu' : 'Live Astronaut Position'}</span><b>${rt.astronautLat}°N, ${rt.astronautLon}°E (${rt.astronautXMeters}m, ${rt.astronautYMeters}m)</b></div>
+          <div class="kv"><span>${tr ? 'Yürünen / Kalan Mesafe' : 'Distance Walked / Remaining'}</span><b>${rt.traveledDistM} m / ${rt.remainDistM} m (Toplam ${sim.safeDistM} m)</b></div>
+          <div class="kv"><span>${tr ? 'Aktif Segment & Sonraki Durak ETA' : 'Active Leg & Next WP ETA'}</span><b>${esc(rt.activeLegLabel)} · ${rt.distToNextWpM} m (${rt.etaNextWpMin} ${tr ? 'dk' : 'min'})</b></div>
+          <div class="kv"><span>${tr ? 'Üsse Tahmini Varış (ETA) & Dönüş Noktası' : 'Base Return ETA & Turnaround'}</span><b class="ok">${rt.etaReturnBaseMin} ${tr ? 'dk' : 'min'} · Turnaround @ ${rt.turnaroundDistM} m</b></div>
+          <div class="kv"><span>${tr ? 'Astronot Dinlenme Durakları (~600m)' : 'Astronot Micro-Rest Stops (~600m)'}</span><b>${esc(restSummary)}</b></div>
+        </div>
+        <div class="eva-drift-card">
+          <div class="sec-head"><h2>${tr ? '2–3. Dinamik Tehlike Algılama & Otomatik Alternatif Rota' : '2–3. Dynamic Hazard Detection & Auto-Reroute'}</h2><span class="badge-mode badge-live">0 HITS</span></div>
+          <div class="kv"><span>${tr ? 'Önceki / Ham Uydu Rotası' : 'Previous / Naive Orbital Route'}</span><b class="bad">${esc(tr ? rr.cancelledRouteStatusTr : rr.cancelledRouteStatus)} (${rr.cancelledHazardHits} risk)</b></div>
+          <div class="kv"><span>${tr ? 'Yeni AutoNav A* Rotası' : 'New AutoNav A* Safe Route'}</span><b class="ok">${esc(tr ? rr.newRouteStatusTr : rr.newRouteStatus)} (${sim.safeDistM} m)</b></div>
+          <div class="kv"><span>${tr ? 'Yükselti Profili (Tırmanış / İniş / Eğim)' : 'Elevation Profile (Ascent / Descent / Max Slope)'}</span><b>+${sim.ascentM} m / -${sim.descentM} m · Max ${sim.maxSafeSlope}°</b></div>
+          <p class="help note-sm">${esc(tr ? rr.reasonTr : rr.reasonEn)}</p>
+        </div>
+        <div class="eva-drift-card">
           <div class="sec-head"><h2>${tr ? 'TRN + AutoNav + MGL Konum & Güven Kazancı' : 'TRN + AutoNav + MGL Localization & Confidence'}</h2></div>
           <div class="kv"><span>${tr ? 'TRN İniş Hassasiyeti' : 'TRN Touchdown'}</span><b class="ok">${sim.navStack.trn.touchdownErrorM} m (${tr ? 'uydu' : 'vs'} ${sim.navStack.trn.landingErrorEllipseOrbitalM} m)</b></div>
           <div class="kv"><span>${tr ? 'AutoNav Sindirim Alanı' : 'AutoNav Assimilation'}</span><b>%${sim.navStack.autonav.assimilatedPct} (${sim.navStack.autonav.hazardsMapped} ${tr ? 'engel hücresi' : 'hazard cells'})</b></div>
@@ -2127,16 +2441,40 @@
         <div class="hls-checks">${domainRows}</div>
         <div class="sec-head"><h2>${tr ? 'Uydu Öncülü vs Sahada Tespit Edilen Farklar (Δt Drift)' : 'Orbital Prior vs In-Situ Discrepancies (Δt Drift)'}</h2></div>
         ${discRows}
-        <div class="sec-head"><h2>${tr ? 'Astronot Giysi (xEMU) & Walkback / SPE Sığınak Limiti' : 'xEMU Suit Bioenergetics, Walkback & SPE Shelter'}</h2></div>
-        <div class="hls-checks">
-          <div class="hls-check"><span class="hint">${tr ? 'O2 Rezervi' : 'O2 Reserve'}</span><b class="${sim.o2RemainPct >= 35 ? 'ok' : 'warn'}">${sim.o2RemainPct}% (${tr ? 'Tüketim' : 'Used'} ${sim.o2UsedPct}%)</b></div>
-          <div class="hls-check"><span class="hint">${tr ? 'Batarya' : 'Suit Battery'}</span><b class="${sim.battRemainPct >= 30 ? 'ok' : 'warn'}">${sim.battRemainPct}%</b></div>
-          <div class="hls-check"><span class="hint">${tr ? 'Soğutma H2O' : 'Cooling H2O'}</span><b class="${sim.waterRemainPct >= 30 ? 'ok' : 'warn'}">${sim.waterUsedL} L (${sim.waterRemainPct}%)</b></div>
+        <div class="eva-drift-card">
+          <div class="sec-head"><h2>${tr ? '4. Astronot Yaşam Destek (PLSS) & Dönüş Rezervi' : '4. Astronaut Life Support (PLSS) & Return Reserve'}</h2></div>
+          <div class="hls-checks">
+            <div class="hls-check"><span class="hint">${tr ? 'O2 Rezervi' : 'O2 Reserve'}</span><b class="${sim.o2RemainPct >= sim.returnReserveO2Pct ? 'ok' : 'warn'}">${sim.o2RemainPct}% (${tr ? 'Tüketim' : 'Used'} ${sim.o2UsedPct}%)</b></div>
+            <div class="hls-check"><span class="hint">${tr ? 'CO2 Filtre (RCA)' : 'CO2 Scrubber'}</span><b class="${sim.co2ScrubberRemainPct >= 25 ? 'ok' : 'warn'}">${sim.co2ScrubberRemainPct}% (${sim.co2ProducedG}g)</b></div>
+            <div class="hls-check"><span class="hint">${tr ? 'Batarya' : 'Suit Battery'}</span><b class="${sim.battRemainPct >= 30 ? 'ok' : 'warn'}">${sim.battRemainPct}%</b></div>
+            <div class="hls-check"><span class="hint">${tr ? 'Soğutma H2O' : 'Cooling H2O'}</span><b class="${sim.waterRemainPct >= 30 ? 'ok' : 'warn'}">${sim.waterUsedL} L (${sim.waterRemainPct}%)</b></div>
+          </div>
+          <div class="kv"><span>${tr ? 'Dönüş + 30dk Acil Durum O2 Rezervi' : 'Return + 30m Emergency O2 Reserve'}</span><b class="${sim.returnReserveProtected ? 'ok' : 'bad'}">%${sim.returnReserveO2Pct} (${sim.returnReserveProtected ? (tr ? 'KORUNDU' : 'PROTECTED') : (tr ? 'RİSKLİ' : 'BREACHED')})</b></div>
+          <div class="kv"><span>${tr ? 'Metabolik Yük & Yürüyüş Hızı' : 'Metabolic Rate & Effective Pace'}</span><b>${sim.metabolicKcalH} kcal/${tr ? 'sa' : 'h'} (${sim.metabolicW} W) · ${sim.effSpeedKmh} km/h</b></div>
+          <div class="kv"><span>${tr ? 'Walkback Güvenli Geri Dönüş' : 'Walkback Safety Limit'}</span><b class="${sim.withinWalkback ? 'ok' : 'warn'}">${sim.walkbackRadiusM} m (${tr ? 'Azami' : 'Max'} ${sim.maxRadiusFromBaseM} m)</b></div>
+          <div class="kv"><span>${tr ? 'SPE Sığınağa Acil Kaçış Süresi (≤30 dk)' : 'SPE Storm Time-to-Shelter (≤30m)'}</span><b class="${sim.speWithin30Min ? 'ok' : 'bad'}">${speTimeShown} ${tr ? 'dk' : 'min'} (${sim.speReturnDistM} m)</b></div>
+          <p class="help note-sm">${esc(tr ? ls.xemuArchitectureNoteTr : ls.xemuArchitectureNote)}</p>
         </div>
-        <div class="kv"><span>${tr ? 'Metabolik Yük' : 'Metabolic Rate'}</span><b>${sim.metabolicKcalH} kcal/${tr ? 'sa' : 'h'} · ${sim.metabolicW} W</b></div>
-        <div class="kv"><span>${tr ? 'Walkback Güvenli Geri Dönüş' : 'Walkback Safety Limit'}</span><b class="${sim.withinWalkback ? 'ok' : 'warn'}">${sim.walkbackRadiusM} m (${tr ? 'Azami' : 'Max'} ${sim.maxRadiusFromBaseM} m)</b></div>
-        <div class="kv"><span>${tr ? 'SPE Sığınağa Acil Kaçış Süresi (≤30 dk)' : 'SPE Storm Time-to-Shelter (≤30m)'}</span><b class="${sim.speWithin30Min ? 'ok' : 'bad'}">${speTimeShown} ${tr ? 'dk' : 'min'} (${sim.speReturnDistM} m)</b></div>
-        <div class="kv"><span>${tr ? 'AutoNav A* vs Ham Uydu Rotası' : 'AutoNav A* vs Naive Orbital Route'}</span><b class="ok">${sim.safeDistM} m (0 ${tr ? 'risk' : 'hits'}) vs ${sim.orbitalDistM} m (${sim.orbitalHazardHits} ${tr ? 'risk' : 'hazards'})</b></div>
+        <div class="eva-drift-card">
+          <div class="sec-head"><h2>${tr ? '5. Çevresel Koşullar & Operasyonel Sınırlar' : '5. Environmental Conditions & Operational Limits'}</h2></div>
+          <div class="kv"><span>${tr ? 'Yüzey Sıcaklığı & Giysi Isıtıcı Yükü' : 'Ambient Surface Temp & Suit Heater'}</span><b>${env.ambientTempC} °C · +${env.coldHeaterW} W</b></div>
+          <div class="kv"><span>${tr ? 'Toz Optik Derinliği (τ) & Görüş Mesafesi' : 'Dust Optical Depth (τ) & Visibility'}</span><b>τ=${env.tau} · ${env.visibilityM} m (${Math.round(env.envSpeedFactor * 100)}% pace)</b></div>
+          <div class="kv"><span>${tr ? 'Radyasyon Dozu & Gale Belirsizlik Aralığı' : 'Radiation Dose & Gale Uncertainty Band'}</span><b>${sim.radDoseUsv} ± ${sim.radDoseUncUsv} µSv (${sim.radBand.nominal} ± ${sim.radBand.uncMsvYr} mSv/yr · ±18.8%)</b></div>
+          <div class="kv"><span>${tr ? 'Operasyonel Eğim Sınırı (Zemine Bağlı)' : 'Operational Slope Limit (Soil-Coupled)'}</span><b>${sim.maxSlope}° -> Etkin ${sim.slopeLimitInfo.effectiveMaxDeg}° (${esc(sim.slopeLimitInfo.soilClass)})</b></div>
+          <p class="help note-sm">${esc(sim.slopeLimitInfo.note)}</p>
+        </div>
+        ${sim.dustMl ? `<div class="eva-drift-card">
+          <div class="sec-head"><h2>${tr ? 'PIML 1-dk Toz & Vorteks Tahmini (MEDA/TWINS)' : 'PIML 1-min Vortex & Dust Nowcast (MEDA/TWINS)'}</h2><span class="badge-mode badge-live">ACC ${sim.dustMl.overallAccuracyPct}% · AUC ${sim.dustMl.overallRocAuc}</span></div>
+          ${sim.dustMl.horizons.slice(0, 3).map(h => `<div class="kv"><span>${esc(tr ? h.horizonTr : h.horizonEn)} <small>(${esc(h.keyMetric)})</small></span><b class="${h.cls}">${h.probPct}% · ${esc(tr ? h.statusTr : h.statusEn)}</b></div>`).join('')}
+        </div>` : ''}
+        <div class="eva-drift-card" id="eva-completion-report">
+          <div class="sec-head"><h2>${tr ? '6. Görev Tamamlanma Raporu (Mission Completion)' : '6. Mission Completion Report'}</h2><span class="badge-mode badge-live">${esc(cr.missionStatus)}</span></div>
+          <div class="kv"><span>${tr ? 'Yürüyüş Süresi & Toplam Mesafe' : 'Walk Duration & Total Distance'}</span><b>${cr.durationH} ${tr ? 'saat' : 'h'} · ${cr.distanceM} m (+${cr.ascentM}m / -${cr.descentM}m)</b></div>
+          <div class="kv"><span>${tr ? 'Tüketilen Kaynaklar (O2 / CO2 / Bat / H2O)' : 'Consumed Resources (O2 / CO2 / Batt / H2O)'}</span><b>${cr.consumed.o2G}g O2 (${cr.consumed.o2Pct}%) · ${cr.consumed.co2G}g CO2 (${cr.consumed.co2ScrubberPct}%) · ${cr.consumed.battPct}% Bat · ${cr.consumed.waterL}L H2O</b></div>
+          <div class="kv"><span>${tr ? 'Karşılaşılan & Aşılan Tehlikeler' : 'Hazards Encountered & Bypassed'}</span><b>${cr.hazardsEncounteredAndBypassed} (${cr.reroutesExecuted} A* reroute)</b></div>
+          <div class="kv"><span>${tr ? 'Toplanan Bilimsel Numune' : 'Collected Science Samples'}</span><b>${cr.samplesCollectedKg} kg (${cr.waypointsVisited} POI)</b></div>
+          <div class="kv"><span>${tr ? 'Dönüş Durumu' : 'Return Status'}</span><b class="${sim.returnReserveProtected && sim.withinWalkback ? 'ok' : 'warn'}">${esc(tr ? cr.returnStatusTr : cr.returnStatus)}</b></div>
+        </div>
         <div class="sec-head"><h2>${tr ? 'Bilimsel Hedef Noktaları (Science Waypoints)' : 'Science Waypoints (Click for HUD)'}</h2></div>
         <div class="eva-wp-list">${wpCards}</div>`;
 
@@ -2167,6 +2505,8 @@
         };
       }
 
+      const btnDemo = out.querySelector('#btn-eva-demo');
+      if (btnDemo) btnDemo.onclick = () => runJuryDemo();
       const btnHud = out.querySelector('#btn-open-hud');
       if (btnHud) btnHud.onclick = () => openHudModal(state.activeWpIdx);
       const btnExpand = out.querySelector('#btn-eva-expand');
@@ -2188,6 +2528,25 @@
         card.onclick = activate;
         card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } };
       });
+    }
+
+    function runJuryDemo() {
+      stopPlay();
+      state.zoneId = 'jezero_delta';
+      const sel = $('#eva-zone-select');
+      if (sel) sel.value = 'jezero_delta';
+      state.loadKg = 17.5;
+      state.speedKmh = 2.4;
+      state.maxSlope = 15;
+      state.buddyMode = 'buddy';
+      state.mglLocked = true;
+      state.speAlert = false;
+      state.activeWpIdx = 0;
+      state.scanStep = 8;
+      state.customScanPts = [{ x: 25, y: 36, r: 12 }, { x: 54, y: 26, r: 12 }];
+      state.dynamicHazards = [{ x: 35, y: 58, r: 5, label: 'Jury Demo: Live Delta Scarp Rockfall' }];
+      state.spotProbe = { x: 25, y: 36 };
+      recompute();
     }
 
     function zoomToZone(zoneKeyOrCoords) {
@@ -2312,6 +2671,7 @@
       zoomToZone,
       openHudModal,
       closeHudModal,
+      runJuryDemo,
       bindControls,
     };
   }

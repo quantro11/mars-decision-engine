@@ -74,10 +74,17 @@
     const noneTxt = tr ? 'bildirilmedi' : 'not reported';
     const activeRovers = (liveApi && liveApi.ACTIVE_ROVER_WEATHER_2026) || [];
     const roverRowsHtml = activeRovers.map(rv => `
-      <div class="kv"><span>${esc(tr ? rv.missionTr : rv.mission)}</span><b>Sol ${rv.sol} (${esc(rv.period)})</b></div>
+      <div class="kv"><span>${esc(tr ? rv.missionTr : rv.mission)}</span><b>Sol ${rv.sol} · ${esc(rv.earthDate || rv.period)}</b></div>
+      <div class="kv"><span>${tr ? 'Konum & Veri Türü' : 'Location & Data Type'}</span><b>${rv.lat !== undefined ? `${rv.lat}°N, ${rv.lon}°E (${rv.elev_m} m)` : 'Mars'} · ${esc(rv.dataType || 'ARCHIVE')}</b></div>
       <div class="kv"><span>${tr ? 'Sıcaklık / Basınç / Rüzgâr' : 'Temp / Pressure / Wind'}</span><b>${rv.air_temp_c.min}/${rv.air_temp_c.mean}/${rv.air_temp_c.max} °C · ${rv.pressure_pa} Pa · ${rv.wind_mps} m/s · τ=${rv.tau}</b></div>
     `).join('');
-    const weatherBlock = (roverRowsHtml ? `<div class="help note-sm"><span class="badge-mode badge-live">● ${tr ? 'AKTİF YÜZEY İSTASYONLARI (2025–2026)' : 'ACTIVE SURFACE STATIONS (2025–2026)'}</span></div>${roverRowsHtml}<hr class="sep">` : '') + (w
+    const extrap = (liveApi && typeof liveApi.extrapolateWeatherToSite === 'function' && activeRovers[1])
+      ? liveApi.extrapolateWeatherToSite(activeRovers[1], 39.2, -188.0, -3950)
+      : null;
+    const extrapHtml = extrap ? `
+      <div class="kv"><span>${tr ? 'Rota Aktarım Modeli (H=11.1 km)' : 'Route Extrapolation Model (H=11.1 km)'}</span><b>${extrap.distKm} km · ${extrap.projectedPressurePa} Pa · ${extrap.projectedMeanTempC} °C</b></div>
+      <div class="help note-sm">${esc(tr ? extrap.disclaimerTr : extrap.disclaimer)}</div>` : '';
+    const weatherBlock = (roverRowsHtml ? `<div class="help note-sm"><span class="badge-mode badge-archive">● ${tr ? 'NOKTA İSTASYON ARŞİV TELEMETRİSİ (REMS & MEDA)' : 'POINT-STATION ARCHIVE TELEMETRY (REMS & MEDA)'}</span></div>${roverRowsHtml}${extrapHtml}<hr class="sep">` : '') + (w
       ? `<div class="kv"><span>${tr ? 'Son arşivlenen sol (InSight API)' : 'Last archived sol (InSight API)'}</span><b>Sol ${w.sol}${w.first_utc ? ' · ' + esc(w.first_utc.slice(0, 10)) : ''}</b></div>
          <div class="kv"><span>${tr ? 'Hava sıcaklığı (min / ort / maks)' : 'Air temperature (min / mean / max)'}</span><b>${w.air_temp_c ? `${w.air_temp_c.min.toFixed(0)} / ${w.air_temp_c.mean.toFixed(0)} / ${w.air_temp_c.max.toFixed(0)} °C` : noneTxt}</b></div>
          <div class="kv"><span>${tr ? 'Basınç' : 'Pressure'}</span><b>${w.pressure_pa ? w.pressure_pa.toFixed(0) + ' Pa' : noneTxt}</b></div>
@@ -88,19 +95,29 @@
          <div class="help note-sm">${tr ? `Yayımlanmış klimatoloji (${esc(ref.citation)}); aktif 2025–2026 ölçümleri yukarıda REMS & MEDA istasyonlarında gösterilmektedir.` : `Published climatology (${esc(ref.citation)}); active 2025–2026 surface telemetry shown above via REMS & MEDA.`}</div>`);
 
     const cme = spaceRes.events && spaceRes.events[0];
+    const marsImpact = (liveApi && typeof liveApi.estimateMarsSpaceWeatherImpact === 'function')
+      ? liveApi.estimateMarsSpaceWeatherImpact(spaceRes.events, flareRes, -2540)
+      : null;
+    const marsModelHtml = marsImpact ? `
+      <hr class="sep">
+      <div class="help note-sm"><span class="badge-mode badge-ref">● ${tr ? 'AYRI MODEL · 1.524 AU MARS YAYILIM & YÜZEY DOZ TAHMİNİ' : 'SEPARATE MODEL · 1.524 AU MARS PROPAGATION & SURFACE DOSE'}</span></div>
+      <div class="kv"><span>${tr ? 'Mars’a Ulaşma Tahmini (DBM 1.524 AU)' : 'Est. Mars Transit Time (DBM 1.524 AU)'}</span><b>${marsImpact.transitHoursToMars} h (${esc(marsImpact.estimatedMarsArrivalWindow)})</b></div>
+      <div class="kv"><span>${tr ? '1/r² Akı Seyrelmesi & CO₂ Zırhlama' : '1/r² Flux Dilution & CO₂ Shielding'}</span><b>${marsImpact.fluxScalingFactor}× · ${marsImpact.columnMassGcm2} g/cm²</b></div>
+      <div class="kv"><span>${tr ? 'Modellenen Mars Yüzey Doz Hızı' : 'Modeled Mars Surface Dose Rate'}</span><b>${marsImpact.modeledSurfaceDoseRateUsvHr} µSv/h (±${marsImpact.uncertaintyPct}%)</b></div>
+      <div class="help note-sm">${esc(tr ? marsImpact.modelDisclaimerTr : marsImpact.modelDisclaimer)}</div>` : '';
     const flareHtml = flareRes ? `
       <hr class="sep">
       <div class="help note-sm">${badge(flareRes.mode || 'live')} ${esc(flareRes.source || 'NASA DONKI FLR')}</div>
-      <div class="kv"><span>${tr ? 'Son Güneş Patlaması (DONKI FLR)' : 'Latest Solar Flare (DONKI FLR)'}</span><b>${esc(flareRes.classType)} · AR ${esc(flareRes.sourceRegion)}</b></div>
+      <div class="kv"><span>${tr ? 'Son Güneş Patlaması (1 AU DONKI FLR)' : 'Latest Solar Flare (1 AU DONKI FLR)'}</span><b>${esc(flareRes.classType)} · AR ${esc(flareRes.sourceRegion)}</b></div>
       <div class="kv"><span>${tr ? 'Tepe Zamanı (UTC)' : 'Peak Time (UTC)'}</span><b>${esc(flareRes.peakTime)}</b></div>
       <div class="kv"><span>${tr ? 'EVA Yüzey Tavsiyesi' : 'EVA Surface Advisory'}</span><b>${esc(flareRes.evaAdvisory)}</b></div>` : '';
     const spaceBlock = spaceRes.mode === 'offline'
-      ? `<div class="help">${tr ? `Veri yok: ${esc(spaceRes.source)}. Varsayım üretilmedi.` : `No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.`}</div>${flareHtml}`
-      : `<div class="kv"><span>${tr ? 'Kataloglanan CME' : 'CMEs catalogued'}</span><b>${spaceRes.events.length}</b></div>
+      ? `<div class="help">${tr ? `Veri yok: ${esc(spaceRes.source)}. Varsayım üretilmedi.` : `No data: ${esc(spaceRes.source)}. Nothing is shown rather than a placeholder.`}</div>${flareHtml}${marsModelHtml}`
+      : `<div class="kv"><span>${tr ? 'Kataloglanan CME (1 AU Güneş Tacı)' : 'CMEs catalogued (1 AU Solar Corona)'}</span><b>${spaceRes.events.length}</b></div>
          ${cme ? `<div class="kv"><span>${tr ? 'En şiddetli / son olay' : 'Most recent / peak'}</span><b>${esc(cme.startTime)}${cme.speed_kms ? ' · ' + Math.round(cme.speed_kms) + ' km/s' : ''}</b></div>` : ''}
          ${cme && cme.note ? `<div class="help note-sm">${esc(cme.note)}</div>` : ''}
          ${flareHtml}
-         <div class="help note-sm">${tr ? 'DONKI heliosferik CME kataloglar; Mars yüzey radyasyon etkisi MAVEN/MSL-RAD ölçümleriyle doğrulanır.' : 'DONKI catalogues heliospheric CMEs; Mars surface radiation impact is cross-referenced with MAVEN/MSL-RAD observations.'}</div>`;
+         ${marsModelHtml}`;
 
     const critRows = liveApi.MARS_HABITABILITY_CRITERIA.map(rawC => {
       const c = trHab(rawC);

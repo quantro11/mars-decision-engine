@@ -16,6 +16,7 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const S = require(path.join(ROOT, 'web/scoring.js')).SCORING;
 const EVA = require(path.join(ROOT, 'web/ui/eva.js')).MDE_EVA;
+const STORM = require(path.join(ROOT, 'web/storm.js')).STORM;
 
 // ---- minimal PNG decoder: 8-bit greyscale, non-interlaced (what preprocess.py writes)
 function decodePNG(file) {
@@ -103,6 +104,12 @@ if (!t3.allPass) {
 const t3Trav = t3.checks.filter((c) => c.detourRatio !== undefined);
 const t3Bio = t3.checks.find((c) => c.id === 'apollo_xemu_bioenergetics_benchmark');
 
+// Test 4: Physics-Informed ML (PIML) Multi-Horizon Dust & Vortex Forecasting (1-min Cadence)
+const t4 = STORM.validateDustMLBenchmarks(L);
+if (!t4.allPass) {
+  throw new Error('Test 4 PIML Dust ML validation failed: ' + JSON.stringify(t4));
+}
+
 const fmtP = (p) => (p === 0 ? '< 0.005' : p.toFixed(3));
 const md = `# Validation
 
@@ -133,17 +140,27 @@ ${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
 | 1 — landers | ${mean(t1.map((t) => t.p)).toFixed(0)} | ${t1geo.toFixed(0)} |
 | 2 — HLS-2015 sites | ${mean(t2.map((t) => t.p)).toFixed(0)} | ${t2geo.toFixed(0)} |
 
-## Test 3 — Phase 2 Tactical Surface Traverse & Partial-Gravity Bioenergetics Validation
+## Test 3 — Independent Phase 2 EVA Multi-Biome & Partial-Gravity Bioenergetics Validation
 
-Couples the 1 km × 1 km (10 m/cell) Phase 2 micro-DEM directly to the shipped 4096 × 2048 MOLA/TES rasters (\`L.elev\`, \`L.slope\`, \`L.rough\`, \`L.ti\`) and benchmarks AutoNav pathfinding, MGL skyline pose lock, and Pandolf-Santee partial-gravity locomotion against published rover and Apollo/xEMU telemetry:
+Note: Tests 1 & 2 evaluate orbital landing suitability (~5 km/px) and **do not** prove astronaut EVA path safety. Test 3 validates local EVA routing, hazard avoidance, slope constraints, and Lunar-adapted xEMU PLSS (CO₂ scrubber + ≥25% return reserve) independently across all **4 biomes** (\`Jezero Delta\`, \`Gale Boxwork\`, \`Nili Fossae\`, \`Arcadia Planitia\`) plus Pandolf-Santee bioenergetics:
 
 | Surface Traverse Benchmark | Published Reference | Direct Chord | AutoNav Safe Route | Detour Ratio | Safe Hits vs Naive Orbital Hits | MGL Pose Error (vs VO Drift) | Status |
 |---|---|---|---|---|---|---|---|
 ${t3Trav.map((c) => `| ${c.mission} | ${c.reference} | ${c.directDistM} m | ${c.safeDistM} m | ${c.detourRatio.toFixed(2)}× | ${c.safeHazardHits} vs ${c.orbitalHazardHits} hits | ±${c.mglPoseErrorM} m (VO ${c.voDriftPct}%) | ${c.pass ? 'PASS' : 'FAIL'} |`).join('\n')}
 
-| Bioenergetics Benchmark (${t3Bio.reference}) | Lunar 1/6g (1.62 m/s²) | Martian 0.38g Nominal (3.71 m/s², η=1.15) | Martian 0.38g +10% Sand Grade (η=1.65) | Status |
-|---|---|---|---|---|
-| ${t3Bio.mission} | ${t3Bio.lunar16gW} W (ref 195–290 W) | ${t3Bio.mars038gNomW} W (ref 290–390 W) | ${t3Bio.mars038gSandUpW} W (ref 430–650 W) | ${t3Bio.pass ? 'PASS' : 'FAIL'} |
+| Bioenergetics & PLSS Benchmark (${t3Bio.reference}) | Lunar 1/6g (1.62 m/s²) | Martian 0.38g Nominal (3.71 m/s², η=1.15) | Martian 0.38g +10% Sand Grade (η=1.65) | CO₂ Scrubber & ≥25% Return Reserve | Status |
+|---|---|---|---|---|---|
+| ${t3Bio.mission} | ${t3Bio.lunar16gW} W (ref 195–290 W) | ${t3Bio.mars038gNomW} W (ref 290–390 W) | ${t3Bio.mars038gSandUpW} W (ref 430–650 W) | ${t3Bio.co2ScrubberRemainPct}% rem · ${t3Bio.returnReserveProtected ? 'PROTECTED' : 'FAIL'} | ${t3Bio.pass ? 'PASS' : 'FAIL'} |
+
+## Test 4 — Physics-Informed ML (PIML) Multi-Horizon Dust & Vortex Forecasting (1-min Cadence)
+
+Out-of-sample Temporal Split validation (${t4.splitProtocol}) across ${t4.totalBenchmarks} benchmark windows combining Perseverance MEDA / InSight TWINS 1-Hz microbarometer & wind telemetry with the Mars Dust Activity Database (MDAD, 22,865 storms, MY 24–31) and Montabone et al. (MY 24–36 CDOD $\\tau$):
+
+| Forecast Horizon | Reference Dataset | Holdout N | TP / TN / FP / FN | Accuracy (%) | ROC-AUC | F1 Score | Brier Score | Status |
+|---|---|---|---|---|---|---|---|---|
+${t4.horizons.map((h) => `| ${h.label} | ${h.reference} | ${h.n} | ${h.tp}/${h.tn}/${h.fp}/${h.fn} | **${h.accuracyPct.toFixed(1)}%** | **${h.rocAuc.toFixed(3)}** | ${h.f1.toFixed(3)} | ${h.brierScore.toFixed(4)} | ${h.pass ? 'PASS' : 'FAIL'} |`).join('\n')}
+
+**Multi-Horizon Holdout Mean: Accuracy ${t4.meanAccuracyPct.toFixed(1)}% · ROC-AUC ${t4.meanRocAuc.toFixed(3)} · Brier Score ${t4.meanBrierScore.toFixed(4)} (${t4.allPass ? 'ALL PASS' : 'FAIL'})**
 
 ## How to read this
 

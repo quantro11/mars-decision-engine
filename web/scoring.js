@@ -35,6 +35,49 @@
   }
   const radDoseMsvYr = radDose;
 
+  // Gale Crater MSL-RAD reference observation (Hassler et al. 2014, Science 343) is 0.64 +- 0.12 mSv/day (+-18.75% 1-sigma),
+  // subject to heliospheric solar-cycle modulation and secondary neutron albedo variations across regolith composition.
+  function radDoseBand(h_m, slopeDeg = 0, ls = null) {
+    const nominal = radDose(h_m, slopeDeg, ls);
+    const uncMsvYr = Math.round(nominal * 0.1875);
+    return {
+      nominal: Math.round(nominal),
+      min: Math.round(nominal - uncMsvYr),
+      max: Math.round(nominal + uncMsvYr),
+      uncMsvYr,
+      relUncPct: 18.8,
+      refSite: 'MSL Curiosity RAD at Gale Crater (-4.59°N, 137.44°E, -4,400 m)',
+      note: 'Extrapolated from Gale Crater 0.64 ± 0.12 mSv/day via barometric mass column Σ(h, Ls) and horizon sky-view Ω(θ)'
+    };
+  }
+
+  // Operational slope limit contextualization: 15° is our engineering model baseline (MER/MSL planning rule),
+  // not a universal physical human limit. Loose fine dust (TI < 100 tiu) lowers slip-safe limit; bedrock (TI >= 300) supports full limit.
+  function effectiveSlopeLimit(nominalMaxDeg = 15, ti = 220) {
+    const base = Math.max(5, Math.min(30, nominalMaxDeg || 15));
+    const tiVal = ti === null || ti === undefined ? 215 : ti;
+    let delta = 0;
+    let soilRegime = 'consolidated_regolith';
+    if (tiVal < 100) {
+      delta = -3.5;
+      soilRegime = 'loose_fine_dust';
+    } else if (tiVal < 150) {
+      delta = -1.8;
+      soilRegime = 'unconsolidated_sand';
+    } else if (tiVal >= 340) {
+      delta = +1.5;
+      soilRegime = 'indurated_bedrock';
+    }
+    const effectiveMaxDeg = +(Math.max(5, Math.min(28, base + delta))).toFixed(1);
+    return {
+      nominalMaxDeg: base,
+      effectiveMaxDeg,
+      deltaDeg: delta,
+      soilRegime,
+      note: '15° is the model operational baseline (not a universal human limit); adjusted locally by TES thermophysical grain/induration proxy'
+    };
+  }
+
   // ---------------------------------------------------------------- Ice access (replaces the old "ISRU yield")
   // SWIM 2.0 "consistency" (-1..1) measures how strongly five independent datasets AGREE that ice is present
   // (Morgan et al. 2021, Nat. Astron. 5). It does NOT measure ice concentration, purity or extraction yield,
@@ -44,12 +87,36 @@
   const CREW_WATER_L_SOL = 10;          // 4 crew, recycled ECLSS make-up water per sol (assumption)
   function calcIceAccess(c, depthBand) {
     const depth = depthBand === 'ice01' ? '0-1 m' : depthBand === 'ice15' ? '1-5 m' : '> 5 m';
-    if (c === null || c === undefined) return { status: 'NO_DATA', label: 'Outside SWIM coverage', depth, consistency: null, regolithKgSol: null };
+    const scientificNote = 'SWIM 2.0 consistency (-1..+1) is a multi-sensor dielectric/thermal/neutron agreement index, not confirmed ice volume or purity';
+    if (c === null || c === undefined) {
+      return {
+        status: 'NO_DATA',
+        isNoData: true,
+        label: 'Outside SWIM coverage (±60° limit — not equivalent to ice-free)',
+        depth,
+        consistency: null,
+        regolithKgSol: null,
+        scientificNote
+      };
+    }
     const status = c >= 0.5 ? 'LIKELY' : c >= 0 ? 'POSSIBLE' : 'UNLIKELY';
-    const label = { LIKELY: 'Ice likely (datasets agree)', POSSIBLE: 'Ice possible (mixed evidence)', UNLIKELY: 'Ice unlikely' }[status];
+    const label = {
+      LIKELY: 'Ice likely (datasets agree — drill core verification required)',
+      POSSIBLE: 'Ice possible (mixed sensor evidence — unconfirmed)',
+      UNLIKELY: 'Ice unlikely (datasets agree ice absent)'
+    }[status];
     // kg of regolith to excavate per sol for the crew make-up water IF the assumed concentration holds
     const regolithKgSol = status === 'UNLIKELY' ? null : Math.round(CREW_WATER_L_SOL / ICE_WT_ASSUMED);
-    return { status, label, depth, consistency: c, regolithKgSol, assumption: `${ICE_WT_ASSUMED * 100}% ice by mass, ${CREW_WATER_L_SOL} L/sol crew make-up water` };
+    return {
+      status,
+      isNoData: false,
+      label,
+      depth,
+      consistency: c,
+      regolithKgSol,
+      assumption: `${ICE_WT_ASSUMED * 100}% ice by mass, ${CREW_WATER_L_SOL} L/sol crew make-up water`,
+      scientificNote
+    };
   }
 
   // ---------------------------------------------------------------- Solar particle event (SPE) shielding
@@ -216,19 +283,53 @@
 
   // Weight-sensitivity (Monte Carlo): perturb every weight by a uniform factor in [1-spread, 1+spread], re-score,
   // and report for each reference candidate the fraction of runs in which a top-N candidate lies within matchPx of it.
+  // Default upgraded to 100 simulation runs with 95% Wilson binomial confidence intervals.
+  function wilson95CI(k, n) {
+    if (n <= 0) return [0, 0];
+    const z = 1.95996, p = k / n, z2 = z * z;
+    const denom = 1 + z2 / n;
+    const center = (p + z2 / (2 * n)) / denom;
+    const half = (z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n)) / denom;
+    return [+Math.max(0, center - half).toFixed(3), +Math.min(1, center + half).toFixed(3)];
+  }
+
   function sensitivity(L, weights, hard, ref, o, rng) {
-    const runs = o.runs || 30, spread = o.spread ?? 0.2, keep = new Array(ref.length).fill(0);
+    const runs = (o && o.runs) || 100, spread = (o && o.spread) ?? 0.2, keep = new Array(ref.length).fill(0);
+    const rankSum = new Array(ref.length).fill(0), rankSq = new Array(ref.length).fill(0);
     const buf = new Float32Array(L.width * L.height);
+    const topN = (o && o.n) || 5;
     for (let r = 0; r < runs; r++) {
       const w = {};
       for (const k in weights) w[k] = weights[k] * (1 - spread + 2 * spread * rng());
-      scoreMap(L, w, hard, buf, o.mode);
-      const top = topCandidates(buf, L.width, L.height, o.n || 5, o.blockPx, o.minSepPx);
+      scoreMap(L, w, hard, buf, o && o.mode);
+      const top = topCandidates(buf, L.width, L.height, topN, o.blockPx, o.minSepPx);
       ref.forEach((c, i) => {
-        if (top.some(t => { let dx = Math.abs(t.x - c.x); dx = Math.min(dx, L.width - dx); return Math.hypot(dx, t.y - c.y) <= o.matchPx; })) keep[i]++;
+        const idx = top.findIndex(t => { let dx = Math.abs(t.x - c.x); dx = Math.min(dx, L.width - dx); return Math.hypot(dx, t.y - c.y) <= o.matchPx; });
+        const rnk = idx >= 0 ? (idx + 1) : (topN + 1);
+        if (idx >= 0) keep[i]++;
+        rankSum[i] += rnk;
+        rankSq[i] += rnk * rnk;
       });
     }
-    return keep.map(k => k / runs);
+    const rates = keep.map(k => k / runs);
+    rates.runs = runs;
+    rates.ci95 = keep.map(k => wilson95CI(k, runs));
+    rates.rankStd = keep.map((_, i) => {
+      const m = rankSum[i] / runs;
+      return +Math.sqrt(Math.max(0, rankSq[i] / runs - m * m)).toFixed(2);
+    });
+    return rates;
+  }
+
+  function sensitivityCI(L, weights, hard, ref, o, rng) {
+    const rates = sensitivity(L, weights, hard, ref, o, rng);
+    return ref.map((_, i) => ({
+      rate: rates[i],
+      runs: rates.runs,
+      ci95Low: rates.ci95[i][0],
+      ci95High: rates.ci95[i][1],
+      rankStd: rates.rankStd[i]
+    }));
   }
 
   /** Linearly interpolate an encoded layer array at fractional grid coordinates (wrapping horizontally).
@@ -261,21 +362,34 @@
 
   function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-  // ---------------------------------------------------------------- 0.38g Martian Pandolf-Santee EVA Bioenergetics & xEMU PLSS
-  // Shared kernel across Site Selection, Regional A* Traverse, and Tactical 1 km x 1 km EVA Planner.
-  // Budgets: 850 g primary O2, 960 Wh battery, 4.2 L LCVG sublimator cooling water, 8.0 h nominal EVA window.
+  // ---------------------------------------------------------------- 0.38g Martian Pandolf-Santee EVA Bioenergetics & Mars-Adapted xEMU PLSS
+  // Note on xEMU Architecture: NASA's xEMU is a Lunar/Artemis reference PLSS architecture (vacuum sublimator/SWME, 1/6g).
+  // Here it is extrapolated to Martian surface EVA (0.38g, 6-10 mbar CO2 atmosphere convective heat leak, RCA CO2 scrubber).
+  // Budgets: 850 g primary O2 (including 25% return + 13% 30-min emergency reserve), 960 Wh battery, 4.2 L cooling H2O, 920 g CO2 RCA scrubber.
   const MARS_G = 3.71;
+  const SUIT_O2_CAP_G = 850;
+  const SUIT_BATT_CAP_WH = 960;
+  const SUIT_WATER_CAP_L = 4.2;
+  const SUIT_CO2_CAP_G = 920; // Rapid Cycle Amine (RCA) + backup LiOH CO2 scrubbing capacity per 8h sortie (g CO2)
+
   function calcPandolfMars(opts = {}) {
     const gLocal = opts.gravityMps2 ?? MARS_G;
     const slopeDeg = Math.max(0, opts.slopeDeg || 0);
-    const speedKmh = Math.max(0.5, opts.speedKmh || 2.4);
+    const rawSpeedKmh = Math.max(0.5, opts.speedKmh || 2.4);
     const loadKg = Math.max(0, opts.loadKg ?? 15);
     const buddyMode = opts.buddyMode || 'buddy';
     const durationH = Math.max(0.2, opts.durationH ?? 6.0);
     const ascentM = Math.max(0, opts.ascentM || 0);
     const ti = opts.ti !== undefined ? opts.ti : 215;
+    const ambientTempC = opts.ambientTempC !== undefined ? opts.ambientTempC : -55;
+    const tau = Math.max(0.1, opts.tau ?? 0.5);
     const sandFrac = Math.max(0, Math.min(1, opts.sandFrac ?? (ti !== null && ti < 100 ? (100 - ti) / 100 : 0)));
+
+    // Environmental visibility & dust storm pace modulation
+    const envSpeedFactor = tau > 1.5 ? Math.max(0.68, 1 - (tau - 1.5) * 0.035) : 1.0;
+    const speedKmh = +(rawSpeedKmh * envSpeedFactor).toFixed(2);
     const vMps = Math.max(0.25, speedKmh / 3.6);
+
     const bodyKg = 80, suitKg = 82;
     const effLoadKg = buddyMode === 'rover_eva' ? loadKg * 0.55 : loadKg * 0.90;
     const effMassLocal = (bodyKg + suitKg + effLoadKg) * (gLocal / 9.81);
@@ -294,26 +408,70 @@
     const metabolicW = Math.round(Math.max(190, Math.min(680, pandolfW)));
     const metabolicKcalH = Math.round(metabolicW * 0.8598);
     const totalKcal = Math.round(metabolicKcalH * durationH);
+
+    // O2 consumption & CO2 production (Respiratory Quotient RQ = 0.85 -> ~1.17 g CO2 per g O2)
     const o2UsedG = Math.round(0.255 * metabolicW * durationH);
-    const o2UsedPct = Math.min(99, Math.round((o2UsedG / 850) * 100));
+    const o2UsedPct = Math.min(99, Math.round((o2UsedG / SUIT_O2_CAP_G) * 100));
     const o2RemainPct = Math.max(1, 100 - o2UsedPct);
-    const waterRateLh = Math.max(0.08, (0.72 * metabolicW) / 675);
+
+    const co2ProducedG = Math.round(o2UsedG * 1.17);
+    const co2ScrubberUsedPct = Math.min(99, Math.round((co2ProducedG / SUIT_CO2_CAP_G) * 100));
+    const co2ScrubberRemainPct = Math.max(1, 100 - co2ScrubberUsedPct);
+
+    // PLSS Electrical Battery (base 95 W avionics/fan/RCA + cold-environment glove/boot heaters in 6-10 mbar CO2 atmosphere)
+    const coldHeaterW = ambientTempC < -60 ? Math.min(38, Math.round((-60 - ambientTempC) * 0.85)) : 0;
+    const suitPowerW = 95 + 0.06 * metabolicW + coldHeaterW;
+    const battUsedWh = Math.round(suitPowerW * durationH);
+    const battUsedPct = Math.min(99, Math.round((battUsedWh / SUIT_BATT_CAP_WH) * 100));
+    const battRemainPct = Math.max(1, 100 - battUsedPct);
+
+    // LCVG Sublimator / SWME feedwater (modulated slightly by ambient temperature)
+    const tempMod = ambientTempC > -35 ? 1.06 : (ambientTempC < -80 ? 0.92 : 1.0);
+    const waterRateLh = Math.max(0.08, ((0.72 * metabolicW) / 675) * tempMod);
     const waterUsedL = +(waterRateLh * durationH).toFixed(2);
-    const waterUsedPct = Math.min(99, Math.round((waterUsedL / 4.2) * 100));
+    const waterUsedPct = Math.min(99, Math.round((waterUsedL / SUIT_WATER_CAP_L) * 100));
     const waterRemainPct = Math.max(1, 100 - waterUsedPct);
+
+    // Mandatory Return & 30-min Emergency Contingency Reserves (minimum 25% O2 / Battery / CO2 scrubber held for return + abort)
+    const returnReserveTargetPct = 25;
+    const emergencyReserveO2G = Math.round(0.255 * metabolicW * 0.5); // 30-min emergency reserve
+    const returnLegO2G = Math.round(o2UsedG * 0.45) + emergencyReserveO2G;
+    const returnReserveO2Pct = Math.min(95, Math.round((returnLegO2G / SUIT_O2_CAP_G) * 100));
+    const minRemainPct = Math.min(o2RemainPct, battRemainPct, co2ScrubberRemainPct, waterRemainPct);
+    const returnReserveProtected = minRemainPct >= returnReserveTargetPct;
+
     const buddyFactor = buddyMode === 'rover_eva' ? 1.24 : (buddyMode === 'solo' ? 0.86 : 1.0);
     const loadPenalty = Math.max(0.55, 1 - 0.0075 * effLoadKg);
     const slopePenalty = Math.max(0.7, 1 - Math.max(0, slopeDeg - 10) * 0.008);
     const paceFactor = Math.sqrt(Math.max(0.6, Math.min(1.25, speedKmh / 2.4)));
     const o2Factor = Math.max(0.55, Math.min(1, o2RemainPct / 80));
     const walkbackRadiusM = Math.round(Math.max(320, Math.min(980, 960 * loadPenalty * slopePenalty * paceFactor * o2Factor * buddyFactor)));
+
     return {
       metabolicW, metabolicKcalH, totalKcal,
       o2UsedG, o2UsedPct, o2RemainPct,
+      co2ProducedG, co2ScrubberUsedPct, co2ScrubberRemainPct,
+      battUsedWh, battUsedPct, battRemainPct, coldHeaterW,
       waterUsedL, waterUsedPct, waterRemainPct,
+      returnLegO2G, emergencyReserveO2G, returnReserveO2Pct, returnReserveTargetPct, returnReserveProtected,
+      envSpeedFactor, effectiveSpeedKmh: speedKmh,
       walkbackRadiusM,
+      suitModelNote: 'Lunar xEMU reference PLSS architecture extrapolated to 0.38g Mars gravity & 6-10 mbar CO2 thermal environment (not flight-certified Mars hardware)'
     };
   }
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, calcIceAccess, calcSPE, speDose, calcTerrainClass, calcPandolfMars, sensitivity, sampleBilinear, mulberry32 };
+  // Scientific Data Traceability Catalog (Item 18: Dataset, Product Code, CRS, Native/Shipped Resolution, Update Epoch)
+  const LAYER_PROVENANCE = [
+    { id: 'elev', name: 'MOLA Planetary Elevation', productCode: 'USGS_MGS_MOLA_DEM_MOSAIC_GLOBAL_463M (MEGDR)', crs: 'IAU-2000 Simple Cylindrical (R = 3389.5 km)', nativeRes: '463 m/px (16-bit int)', shippedRes: '5.2 km/px (4096×2048, 8-bit)', epoch: 'PDS3 Archive / Re-indexed 2024' },
+    { id: 'slope', name: 'MOLA 90th-Percentile Slope', productCode: 'DERIVED_MOLA_16BIT_P90_SLOPE_81SAMPLES', crs: 'IAU-2000 Simple Cylindrical (cos φ corrected)', nativeRes: '2.3 km baseline (9216×4608)', shippedRes: '5.2 km/px (0.125°/level)', epoch: 'Derived from MOLA MEGDR (2024)' },
+    { id: 'rough', name: 'MOLA Sub-Cell Roughness (σ)', productCode: 'DERIVED_MOLA_16BIT_STDDEV_81SAMPLES', crs: 'IAU-2000 Simple Cylindrical', nativeRes: '2.3 km sub-grid (81 pts/cell)', shippedRes: '5.2 km/px (4 m/level)', epoch: 'Derived from MOLA MEGDR (2024)' },
+    { id: 'ice', name: 'SWIM 2.0 Subsurface Ice Consistency', productCode: 'PSI_SWIM_2.0_COMPOSITE_ICE_CONSISTENCY (0-1m, 1-5m, >5m)', crs: 'IAU-2000 Equirectangular (±60° lat)', nativeRes: '3.0 km/px (7200×2400)', shippedRes: '5.2 km/px (-1.0..+1.0 index)', epoch: 'Morgan et al. 2021 (Nature Astron. 5)' },
+    { id: 'ti', name: 'MGS TES Thermal Inertia', productCode: 'ASU_JMARS_TES_THERMAL_INERTIA_NUMERIC (Putzig/Mellon)', crs: 'IAU-2000 Simple Cylindrical', nativeRes: '7.4 km/px (8 ppd numeric VICAR)', shippedRes: '5.2 km/px (4 tiu/level)', epoch: 'Christensen et al. / Putzig 2005 PDS' },
+    { id: 'dust', name: 'MGS TES Surface Dust Index', productCode: 'ASU_JMARS_TES_DUST_NUMERIC (Bandfield 2002)', crs: 'IAU-2000 Simple Cylindrical', nativeRes: '7.4 km/px (8 ppd numeric VICAR)', shippedRes: '5.2 km/px (0.005/level)', epoch: 'Bandfield 2002 (JGR 107)' },
+    { id: 'cave', name: 'Mars Global Cave Candidate Catalog (MGC³)', productCode: 'USGS_PDS_MGC3_V1_1062_CANDIDATES (Cushing 2017)', crs: 'IAU-2000 Planetocentric Lat/Lon', nativeRes: 'Point catalog (CTX 6 m / HiRISE 0.25 m)', shippedRes: '1062 point vectors + distance raster', epoch: 'Cushing 2017 (USGS Astrogeology)' },
+    { id: 'basemap', name: 'Viking Orbiter Global Color Mosaic', productCode: 'USGS_MDIM_2.1_GLOBAL_COLOR_SHADED', crs: 'IAU-2000 Simple Cylindrical', nativeRes: '231 m/px global mosaic', shippedRes: '5.2 km/px (4096×2048 RGB)', epoch: 'USGS Astrogeology MDIM 2.1' },
+    { id: 'eva_dtm', name: 'Phase 2 Tactical Surface DTM / Micro-DEM', productCode: 'UA_HIRISE_PDS_DTM (DTEEC_045994_1985 / DTEEC_023957_1745) + MOLA/TES Prior', crs: 'Local Metric Tangent Plane (1 km × 1 km)', nativeRes: '1.0–2.0 m/post (where stereo exists)', shippedRes: '10 m/cell (100×100) + 1 m HUD', epoch: 'PDS4 Mars 2020 / MSL Archive (2024–2026)' }
+  ];
+
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, radDoseBand, effectiveSlopeLimit, calcIceAccess, calcSPE, speDose, calcTerrainClass, calcPandolfMars, sensitivity, sensitivityCI, wilson95CI, sampleBilinear, mulberry32, LAYER_PROVENANCE };
 })(typeof window !== 'undefined' ? window : module.exports);
