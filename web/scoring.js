@@ -8,6 +8,10 @@
 (function (global) {
   'use strict';
 
+  const PLANET = (global.PLANET_PROFILES ||
+    (typeof globalThis !== 'undefined' && globalThis.PLANET_PROFILES) ||
+    (typeof require === 'function' ? require('./planet_profiles.js').PLANET_PROFILES : null)).get();
+
   function ramp(x, x0, x1) {           // 1 at x<=x0, 0 at x>=x1, linear between
     if (x <= x0) return 1;
     if (x >= x1) return 0;
@@ -21,17 +25,19 @@
   function atmoColumnGcm2(h_m, ls = null) {
     let fSeason = 1.0;
     if (ls !== null && ls !== undefined) {
-      const phi = ((ls - 255) * Math.PI) / 180;
-      fSeason = 1.0 + 0.092 * Math.cos(phi) + 0.038 * Math.cos(2 * phi);
+      const sc = PLANET.atmosphere.seasonalColumn;
+      const phi = ((ls - sc.phaseLsDeg) * Math.PI) / 180;
+      fSeason = 1.0 + sc.a1 * Math.cos(phi) + sc.a2 * Math.cos(2 * phi);
     }
-    return 16.4 * fSeason * Math.exp(-h_m / 11100);
+    return PLANET.atmosphere.columnDatumGcm2.value * fSeason * Math.exp(-h_m / PLANET.atmosphere.scaleHeightM.value);
   }
   function radDose(h_m, slopeDeg = 0, ls = null) {
     const sigma = atmoColumnGcm2(h_m, ls);
     const sDeg = Math.min(45, Math.max(0, slopeDeg || 0));
     const skyView = 1 - 0.5 * (1 - Math.cos(sDeg * Math.PI / 180));
     const geomFactor = Math.max(0.75, skyView - sDeg * 0.002);
-    return 0.64 * Math.exp(-(sigma - 24.6) / 60) * 365.25 * geomFactor;
+    const R = PLANET.radiation;
+    return R.anchorDoseMsvPerDay.value * Math.exp(-(sigma - R.anchorColumnGcm2.value) / R.eFoldColumnGcm2.value) * 365.25 * geomFactor;
   }
   const radDoseMsvYr = radDose;
 
@@ -366,7 +372,7 @@
   // Note on xEMU Architecture: NASA's xEMU is a Lunar/Artemis reference PLSS architecture (vacuum sublimator/SWME, 1/6g).
   // Here it is extrapolated to Martian surface EVA (0.38g, 6-10 mbar CO2 atmosphere convective heat leak, RCA CO2 scrubber).
   // Budgets: 850 g primary O2 (including 25% return + 13% 30-min emergency reserve), 960 Wh battery, 4.2 L cooling H2O, 920 g CO2 RCA scrubber.
-  const MARS_G = 3.71;
+  const MARS_G = PLANET.gravityMs2.value;
   const SUIT_O2_CAP_G = 850;
   const SUIT_BATT_CAP_WH = 960;
   const SUIT_WATER_CAP_L = 4.2;

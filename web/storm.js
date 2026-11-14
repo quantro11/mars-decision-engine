@@ -16,13 +16,16 @@
 //   battery(t+1)= clamp(battery(t) + net, 0, capacity)
 (function (global) {
   'use strict';
-  const SOL_H = 24.66, KILOPOWER_KW = 10;
+  const PLANET = (global.PLANET_PROFILES ||
+    (typeof globalThis !== 'undefined' && globalThis.PLANET_PROFILES) ||
+    (typeof require === 'function' ? require('./planet_profiles.js').PLANET_PROFILES : null)).get();
+  const SOL_H = PLANET.solHours.value, KILOPOWER_KW = 10;
   const DEG = Math.PI / 180;
-  const OBLIQUITY = 25.19 * DEG;
-  const ECC = 0.0934;
-  const LS_PERIHELION = 251.0;
-  const S0 = 586;
-  const LS_PER_SOL = 360 / 668.6;
+  const OBLIQUITY = PLANET.obliquityDeg.value * DEG;
+  const ECC = PLANET.eccentricity.value;
+  const LS_PERIHELION = PLANET.lsPerihelionDeg.value;
+  const S0 = PLANET.solarConstantWm2.value;
+  const LS_PER_SOL = 360 / PLANET.solsPerYear.value;
 
   function fTau(tau) { return Math.exp(-0.35 * (tau - 0.5)); }
 
@@ -184,7 +187,7 @@
   //
   // Combines 7 first-principles boundary-layer & orbital features with a calibrated
   // Gradient Boosted Decision Tree (GBDT) ensemble and Platt probability scaling.
-  const MARS_G_ACCEL = 3.71;
+  const MARS_G_ACCEL = PLANET.gravityMs2.value;
   const R_CO2 = 188.9;
 
   // Historical storm track & baroclinic genesis corridors from MDAD (Battalio & Wang 2021)
@@ -252,7 +255,7 @@
     // 1. Atmospheric column & density rho(h, Ls)
     const phiLs = (ls - 148) * DEG;
     const fSeasonP = 1.0 - 0.085 * Math.cos(phiLs) + 0.035 * Math.cos(2 * phiLs);
-    const sigmaGcm2 = 16.4 * fSeasonP * Math.exp(-elev / 11100);
+    const sigmaGcm2 = PLANET.atmosphere.columnDatumGcm2.value * fSeasonP * Math.exp(-elev / PLANET.atmosphere.scaleHeightM.value);
     const pressurePa = sigmaGcm2 * 10 * MARS_G_ACCEL; // ~608 Pa at datum
     const sTemp = surfaceTempC(lat, ls, ti, elev, tauCurrent);
     const tAirK = Math.max(150, sTemp.day + 273.15 - 16.0);

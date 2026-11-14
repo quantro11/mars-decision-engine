@@ -6,7 +6,7 @@
   const IS_WORKER = typeof importScripts === 'function';
   if (IS_WORKER) {
     global.window = global;
-    importScripts('layers/meta.js', 'scoring.js', 'astar.js');
+    importScripts('layers/meta.js', 'planet_profiles.js', 'scoring.js', 'astar.js');
   }
 
   /**

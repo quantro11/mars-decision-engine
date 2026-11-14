@@ -254,4 +254,15 @@ const utopiaRes = ENGINE.generateAnalysis({
 });
 check(utopiaRes.hasCoarseBaseline && !utopiaRes.isLowResGrid && utopiaRes.summary.maxScore > utopiaRes.summary.minScore, `Candidate Utopia 16 km2 grid shows real 100-200 m diversity (${utopiaRes.summary.minScore}..${utopiaRes.summary.maxScore})`);
 
+
+// Refactor invariance: planet profile must reproduce the pre-refactor Mars constants exactly
+const PLANET = require(path.join(WEB, 'planet_profiles.js')).PLANET_PROFILES.get();
+check(PLANET.id === 'mars' && PLANET.verified === true, 'active planet profile is the verified Mars profile');
+check(Math.abs(SCORING.atmoColumnGcm2(0) - 16.4) < 1e-9, 'column mass at datum = 16.4 g/cm2 (profile-driven)');
+check(Math.abs(SCORING.atmoColumnGcm2(-4400) - 16.4 * Math.exp(4400 / 11100)) < 1e-9, 'column mass follows 11.1 km scale height');
+check(Math.abs(SCORING.radDose(-4400, 0) - 0.64 * Math.exp(-(16.4 * Math.exp(4400 / 11100) - 24.6) / 60) * 365.25) < 1e-6, 'GCR dose formula unchanged by profile refactor');
+check(Math.abs(STORM.fTau(0.5) - 1) < 1e-12, 'storm model loads with profile constants');
+for (const [k, v] of Object.entries(require(path.join(WEB, 'planet_profiles.js')).PLANET_PROFILES.earth)) {
+  if (v && typeof v === 'object' && 'value' in v) check(v.value === null && /unverified/.test(v.source), `earth template ${k} is explicitly unverified`);
+}
 console.log(`All ${passed} Tactical EVA 16 km2 unit/model/config/VICAR assertions passed.`);

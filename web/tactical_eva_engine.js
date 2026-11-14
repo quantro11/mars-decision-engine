@@ -3,6 +3,9 @@
 // Reuses MDE_MARS_TIME (Mars24), SCORING (radiation/elevation/normalization), and STORM (dust solar/thermal/ML).
 (function (global) {
   'use strict';
+  const PLANET = (global.PLANET_PROFILES ||
+    (typeof globalThis !== 'undefined' && globalThis.PLANET_PROFILES) ||
+    (typeof require === 'function' ? require('./planet_profiles.js').PLANET_PROFILES : null)).get();
 
   function unwrap(mod, key) {
     return mod && mod[key] ? mod[key] : mod;
@@ -379,7 +382,7 @@
     const baseRad = SCORING.radDose(phys.elevM, phys.slopeDeg, env.lsDeg);
     const modelColGcm2 = SCORING.atmoColumnGcm2(phys.elevM, env.lsDeg);
     const pressureFactor = phys.pressurePa != null
-      ? clamp(phys.pressurePa / Math.max(100, modelColGcm2 * 37.2076), 0.5, 1.5)
+      ? clamp(phys.pressurePa / Math.max(100, modelColGcm2 * PLANET.atmosphere.pressurePaPerGcm2.value), 0.5, 1.5)
       : 1.0;
     const colGcm2 = modelColGcm2 * pressureFactor;
     const modelGcrMSvYr = baseRad * cyc.factor / Math.pow(pressureFactor, 0.25);
@@ -539,7 +542,7 @@
       gcrMSvYr: +gcrMSvYr.toFixed(1),
       speMSv: +speMSv.toFixed(1),
       atmoColGcm2: +colGcm2.toFixed(2),
-      pressurePa: +(colGcm2 * 37.2076).toFixed(0),
+      pressurePa: +(colGcm2 * PLANET.atmosphere.pressurePaPerGcm2.value).toFixed(0),
       visHazePct: +(visHaze * 100).toFixed(1),
       sinkagePenalty: +sinkagePenalty.toFixed(1),
       speedRiskPenalty: +speedRiskPenalty.toFixed(1),
