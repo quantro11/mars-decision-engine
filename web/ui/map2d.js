@@ -23,6 +23,86 @@
     const radLut = OVERLAYS.buildRadLut(layers.L.meta.elev, SCORING);
     let ovDirty = true, viewReady = false, raf3D = 0;
 
+    // ---- Zoom-dependent relief detail tiles (tools/build_detail_tiles.mjs, MOLA-HRSC 200 m DEM)
+    // Base map = level 3 (4096 px wide, ~5.2 km/px). When zoomed in, sharper 256 px tiles for only the
+    // visible area are fetched from tiles/relief/{z}/{x}_{y}.png and blended over the colour mosaic.
+    const detail = { manifest: null, levels: [], cache: new Map(), pending: 0, enabled: true, activeKmPerPx: null };
+    const DETAIL_MAX_CACHE = 600;
+    function loadDetailManifest() {
+      if (typeof fetch !== 'function' || (typeof location !== 'undefined' && location.protocol === 'file:')) return;
+      fetch('tiles/manifest.json', { cache: 'no-cache' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((m) => {
+          if (!m || !Array.isArray(m.levels) || !m.levels.length) return;
+          detail.manifest = m;
+          detail.levels = m.levels.slice().sort((a, b) => a.z - b.z);
+          updateScaleBar(); draw();
+        })
+        .catch(() => {});
+    }
+    function detailTile(z, x, y) {
+      const key = z + '/' + x + '_' + y;
+      let e = detail.cache.get(key);
+      if (e) { detail.cache.delete(key); detail.cache.set(key, e); return e.ok ? e.img : null; }
+      if (detail.pending > 24) return null;
+      const img = new Image();
+      e = { img, ok: false };
+      detail.cache.set(key, e);
+      detail.pending++;
+      img.onload = () => { e.ok = true; detail.pending--; draw(); };
+      img.onerror = () => { detail.pending--; };
+      img.src = 'tiles/relief/' + key + '.png';
+      if (detail.cache.size > DETAIL_MAX_CACHE) detail.cache.delete(detail.cache.keys().next().value);
+      return null;
+    }
+    function pickDetailLevel(scale) {
+      if (!detail.enabled || !detail.levels.length || scale < 1.4) return null;
+      const base = detail.manifest.baseLevel || 3;
+      const want = base + Math.ceil(Math.log2(scale));
+      let lv = null;
+      for (const l of detail.levels) if (l.z <= want) lv = l;
+      return lv || null;
+    }
+    /** Draw visible relief tiles for one horizontal world copy starting at screen x = sx. */
+    function drawDetailTiles(sx, ty, scale) {
+      const lv = pickDetailLevel(scale);
+      detail.activeKmPerPx = lv ? lv.kmPerPx : null;
+      if (!lv) return;
+      const T = detail.manifest.tileSize || 256;
+      const k = lv.width / W;                 // tile pixels per base-grid pixel
+      const tileScreen = (T / k) * scale;     // on-screen size of one tile
+      const gx0 = Math.max(0, (0 - sx) / scale), gx1 = Math.min(W, (canvas.width - sx) / scale);
+      const gy0 = Math.max(0, (0 - ty) / scale), gy1 = Math.min(H, (canvas.height - ty) / scale);
+      if (gx1 <= gx0 || gy1 <= gy0) return;
+      const tx0 = Math.floor((gx0 * k) / T), tx1 = Math.min(lv.tilesX - 1, Math.floor((gx1 * k) / T));
+      const ty0 = Math.floor((gy0 * k) / T), ty1 = Math.min(lv.tilesY - 1, Math.floor((gy1 * k) / T));
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = 0.95;
+      for (let yy = ty0; yy <= ty1; yy++) {
+        for (let xx = tx0; xx <= tx1; xx++) {
+          let img = detailTile(lv.z, xx, yy);
+          let srcLv = lv;
+          if (!img) {
+            // Fall back to the parent tile at a coarser level while the sharp one downloads
+            const parent = detail.levels.filter((l) => l.z < lv.z).pop();
+            if (parent) {
+              const f = lv.width / parent.width;
+              const pimg = detailTile(parent.z, Math.floor(xx / f), Math.floor(yy / f));
+              if (pimg) {
+                const ox = (xx % f) * (T / f), oy = (yy % f) * (T / f);
+                ctx.drawImage(pimg, ox, oy, T / f, T / f, sx + xx * tileScreen, ty + yy * tileScreen, tileScreen + 0.5, tileScreen + 0.5);
+              }
+            }
+            continue;
+          }
+          ctx.drawImage(img, sx + xx * tileScreen, ty + yy * tileScreen, tileScreen + 0.5, tileScreen + 0.5);
+        }
+      }
+      ctx.restore();
+    }
+
     const toScreen = (x, y) => [S.view.tx + x * S.view.scale, S.view.ty + y * S.view.scale];
     const toGrid = (sx, sy) => [(sx - S.view.tx) / S.view.scale, (sy - S.view.ty) / S.view.scale];
 
@@ -58,7 +138,11 @@
       let niceKm = steps[0];
       for (const s of steps) { if (s <= targetKm * 1.35) niceKm = s; }
       const barPx = Math.max(28, Math.min(120, Math.round(niceKm / kmPerCssPx)));
-      elLbl.textContent = `${niceKm} km`;
+      const baseKm = (2 * Math.PI * MARS_R) / W;
+      const lv = S.viewMode === '3d' ? null : pickDetailLevel(S.view.scale);
+      const dataKm = lv ? lv.kmPerPx : baseKm;
+      elLbl.textContent = `${niceKm} km · data ${dataKm < 1 ? Math.round(dataKm * 1000) + ' m' : dataKm.toFixed(1) + ' km'}/px`;
+      elLbl.title = lv ? `Relief detail tiles z${lv.z} from MOLA-HRSC 200 m DEM (USGS 2018)` : 'Global base map (MOLA 463 m DEM averaged to 4096×2048)';
       elBar.style.width = `${barPx}px`;
     }
 
@@ -234,17 +318,24 @@
         const { scale, tx, ty } = S.view;
         ctx.fillStyle = '#030508';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.imageSmoothingEnabled = scale < 1.2;
+        const useDetail = !!pickDetailLevel(scale);
+        detail.activeKmPerPx = null;
         for (const off of [-W, 0, W]) {
           const sx = tx + off * scale;
           if (sx > canvas.width || sx + W * scale < 0) continue;
+          // With relief tiles active, smooth the colour mosaic so 5 km blocks don't show through
+          ctx.imageSmoothingEnabled = useDetail || scale < 1.2;
           ctx.drawImage(baseImg, sx, ty, W * scale, H * scale);
+          if (useDetail) drawDetailTiles(sx, ty, scale);
           if (S.overlay !== 'none') {
+            // Data overlays are 5 km cells; smooth them when zoomed in so they read as a field, not blocks
+            ctx.imageSmoothingEnabled = useDetail || scale < 1.2;
             ctx.globalAlpha = S.opacity;
             ctx.drawImage(ovCanvas, sx, ty, W * scale, H * scale);
             ctx.globalAlpha = 1;
           }
         }
+        ctx.imageSmoothingEnabled = scale < 1.2;
         draw2DGraticule(dpr, placer, bounds);
       }
 
@@ -339,7 +430,7 @@
       }
       const mx = canvas.width / 2, my = canvas.height / 2;
       const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
-      const ns = Math.max(minS, Math.min(40, S.view.scale * factor));
+      const ns = Math.max(minS, Math.min(detail.levels.length ? 96 : 40, S.view.scale * factor));
       const k = ns / S.view.scale;
       S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k;
       S.view.scale = ns; wrapView(); updateScaleBar(); draw();
@@ -395,7 +486,7 @@
       const dpr = global.devicePixelRatio || 1, r = canvas.getBoundingClientRect();
       const mx = (e.clientX - r.left) * dpr, my = (e.clientY - r.top) * dpr;
       const f = Math.exp(-e.deltaY * 0.0015), minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
-      const ns = Math.max(minS, Math.min(40, S.view.scale * f)), k = ns / S.view.scale;
+      const ns = Math.max(minS, Math.min(detail.levels.length ? 96 : 40, S.view.scale * f)), k = ns / S.view.scale;
       S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k; S.view.scale = ns;
       wrapView(); updateScaleBar(); draw();
     }, { passive: false });
@@ -477,7 +568,7 @@
           schedule3D();
         } else {
           const mx = ((t1.clientX + t2.clientX) / 2 - rect.left) * dpr, my = ((t1.clientY + t2.clientY) / 2 - rect.top) * dpr;
-          const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9, ns = Math.max(minS, Math.min(40, touchState.scale * ratio));
+          const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9, ns = Math.max(minS, Math.min(detail.levels.length ? 96 : 40, touchState.scale * ratio));
           const k = ns / touchState.scale;
           S.view.scale = ns; S.view.tx = mx - (touchState.mx - touchState.tx) * k; S.view.ty = my - (touchState.my - touchState.ty) * k;
           wrapView(); updateScaleBar(); draw();
@@ -498,8 +589,11 @@
       }
     });
 
+    loadDetailManifest();
+
     return {
       canvas,
+      detail,
       markOverlayDirty: () => { ovDirty = true; },
       buildOverlay,
       resize,

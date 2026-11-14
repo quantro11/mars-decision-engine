@@ -6,15 +6,36 @@
     {
       "source": "/layers/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    },
+    {
+      "source": "/tiles/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, immutable"
+        }
       ]
     },
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://mars.nasa.gov https://mars.jpl.nasa.gov https://images-assets.nasa.gov https://astro.arcgis.com; connect-src 'self' https://api.nasa.gov https://mars.nasa.gov https://images-api.nasa.gov https://astro.arcgis.com https://services.arcgis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://mars.nasa.gov https://mars.jpl.nasa.gov https://images-assets.nasa.gov https://astro.arcgis.com; connect-src 'self' https://api.nasa.gov https://mars.nasa.gov https://images-api.nasa.gov https://astro.arcgis.com https://services.arcgis.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        }
       ]
     }
   ]
