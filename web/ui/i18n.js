@@ -5,7 +5,7 @@
   const STRINGS = {
     en: {
       brandName: 'Mars EVA & Base Decision Engine',
-      brandSub: 'Phase 1: Strategic Base Siting · Phase 2: Hyper-Local EVA & Suit HUD',
+      brandSub: 'Landing-site, Marswalk (EVA) route & science planning on real orbital data',
       'mode.score': 'Site selection',
       'mode.eva': 'Tactical EVA · 1m/px',
       'mode.route': 'Rover route',
@@ -85,7 +85,7 @@
     },
     tr: {
       brandName: 'Mars EVA & Üs Karar Motoru',
-      brandSub: 'Aşama 1: Stratejik Üs Seçimi · Aşama 2: Hiper-Yerel EVA ve Kask HUD',
+      brandSub: 'Gerçek yörünge verileriyle iniş sahası, Marswalk (EVA) rotası ve bilim planlaması',
       'mode.score': 'Saha seçimi',
       'mode.eva': 'Taktik EVA · 1m/px',
       'mode.route': 'Rover rotası',
@@ -168,7 +168,7 @@
   // Static DOM bindings: [selectorOrTuple, trText]
   const DOM_TR = [
     ['.brand-name', 'Mars EVA & Üs Karar Motoru'],
-    ['.brand-sub', 'Aşama 1: Stratejik Üs Seçimi · Aşama 2: Hiper-Yerel EVA ve Kask HUD'],
+    ['.brand-sub', 'Gerçek yörünge verileriyle iniş sahası, Marswalk (EVA) rotası ve bilim planlaması'],
     ['.mode-btn[data-mode="score"] .mode-label', 'Saha seçimi'],
     ['.mode-btn[data-mode="eva"] .mode-label', 'Taktik EVA · 1m/px'],
     ['.mode-btn[data-mode="route"] .mode-label', 'Rover rotası'],
@@ -194,9 +194,12 @@
     ['#panel-eva .sec-head h2', 'Taktik EVA / Mars Yürüyüşü'],
     ['#eva-intro', 'Kaya blokları, dik krater duvarları ve kum tuzakları etrafında 1 m/px yerel A* yürüyüş rotası, xEMU giysi O₂/batarya/soğutma telemetrisi, Güvenli Geri Dönüş Çemberi ve Kask İçi HUD.'],
     ['#hud-close', 'Kapat'],
-    ['#panel-route .sec-head h2', 'Rover rotası'],
-    ['#panel-route p.help', 'Harita veya küreden başlangıç ve varış seçin. Planlayıcı MOLA eğim haritasında en güvenli rotayı bulup kuş uçuşuyla kıyaslar.'],
+    ['#panel-route .sec-head h2', 'Rover / Marswalk rotası'],
+    ['#panel-route p.help', 'Harita veya küreden başlangıç ve varış seçin. Planlayıcı MOLA eğim haritasında Bilimsel Hedef Noktalarına (POI) uğrayan en güvenli rotayı bulur ve uzay giysisi (EVA) metabolik/O₂/radyasyon yükünü hesaplar.'],
+    ['#route-mode-seg button[data-rmode="rover"]', 'Rover Sürüşü'],
+    ['#route-mode-seg button[data-rmode="marswalk"]', 'EVA / Marswalk'],
     ['#route-demo', 'Jezero → Nili örneği'],
+    ['#route-marswalk-demo', 'Gale Boxwork Marswalk'],
     ['#route-clear', 'Temizle'],
     ['#panel-crisis .sec-head h2', 'Toz fırtınası güç modeli'],
     ['#panel-crisis p.help', 'Haritadan veya aday kartından bir saha seçin; güç sistemini 2018-benzeri küresel toz fırtınasına göre boyutlandırın.'],
@@ -264,6 +267,7 @@
   const CHECK_DESC_TR = [
     ['#hard', ' +2 km rakım üstü, 15°’den dik veya ±50° enlem dışı hücreler elenir.'],
     ['#agg-geo', ' Ağırlıklı geometrik ortalama: sıfıra yakın bir kriter diğerleriyle telafi edilemez.'],
+    ['#route-sci-poi', ' SWIM 2.0 Buz Sondajı, Mount Sharp Boxwork ve TES Mineral Örnekleme duraklarını rotaya dahil et ve bilim skorunu hesapla.'],
     ['#show-regions', 'Yer adları ve iniş araçları'],
     ['#show-ez', 'NASA 2015 keşif zonları'],
   ];

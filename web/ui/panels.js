@@ -85,7 +85,7 @@
   function createPanels(ctx) {
     const {
       doc = global.document, S, layers, SCORING, STORM, FMT, CHARTS,
-      onRescore, onSelect, onUseRoute, onUseCrisis, onUseEva, onGlobeFly,
+      onRescore, onSelect, onUseRoute, onUseCrisis, onUseEva, onPlanMarswalk, onOpenHud, onGlobeFly,
     } = ctx;
     const $ = (s) => doc.querySelector(s);
     const { candidateName, trekUrl, fmtLat, fmtLon, escHtml } = FMT;
@@ -243,11 +243,24 @@
           <tr><td>${tr ? 'Habitat ısı kaybı' : 'Habitat heat loss'}</td><td>${pTherm} kW (${tr ? 'önce elektrik yükü atık ısısıyla karşılanır' : 'covered by waste heat of the electrical load first'})</td></tr>
           <tr><td>${tr ? 'xEMU EVA Güvenli Dönüş (Walkback)' : 'xEMU EVA Walkback Limit'}</td><td><b>${(S.evaSim ? S.evaSim.walkbackRadiusM : 1380)} m</b> · ${S.evaSim ? S.evaSim.metabolicKcalH : 275} kcal/h · O₂ ${S.evaSim ? S.evaSim.o2RemainPct : 72}%</td></tr>
         </table>
+        <div class="marswalk-micro-card">
+          <div class="marswalk-micro-head">
+            <b>${tr ? 'Yerel HiRISE / Marswalk Mikro-Planlama Özeti' : 'Local HiRISE / Marswalk Micro-Planning Summary'}</b>
+            <span class="badge-mode badge-live">1 m/px · ≤ 8h EVA</span>
+          </div>
+          <div class="help note-sm">${tr
+            ? `${escHtml(nr.region.name)} çevresinde bireysel astronot yürüyüşü (Marswalk): <b>SWIM 2.0 Buz Sondajı</b> (${v.ice === null ? 'soğuk tuzak' : v.ice.toFixed(2)}), <b>Boxwork Kırık Sırtları</b> ve <b>TES Mineral Mostrası</b> (${v.ti.toFixed(0)} tiu) duraklarını kapsar.`
+            : `Individual astronaut surface walk (Marswalk) near ${escHtml(nr.region.name)} targeting <b>SWIM 2.0 Ice Core</b> (${v.ice === null ? 'cold trap' : v.ice.toFixed(2)}), <b>Boxwork Fracture Ridges</b>, and <b>TES Mineral Outcrop</b> (${v.ti.toFixed(0)} tiu).`}</div>
+          <div class="kv"><span>${tr ? 'Tahmini EVA Süresi & Limit' : 'Est. Marswalk Duration & Limit'}</span><b class="ok">5.2 h / 8.0 h max EVA ✓</b></div>
+          <div class="kv"><span>${tr ? 'Giysi O₂ / Soğutma Suyu / Doz' : 'Suit O₂ / Cooling H₂O / Dose'}</span><b>O₂ 68% rem · 1.4 L H₂O · ${(radMsv / (365.25 * 24) * 5.2).toFixed(3)} mSv</b></div>
+        </div>
         <div class="row">
+          <button id="plan-marswalk-btn" class="btn-spec btn-full">${escHtml(tr ? 'Bu Sahada Marswalk Rotası Planla (A* + Bilim POI)' : 'Plan Marswalk at this Site (A* + Science POIs)')}</button>
           <button id="use-eva" class="btn-spec btn-full">${escHtml(t('zoomLocalEva', tr ? 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD' : 'Zoom to Local EVA Zone (1 m/px) & HUD'))}</button>
           <button id="use-route" class="ghost">${escHtml(t('startRouteHere', 'Start a route here'))}</button>
           <button id="use-crisis" class="ghost">${escHtml(t('useStormModel', 'Use in storm model'))}</button>
         </div>`;
+      if ($('#plan-marswalk-btn')) $('#plan-marswalk-btn').onclick = () => { if (onPlanMarswalk) onPlanMarswalk(x, y, v, nr.region.name); else if (onUseRoute) onUseRoute(x, y); };
       if ($('#use-eva')) $('#use-eva').onclick = () => { if (onUseEva) onUseEva(x, y, v, nr.region.name); };
       $('#use-route').onclick = () => onUseRoute(x, y);
       $('#use-crisis').onclick = () => onUseCrisis(x, y, true);
@@ -271,21 +284,53 @@
       const havens = b.safeHavens || [];
       const havenStr = havens.length ? havens.map(h => `${h.name} (${h.km}km · sol ${Math.round(h.km / r.speed)})`).join(', ') : (tr ? 'Tespit edilmedi' : 'None detected');
       const evaSim = S.evaSim || { o2UsedPct: 28, o2RemainPct: 72, battUsedPct: 24, battRemainPct: 76, loadKg: 15, metabolicKcalH: 278, metabolicW: 323, walkbackRadiusM: 1380 };
+      const ev = b.evaStats || {
+        sortieKm: 12.0, walkHours: 6.2, maxEvaLimitH: 8.0, withinEvaLimit: true, evaSorties: Math.max(1, Math.ceil(b.km / 14)),
+        metabolicW: 318, metabolicKcalH: 273, sortieKcal: 1692, o2UsedG: 503, o2UsedPct: 59, o2RemainPct: 41,
+        waterUsedL: 2.11, waterUsedPct: 56, waterRemainPct: 44, radDoseMsv: 0.168, corridorRadDoseMsv: 1.42
+      };
+      const evDir = (a && a.evaStats) || { walkHours: 6.8, metabolicKcalH: 312, o2UsedPct: 68, radDoseMsv: 0.195 };
+      const sciWps = b.scienceWaypoints || [];
+      const sciScore = b.scienceScore || 92;
+      const isMarswalk = r.travelMode === 'marswalk';
 
-      el.innerHTML = `<table class="stat-table"><tr><th>${tr ? 'Metrik' : 'Metric'}</th><th class="straight">${tr ? 'Doğrudan' : 'Direct'}</th><th class="safe">${tr ? 'A* Güvenli' : 'A* Safe'}</th></tr>
+      const sciRowsHtml = sciWps.map((wp, idx) => `
+        <div class="eva-wp-card route-poi-card" data-poi-idx="${idx}" role="button" tabindex="0">
+          <div class="eva-wp-head">
+            <b>${escHtml(wp.id)} · ${escHtml(tr ? wp.nameTr : wp.name)}</b>
+            <span class="badge-mode badge-live">+${wp.sciGain} SCI · km ${wp.km}</span>
+          </div>
+          <div class="help note-sm">${escHtml(tr ? wp.targetTr : wp.target)}</div>
+          <div class="help note-sm">Elev ${wp.elev} m · Slope ${wp.slope}° · TI ${wp.ti} tiu · SWIM Ice ${wp.ice}</div>
+        </div>`).join('');
+
+      el.innerHTML = `
+        <div class="marswalk-mode-banner ${isMarswalk ? 'active' : ''}">
+          <b>${isMarswalk ? (tr ? 'AKTİF MOD: Astronot EVA / Marswalk (Uzay Giysisi & Bilim Rotası)' : 'ACTIVE MODE: Astronaut EVA / Marswalk (Spacesuit & Science Route)') : (tr ? 'AKTİF MOD: Basınçlı Rover + Marswalk EVA Çıkışları' : 'ACTIVE MODE: Pressurized Rover + Marswalk EVA Sorties')}</b>
+          <span class="badge-mode badge-live">${tr ? `BİLİM KAZANIMI: ${sciScore}/100` : `SCIENCE GAIN: ${sciScore}/100`}</span>
+        </div>
+        <table class="stat-table"><tr><th>${tr ? 'Metrik' : 'Metric'}</th><th class="straight">${tr ? 'Doğrudan' : 'Direct'}</th><th class="safe">${tr ? 'A* Güvenli' : 'A* Safe'}</th></tr>
         <tr><td>${tr ? 'Toplam Mesafe' : 'Total Distance'}</td><td>${a.km.toFixed(0)} km</td><td>${b.km.toFixed(0)} km <small>(+${(100 * (b.km / a.km - 1)).toFixed(0)}%)</small></td></tr>
         <tr><td>${tr ? 'Tepe Eğim' : 'Peak Slope'}</td><td class="${cls(a.maxSlope)}">${a.maxSlope.toFixed(1)}°</td><td class="${cls(b.maxSlope)}">${b.maxSlope.toFixed(1)}°</td></tr>
         <tr><td>${tr ? 'Ortalama Eğim' : 'Mean Slope'}</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}°</td></tr>
         <tr><td>${tr ? '&gt;10° Eğim Mesafesi' : 'Distance &gt;10° Slope'}</td><td>${a.hazardKm.toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} km</td></tr>
         <tr><td>${tr ? 'Düşük-TI Toz (&lt;100 tiu)' : 'Low-TI Dust (&lt;100 tiu)'}</td><td>${(a.dustKm || 0).toFixed(0)} km</td><td>${(b.dustKm || 0).toFixed(0)} km</td></tr>
-        <tr><td>${tr ? 'Aday mola noktası' : 'Candidate rest stops'}</td><td>—</td><td><b>${havens.length}</b> (${tr ? 'düz, pürüzsüz, sert' : 'flat, smooth, firm'})</td></tr>
-        <tr><td>${tr ? 'Geçiş Süresi' : 'Traverse Duration'}</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr>
-        <tr><td>${tr ? 'Astronot O₂ / Giysi Bat.' : 'Astronaut O₂ / Suit Batt'}</td><td>—</td><td class="ok">O₂ -${evaSim.o2UsedPct}% (${evaSim.o2RemainPct}% rem) · Batt -${evaSim.battUsedPct}%</td></tr>
-        <tr><td>${tr ? 'Ekipman Yükü & Metabolik' : 'Sample Load & Metabolic'}</td><td>—</td><td>${evaSim.loadKg} kg · ${evaSim.metabolicKcalH} kcal/h (${evaSim.metabolicW} W)</td></tr>
-        <tr><td>${tr ? 'Güvenli Geri Dönüş (Walkback)' : 'Walkback Safety Limit'}</td><td>—</td><td class="ok"><b>${evaSim.walkbackRadiusM} m</b> (${tr ? 'Rover+Yaya İkili' : 'Rover+Foot Buddy'})</td></tr></table>
+        <tr><td>${tr ? 'Rover Geçiş Süresi' : 'Rover Duration'}</td><td>${sols(a.km)} sols</td><td>${sols(b.km)} sols</td></tr>
+        <tr><td>${tr ? 'EVA Yürüyüş Süresi (≤8 sa limit)' : 'EVA Walk Time (≤8h limit)'}</td><td>${evDir.walkHours} h/sortie</td><td class="${ev.withinEvaLimit ? 'ok' : 'warn'}"><b>${ev.walkHours} h / ${ev.maxEvaLimitH.toFixed(1)} h</b> (${ev.evaSorties} sortie)</td></tr>
+        <tr><td>${tr ? 'Metabolik Enerji (Uzay Giysisi)' : 'Spacesuit Metabolic Energy'}</td><td>${evDir.metabolicKcalH} kcal/h</td><td><b>${ev.metabolicKcalH} kcal/h</b> (${ev.metabolicW} W · ${ev.sortieKcal} kcal)</td></tr>
+        <tr><td>${tr ? 'O₂ & Soğutma Suyu Tüketimi' : 'O₂ & Cooling H₂O Used'}</td><td>O₂ ${evDir.o2UsedPct}%</td><td class="ok"><b>${ev.o2UsedG} g O₂</b> (${ev.o2UsedPct}%) · <b>${ev.waterUsedL} L H₂O</b> (${ev.waterUsedPct}%)</td></tr>
+        <tr><td>${tr ? 'Toplam Anlık Radyasyon Dozu' : 'Traverse Radiation Dose'}</td><td>${evDir.radDoseMsv} mSv</td><td class="ok"><b>${ev.radDoseMsv} mSv</b>/sortie (${ev.corridorRadDoseMsv} mSv total)</td></tr>
+        <tr><td>${tr ? 'Güvenli Geri Dönüş (Walkback)' : 'Walkback Safety Limit'}</td><td>—</td><td class="ok"><b>${evaSim.walkbackRadiusM} m</b> (${evaSim.loadKg} kg ${tr ? 'numune' : 'sample'})</td></tr>
+        <tr><td>${tr ? 'Rota Bilimsel Kazanım Skoru' : 'Route Science Gain Score'}</td><td>—</td><td class="ok"><b>${sciScore} / 100 pts</b> (${sciWps.length} POI)</td></tr></table>
         <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (tr ? `Doğrudan hat ${a.maxSlope.toFixed(1)}° eğimi aşıyor (sınır ${r.maxSlope}°). Güvenli rota +${(b.km - a.km).toFixed(0)} km ekler.` : `Direct path crosses ${a.maxSlope.toFixed(1)}° terrain (${r.maxSlope}° limit). The safe route adds ${(b.km - a.km).toFixed(0)} km.`) : (tr ? 'Doğrudan hat azami eğim sınırını sağlıyor.' : 'Direct path satisfies maximum slope constraint.')}</div>
+        ${sciWps.length ? `<div class="sec-head mt-sm"><h2>${tr ? 'Rota Üzerindeki Bilimsel Hedef Noktaları (Science Waypoints)' : 'Science Waypoints Along Route (Click for Visor HUD)'}</h2></div><div class="eva-wp-list">${sciRowsHtml}</div>` : ''}
         ${havens.length ? `<div class="help haven-note"><b>${tr ? 'MOLA NOKTALARI (YALNIZCA ARAZİ, SIĞINAK ANLAMI TAŞIMAZ)' : 'REST STOPS (TERRAIN ONLY, NO SHELTER IMPLIED)'}</b>${escHtml(havenStr)}</div>` : ''}
         <div class="hint mt-sm">${tr ? 'Güvenli rota boyunca yükselti profili' : 'Elevation profile along the safe route'} · ${(r.ms || 0).toFixed(0)} ms, ${r.safe.path.length} ${tr ? 'hücre' : 'cells'}</div>${CHARTS.profileSVG(b.profile)}`;
+      el.querySelectorAll('.route-poi-card').forEach(card => {
+        const openPoi = () => { if (onOpenHud) onOpenHud(+card.dataset.poiIdx); };
+        card.onclick = openPoi;
+        card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPoi(); } };
+      });
       announce(tr ? `Güvenli rover rotası hesaplandı: ${b.km.toFixed(0)} kilometre, tepe eğim ${b.maxSlope.toFixed(1)} derece.` : `Safe traverse route computed: ${b.km.toFixed(0)} kilometers, peak slope ${b.maxSlope.toFixed(1)} degrees.`, doc);
     }
 

@@ -53,7 +53,7 @@
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
     sensSpread: 0.2, agg: 'sum',
-    route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20, ms: 0 },
+    route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20, ms: 0, travelMode: 'rover', viaSciencePoi: true },
     crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0, regolith: 1.5 },
   };
 
@@ -154,15 +154,8 @@
     if (!r.start || !r.goal) return;
     const ticket = ++routeTicket;
     const finish = (safe, straight, ms) => { if (ticket === routeTicket) { r.safe = safe; r.straight = straight; r.ms = ms; panels.renderRoute(); viewport.draw(); } };
-    const runSyncRoute = () => {
-      const t0 = performance.now();
-      finish(ASTAR.plan(L, r.start.x, r.start.y, r.goal.x, r.goal.y, { k: r.k, maxSlope: r.maxSlope }), ASTAR.straight(L, r.start.x, r.start.y, r.goal.x, r.goal.y), performance.now() - t0);
-    };
-    if (workerReady) {
-      workerCall({ cmd: 'route', sx: r.start.x, sy: r.start.y, gx: r.goal.x, gy: r.goal.y, k: r.k, maxSlope: r.maxSlope })
-        .then(res => finish(res.safe, res.straight, res.ms)).catch(runSyncRoute);
-      return;
-    }
+    const runSyncRoute = () => { const t0 = performance.now(); finish(ASTAR.plan(L, r.start.x, r.start.y, r.goal.x, r.goal.y, { k: r.k, maxSlope: r.maxSlope, viaSciencePoi: r.viaSciencePoi }), ASTAR.straight(L, r.start.x, r.start.y, r.goal.x, r.goal.y), performance.now() - t0); };
+    if (workerReady) { workerCall({ cmd: 'route', sx: r.start.x, sy: r.start.y, gx: r.goal.x, gy: r.goal.y, k: r.k, maxSlope: r.maxSlope, viaSciencePoi: r.viaSciencePoi }).then(res => finish(res.safe, res.straight, res.ms)).catch(runSyncRoute); return; }
     runSyncRoute();
   }
 
@@ -179,21 +172,27 @@
     else { panels.runCrisis(); viewport.draw(); }
   }
 
+  function setRouteMode(rm) {
+    S.route.travelMode = rm;
+    document.querySelectorAll('#route-mode-seg button').forEach(b => { const a = b.dataset.rmode === rm; b.classList.toggle('active', a); b.setAttribute('aria-pressed', String(a)); });
+    panels.renderRoute(); if (viewport) viewport.draw();
+  }
   panels = window.MDE_PANELS.createPanels({
     doc: document, S, layers, SCORING, STORM, FMT, CHARTS,
-    onRescore: rescore,
-    onSelect: select,
+    onRescore: rescore, onSelect: select, onUseCrisis: setCrisisSite,
     onUseRoute: (x, y) => { setMode('route'); S.route.start = { x, y }; S.route.goal = null; S.route.safe = S.route.straight = null; panels.renderRoute(); viewport.draw(); },
-    onUseCrisis: setCrisisSite,
+    onPlanMarswalk: (x, y) => {
+      const safePt = (cx, cy) => { for (let r = 0; r <= 12; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const nx = ((cx + dx) % W + W) % W, ny = Math.max(4, Math.min(H - 5, cy + dy)); if (!L.slope || L.slope[ny * W + nx] * META.slope.scale <= S.route.maxSlope) return { x: nx, y: ny }; } return { x: cx, y: cy }; };
+      setMode('route'); setRouteMode('marswalk');
+      S.route.start = safePt(x, y); S.route.goal = safePt((x + 12) % W, Math.max(4, Math.min(H - 5, y - 8)));
+      if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 5.5); S.view.tx = viewport.canvas.width / 2 - (x + 6) * S.view.scale; S.view.ty = viewport.canvas.height / 2 - (y - 4) * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); }
+      computeRoute();
+    },
+    onOpenHud: (idx) => { if (eva) eva.openHudModal(idx); },
     onUseEva: (x, y, v, regionName) => {
       if (eva) eva.zoomToZone({ lat: L.latOfRow(y), lon: L.lonOfCol(x), v, regionName });
       setMode('eva');
-      if (S.viewMode === '2d' && viewport) {
-        S.view.scale = Math.max(S.view.scale, 6.0);
-        S.view.tx = viewport.canvas.width / 2 - x * S.view.scale;
-        S.view.ty = viewport.canvas.height / 2 - y * S.view.scale;
-        viewport.wrapView(); viewport.updateScaleBar(); viewport.draw();
-      }
+      if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 6.0); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
     onGlobeFly: (lat, lon) => { if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon); viewport.schedule3D(); } },
   });
@@ -228,17 +227,10 @@
   function setHudHint(text, isWarn) { const el = $('#hud-hint'); if (el) { el.textContent = text; el.classList.toggle('warn', !!isWarn); } }
   function renderLegend() { if ($('#legend')) $('#legend').innerHTML = OVERLAYS.renderLegendHTML(S.overlay); }
 
-  if (!globe && $('#btn-3d')) {
-    $('#btn-3d').setAttribute('aria-disabled', 'true');
-    $('#btn-3d').title = '3D Globe unavailable (WebGL disabled or unsupported)';
-  }
+  if (!globe && $('#btn-3d')) { $('#btn-3d').setAttribute('aria-disabled', 'true'); $('#btn-3d').title = '3D Globe unavailable (WebGL disabled or unsupported)'; }
   if (globe) {
     globe.state.onContextLost = () => setHudHint('WebGL context lost — restoring 3D globe…', true);
-    globe.state.onContextRestored = () => {
-      viewport.markOverlayDirty(); viewport.buildOverlay();
-      setHudHint(t(S.viewMode === '3d' ? 'hudHint3d' : 'hudHint2d'), false);
-      viewport.schedule3D();
-    };
+    globe.state.onContextRestored = () => { viewport.markOverlayDirty(); viewport.buildOverlay(); setHudHint(t(S.viewMode === '3d' ? 'hudHint3d' : 'hudHint2d'), false); viewport.schedule3D(); };
   }
 
   function setViewMode(vm) {
@@ -313,18 +305,21 @@
   bindRange('maxslope', v => v + '°', v => { S.route.maxSlope = v; computeRoute(); });
   bindRange('kslope', v => (v / 100).toFixed(2), v => { S.route.k = v / 100; computeRoute(); });
   bindRange('speed', v => v + ' km/sol', v => { S.route.speed = v; panels.renderRoute(); });
+  document.querySelectorAll('#route-mode-seg button').forEach(b => b.onclick = () => setRouteMode(b.dataset.rmode));
+  on('#route-sci-poi', 'onchange', (e) => { S.route.viaSciencePoi = e.target.checked; computeRoute(); });
   on('#route-clear', 'onclick', () => { S.route.start = S.route.goal = S.route.safe = S.route.straight = null; panels.renderRoute(); viewport.draw(); });
   on('#route-demo', 'onclick', () => {
     const a = REGIONS[0], b = REGIONS[16];
-    S.route.start = { x: L.colOfLon(a.lon), y: L.rowOfLat(a.lat) };
-    S.route.goal = { x: L.colOfLon(b.lon), y: L.rowOfLat(b.lat) };
+    S.route.start = { x: L.colOfLon(a.lon), y: L.rowOfLat(a.lat) }; S.route.goal = { x: L.colOfLon(b.lon), y: L.rowOfLat(b.lat) };
     if (S.viewMode === '3d' && globe) { globe.flyTo((a.lat + b.lat) / 2, (a.lon + b.lon) / 2, 1.85); viewport.schedule3D(); }
-    else {
-      S.view.scale = Math.max(S.view.scale, 3.2);
-      S.view.tx = viewport.canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * S.view.scale;
-      S.view.ty = viewport.canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * S.view.scale;
-      viewport.wrapView(); viewport.updateScaleBar();
-    }
+    else { S.view.scale = Math.max(S.view.scale, 3.2); S.view.tx = viewport.canvas.width / 2 - (S.route.start.x + S.route.goal.x) / 2 * S.view.scale; S.view.ty = viewport.canvas.height / 2 - (S.route.start.y + S.route.goal.y) / 2 * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); }
+    computeRoute();
+  });
+  on('#route-marswalk-demo', 'onclick', () => {
+    const sx = L.colOfLon(137.4), sy = L.rowOfLat(-4.6), gx = L.colOfLon(138.2), gy = L.rowOfLat(-5.3);
+    setRouteMode('marswalk'); S.route.start = { x: sx, y: sy }; S.route.goal = { x: gx, y: gy };
+    if (S.viewMode === '3d' && globe) { globe.flyTo(-5.0, 137.8, 1.75); viewport.schedule3D(); }
+    else { S.view.scale = Math.max(S.view.scale, 5.8); S.view.tx = viewport.canvas.width / 2 - (sx + gx) / 2 * S.view.scale; S.view.ty = viewport.canvas.height / 2 - (sy + gy) / 2 * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); }
     computeRoute();
   });
   bindRange('ls', v => `${v}° · ${(I18N && I18N.trDomain ? I18N.trDomain(STORM.seasonName(v)) : STORM.seasonName(v)).split(' /')[0]}`, v => { S.crisis.ls = v; panels.runCrisis(); });

@@ -308,6 +308,11 @@
       const t = (k, fb) => (i18n && i18n.t(k) !== k ? i18n.t(k) : fb);
       if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
       if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
+      if (S.route.safe && S.route.safe.stats && S.route.safe.stats.scienceWaypoints) {
+        S.route.safe.stats.scienceWaypoints.forEach((wp) => {
+          drawWaypoint(wp.x, wp.y, '#ea9662', `${wp.id} ${wp.code}`);
+        });
+      }
       if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', t('startPin', 'Start'));
       if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#cfa25c', t('goalPin', 'Goal'));
 

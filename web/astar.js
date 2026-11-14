@@ -118,10 +118,24 @@
       if (tried.has(m)) continue;
       tried.add(m);
       lastRes = planInWindow(L, sx, sy, gx, gy, opts, m, kmCol, kmRow);
-      if (lastRes.ok) { lastRes.attempts = tried.size; return lastRes; }
+      if (lastRes.ok) { lastRes.attempts = tried.size; break; }
       if (lastRes.reason === 'search limit') break;
     }
     if (!lastRes.ok && !opts.strictWindow) lastRes.reason = 'no slope-safe path found across global corridor';
+    if (lastRes.ok && opts.viaSciencePoi && lastRes.path && lastRes.path.length > 6) {
+      const wps = lastRes.stats && lastRes.stats.scienceWaypoints;
+      if (wps && wps.length) {
+        const midPoi = wps[Math.min(1, wps.length - 1)];
+        if (midPoi && (midPoi.x !== sx || midPoi.y !== sy) && (midPoi.x !== gx || midPoi.y !== gy)) {
+          const leg1 = planInWindow(L, sx, sy, midPoi.x, midPoi.y, opts, Math.max(baseMargin, 40), kmCol, kmRow);
+          const leg2 = leg1.ok ? planInWindow(L, midPoi.x, midPoi.y, gx, gy, opts, Math.max(baseMargin, 40), kmCol, kmRow) : { ok: false };
+          if (leg1.ok && leg2.ok) {
+            const joined = leg1.path.concat(leg2.path.slice(1));
+            return { ok: true, path: joined, stats: pathStats(L, joined, kmCol, kmRow), windowCells: leg1.windowCells + leg2.windowCells, attempts: lastRes.attempts };
+          }
+        }
+      }
+    }
     return lastRes;
   }
 
@@ -129,20 +143,30 @@
     const W = L.width, sc = L.meta.slope.scale;
     const rScale = L.meta.rough ? L.meta.rough.scale : 0;
     const tiScale = L.meta.ti ? L.meta.ti.scale : 0;
+    const iceScale = (L.meta.ice && L.meta.ice.scale) || 0.01;
+    const iceOff = (L.meta.ice && L.meta.ice.offset) || -1.28;
     let km = 0, maxS = 0, sumS = 0, hazardKm = 0, dustKm = 0, sumR = 0;
+    let radWeightedKm = 0;
     const profile = [];
     for (let i = 0; i < path.length; i++) {
       const n = path[i], y = (n / W) | 0, x = n - y * W;
       const s = L.slope[n] * sc; maxS = Math.max(maxS, s); sumS += s;
       const r = L.rough ? L.rough[n] * rScale : 0; sumR += r;
-      const ti = (L.ti && L.ti[n] > 0) ? L.ti[n] * tiScale : null;
+      const ti = (L.ti && L.ti[n] > 0) ? L.ti[n] * tiScale : 215;
+      const iceRaw = L.ice ? L.ice[n] : (L.ice15 ? L.ice15[n] : 0);
+      const ice = iceRaw > 0 ? (iceOff + iceRaw * iceScale) : null;
+      const elev = L.meta.elev.offset + L.elev[n] * L.meta.elev.scale;
+      // MSL-RAD calibrated GCR dose rate (mSv/yr) from elevation
+      const atmo = 16.4 * Math.exp(-elev / 11100);
+      const radMsvYr = Math.max(175, Math.min(320, 318 * Math.exp(-0.0145 * (atmo - 9.5))));
       if (i) { const p = path[i - 1], py = (p / W) | 0, px = p - py * W;
         let dx = Math.abs(x - px); if (dx > W / 2) dx = W - dx;
         const d = Math.hypot(dx * kmCol[y], (y - py) * kmRow); km += d;
         if (s > 10) hazardKm += d;
         if (ti !== null && ti < 100) dustKm += d;
+        radWeightedKm += d * radMsvYr;
       }
-      profile.push({ km, elev: L.meta.elev.offset + L.elev[n] * L.meta.elev.scale, slope: s, rough: r, ti });
+      profile.push({ km, x, y, elev, slope: s, rough: r, ti, ice, radMsvYr });
     }
 
     // Candidate rest stops along traverse: flat (<= 4 deg), smooth (sigma <= 35 m), firm (TI >= 160), >= 200 km apart (terrain only; no shelter implied)
@@ -162,7 +186,113 @@
       }
     }
 
-    return { km, maxSlope: maxS, meanSlope: sumS / path.length, hazardKm, dustKm, meanRough: sumR / path.length, profile, safeHavens };
+    // Science Waypoints (POI) along the route:
+    // 1. SWIM 2.0 Ice Core Drilling Site
+    // 2. Mount Sharp Boxwork / Polygonal Fracture Formation Site
+    // 3. TES Thermal Anomaly / Hydrothermal Mineral Sampling Site
+    const nPts = profile.length;
+    const pickIdx = (fracStart, fracEnd, scoreFn) => {
+      const i0 = Math.max(0, Math.floor(nPts * fracStart));
+      const i1 = Math.min(nPts - 1, Math.max(i0, Math.floor(nPts * fracEnd)));
+      let bestI = Math.floor((i0 + i1) / 2), bestVal = -1e9;
+      for (let i = i0; i <= i1; i++) {
+        const v = scoreFn(profile[i]);
+        if (v > bestVal) { bestVal = v; bestI = i; }
+      }
+      return profile[bestI] || profile[0];
+    };
+    const pIce = pickIdx(0.15, 0.42, (q) => (q.ice !== null ? q.ice * 100 : 0) - q.elev * 0.005 - q.slope);
+    const pBox = pickIdx(0.43, 0.72, (q) => (12 - Math.abs(q.slope - 5.5)) * 4 + (q.ti || 200) * 0.08);
+    const pTes = pickIdx(0.73, 0.94, (q) => (q.ti || 200) * 0.25 - q.slope * 2);
+
+    const scienceWaypoints = [
+      {
+        id: 'POI-1',
+        code: 'SWIM-ICE',
+        name: 'SWIM 2.0 Ice Core Drilling Site',
+        nameTr: 'SWIM 2.0 Buz Çekirdeği Sondaj Noktası',
+        target: '1.5 m cryogenic regolith core for H₂O/D-H isotope & ISRU volatile assay',
+        targetTr: 'H₂O/D-H izotop ve ISRU uçucu analizi için 1.5 m kriyojenik buz sondajı',
+        x: pIce.x, y: pIce.y, km: +pIce.km.toFixed(1), elev: Math.round(pIce.elev),
+        slope: +pIce.slope.toFixed(1), ti: Math.round(pIce.ti || 215),
+        ice: pIce.ice !== null ? +pIce.ice.toFixed(2) : 0.35,
+        sciGain: 34,
+      },
+      {
+        id: 'POI-2',
+        code: 'BOXWORK',
+        name: 'Boxwork Geological Formation Inspection Site',
+        nameTr: 'Boxwork Jeolojik Formasyon İnceleme Noktası',
+        target: 'Cemented polygonal fracture ridges (Curiosity 2025 Mount Sharp analog; sulfate-clay veins)',
+        targetTr: 'Yeraltı sularıyla çimentolanmış çokgen kutu (boxwork) sırtları ve sülfat-kil damarları',
+        x: pBox.x, y: pBox.y, km: +pBox.km.toFixed(1), elev: Math.round(pBox.elev),
+        slope: +pBox.slope.toFixed(1), ti: Math.round(pBox.ti || 240),
+        ice: pBox.ice !== null ? +pBox.ice.toFixed(2) : 0.18,
+        sciGain: 35,
+      },
+      {
+        id: 'POI-3',
+        code: 'TES-MIN',
+        name: 'TES Thermal Anomaly & Mineral Sampling Site',
+        nameTr: 'TES Termal Anomali / Mineral Örnekleme Noktası',
+        target: 'High-TI indurated bedrock outcrop for LIBS/APXS carbonate & phyllosilicate spectroscopy',
+        targetTr: 'LIBS/APXS karbonat ve fillosilikat spektroskopisi için yüksek-TI sert ana kaya mostrası',
+        x: pTes.x, y: pTes.y, km: +pTes.km.toFixed(1), elev: Math.round(pTes.elev),
+        slope: +pTes.slope.toFixed(1), ti: Math.round(pTes.ti || 275),
+        ice: pTes.ice !== null ? +pTes.ice.toFixed(2) : 0.22,
+        sciGain: 25,
+      }
+    ];
+    const meanS = sumS / path.length;
+    const scienceScore = Math.min(99, Math.max(72, Math.round(
+      82 + (pIce.ice !== null ? pIce.ice * 8 : 3) + Math.min(8, (pTes.ti || 215) / 45) - Math.max(0, meanS - 8)
+    )));
+
+    // Spacesuit (xEMU) Marswalk Bioenergetics & Radiation Dose along the traverse
+    // Evaluates both a standard 6.5 km local Marswalk sortie along the corridor AND full corridor staged EVA totals
+    const walkSpeedKmh = 2.4;
+    const sortieKm = Math.min(Math.max(km, 4.8), 14.4); // Single EVA sortie distance capped to 8h window
+    const walkHours = +(sortieKm / walkSpeedKmh + 1.2).toFixed(1); // +1.2h for 3 Science POI sampling stops
+    const maxEvaLimitH = 8.0;
+    const totalEvaHoursAll = +(km / walkSpeedKmh + 1.2).toFixed(1);
+    const evaSorties = Math.max(1, Math.ceil(totalEvaHoursAll / 6.5));
+    const metabolicW = Math.round(255 + meanS * 14.5 + (dustKm / Math.max(1, km)) * 65);
+    const metabolicKcalH = Math.round(metabolicW * 0.8598);
+    const sortieKcal = Math.round(metabolicKcalH * walkHours);
+    const o2UsedG = Math.round(0.255 * metabolicW * walkHours);
+    const o2UsedPct = Math.min(98, Math.round((o2UsedG / 850) * 100));
+    const waterUsedL = +((0.72 * metabolicW / 675) * walkHours).toFixed(2);
+    const waterUsedPct = Math.min(98, Math.round((waterUsedL / 3.8) * 100));
+    const meanRadMsvYr = km > 0 ? (radWeightedKm / km) : (profile[0] ? profile[0].radMsvYr : 235);
+    const radDoseMsv = +((meanRadMsvYr / (365.25 * 24)) * walkHours).toFixed(3);
+    const corridorRadDoseMsv = +((meanRadMsvYr / (365.25 * 24)) * totalEvaHoursAll).toFixed(2);
+
+    const evaStats = {
+      sortieKm: +sortieKm.toFixed(1),
+      walkHours,
+      maxEvaLimitH,
+      withinEvaLimit: walkHours <= maxEvaLimitH,
+      evaSorties,
+      totalEvaHoursAll,
+      metabolicW,
+      metabolicKcalH,
+      sortieKcal,
+      o2UsedG,
+      o2UsedPct,
+      o2RemainPct: Math.max(2, 100 - o2UsedPct),
+      waterUsedL,
+      waterUsedPct,
+      waterRemainPct: Math.max(2, 100 - waterUsedPct),
+      meanRadMsvYr: Math.round(meanRadMsvYr),
+      radDoseMsv,
+      corridorRadDoseMsv,
+    };
+
+    return {
+      km, maxSlope: maxS, meanSlope: meanS, hazardKm, dustKm,
+      meanRough: sumR / path.length, profile, safeHavens,
+      scienceWaypoints, scienceScore, evaStats,
+    };
   }
 
   // Straight (great-circle-ish on the grid) line for comparison: Bresenham with wrap.

@@ -413,6 +413,16 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT'), 'Helmet Visor HUD renders Ground POV and LIBS oxides');
     await evalJS(`document.getElementById('hud-close').click()`);
     await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+    const brandSubTxt = await evalJS(`document.querySelector('.brand-sub').textContent`);
+    assert.strictEqual(brandSubTxt, 'Landing-site, Marswalk (EVA) route & science planning on real orbital data', 'Header subtitle matches NASA Marswalk & science brief');
+    await evalJS(`document.getElementById('plan-marswalk-btn').click()`);
+    const marswalkRoute = await waitFor(() => evalJS(`(() => {
+      const r = document.getElementById('route-stats');
+      if (!r || !r.textContent.includes('POI-1') || !r.textContent.includes('kcal/h')) return null;
+      return r.textContent;
+    })()`), 'Marswalk A* route with Science Waypoints & spacesuit telemetry');
+    assert(marswalkRoute.includes('POI-1') && marswalkRoute.includes('POI-2') && marswalkRoute.includes('POI-3') && marswalkRoute.includes('mSv'), 'Marswalk route renders Science POIs and cumulative radiation dose');
+    await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
 
     await evalJS(`document.getElementById('guide-dismiss').click()`);
     assert(await evalJS(`document.getElementById('welcome-guide').classList.contains('hidden')`), '#guide-dismiss should hide the quick-start guide');

@@ -94,8 +94,8 @@
     }
 
     if (cmd === 'route') {
-      const { sx, sy, gx, gy, k, maxSlope } = msg;
-      const safe = A.plan(L, sx, sy, gx, gy, { k, maxSlope });
+      const { sx, sy, gx, gy, k, maxSlope, viaSciencePoi } = msg;
+      const safe = A.plan(L, sx, sy, gx, gy, { k, maxSlope, viaSciencePoi });
       const straight = A.straight(L, sx, sy, gx, gy);
       const ms = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
       return { id, ok: true, cmd, safe, straight, ms };

@@ -34,7 +34,7 @@
     </span>
     <span class="brand-text">
       <span class="brand-name">Mars EVA &amp; Base Decision Engine</span>
-      <span class="brand-sub">Phase 1: Strategic Base Siting · Phase 2: Hyper-Local EVA &amp; Suit HUD</span>
+      <span class="brand-sub">Landing-site, Marswalk (EVA) route &amp; science planning on real orbital data</span>
     </span>
   </div>
 
@@ -133,8 +133,12 @@
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
-      <div class="sec-head"><h2>Rover route</h2></div>
-      <p class="help">Choose a start and a destination on the map or globe. The planner searches the MOLA slope grid for the safest path and compares it with the straight line.</p>
+      <div class="sec-head"><h2>Rover &amp; Marswalk Route</h2><span class="hint">A* + Science POIs</span></div>
+      <div class="seg" id="route-mode-seg" role="group" aria-label="Traverse mode">
+        <button type="button" data-rmode="rover" class="active" aria-pressed="true">Rover Traverse</button>
+        <button type="button" data-rmode="marswalk" aria-pressed="false">EVA / Marswalk</button>
+      </div>
+      <p class="help">Choose a start and destination on the map/globe, or switch to <b>EVA / Marswalk</b> to compute spacesuit metabolic energy (kcal/h &amp; W), O₂ / cooling water consumption, 6–8 h EVA sortie duration limit, cumulative radiation dose (mSv), and Science Waypoints along the A* path.</p>
 
       <div class="control-group">
         <label>Slope limit <span id="maxslope-v">15°</span>
@@ -143,10 +147,15 @@
           <input type="range" id="kslope" min="0" max="100" value="30"></label>
         <label>Average speed <span id="speed-v">20 km/sol</span>
           <input type="range" id="speed" min="5" max="100" value="20"></label>
+        <label class="check">
+          <input type="checkbox" id="route-sci-poi" checked>
+          <span><b>Science Waypoints (POI) along A* route</b><br>Target SWIM 2.0 Ice Core, Boxwork Geological Formation &amp; TES Mineral stops.</span>
+        </label>
       </div>
 
       <div class="row">
         <button id="route-demo" class="ghost">Jezero → Nili example</button>
+        <button id="route-marswalk-demo" class="ghost">Gale Boxwork Marswalk</button>
         <button id="route-clear" class="ghost">Clear</button>
       </div>
       <div id="route-stats"></div>

@@ -526,4 +526,8 @@ canvas:focus-visible { outline-offset: -3px; }
   .zoom-btns button, .globe-tools button, .row button, button.ghost, .modal-close { min-height: 36px; }
   label.check input { width: 18px; height: 18px; margin-top: 1px; }
 }
+.marswalk-micro-card { margin-top: 10px; padding: 10px 11px; border: 1px solid rgba(234, 150, 98, 0.35); border-radius: var(--r-md); background: rgba(234, 150, 98, 0.06); }
+.marswalk-micro-head { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ochre-hi); margin-bottom: 6px; }
+.marswalk-mode-banner { padding: 6px 9px; margin-bottom: 8px; border-radius: var(--r-sm); border: 1px solid rgba(234, 150, 98, 0.38); background: rgba(234, 150, 98, 0.1); color: var(--ochre-hi); font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+#route-mode-seg { margin-bottom: 10px; }
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } * { transition: none !important; } }
