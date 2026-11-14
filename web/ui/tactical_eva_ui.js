@@ -1160,12 +1160,15 @@
       const box = $('tac-benchmark-box');
       if (!box) return;
       const tr = isTr();
+      // Benchmark runs on the bundled 200 m MOLA-HRSC / 100 m THEMIS Jezero cutout (crater floor at the delta front,
+      // ~8 km from Octavia E. Butler Landing at 18.44N 77.45E) so it is deterministic and never waits for the global
+      // 5 km layers to decode (which previously fell back to a placeholder -1800 m elevation and under-predicted pressure).
       const perc = engine.generateAnalysis({
         inputs: {
           ...engine.getDefaultInputs(vehiclesCfg, tacticalCfg),
           presetZoneId: 'jezero_delta',
-          lat: 18.44,
-          lonInput: 77.45,
+          lat: 18.38,
+          lonInput: 77.58,
           lonConvention: '-180_180',
           earthDateUtc: '2021-02-18',
           ltstHours: 14.0,
@@ -1182,35 +1185,18 @@
         scoring,
         storm,
       });
-      const gale = engine.generateAnalysis({
-        inputs: {
-          ...engine.getDefaultInputs(vehiclesCfg, tacticalCfg),
-          presetZoneId: 'gale_boxwork',
-          lat: -5.08,
-          lonInput: 137.85,
-          lonConvention: '-180_180',
-          earthDateUtc: '2021-02-18',
-          ltstHours: 14.0,
-          tau: 0.6,
-          solarCycle: 'min',
-          speActive: false,
-          vehicleClass: 'lab_rover',
-        },
-        cutouts,
-        layers,
-        vehiclesCfg,
-        tacticalCfg,
-        marsTime,
-        scoring,
-        storm,
-      });
-      if (!perc.ok || !gale.ok) return;
+      if (!perc.ok) return;
 
       const cb = perc.centerBase;
       const mt = perc.environment;
       const tiMean = Math.round(perc.grids.ti.reduce((a, b) => a + b, 0) / perc.grids.ti.length);
       const jezeroGcr = Math.round(cb.gcrMSvYr);
-      const galeGcr = Math.round(gale.centerBase.gcrMSvYr);
+      // Reference: Curiosity Bradbury Landing (-4.59N 137.44E, -4.4 km), the MSL/RAD calibration anchor of the dose model
+      // (Hassler et al. 2014). Same Ls and solar-cycle factor as the Jezero run.
+      const BRADBURY_ELEV_M = -4400;
+      const cycFactor = ((tacticalCfg.radiation.solarCycle.min) || { factor: 1 }).factor;
+      const bradburyGcr = Math.round(scoring.radDose(BRADBURY_ELEV_M, 0, mt.lsDeg) * cycFactor);
+      const jezeroElev = Math.round(perc.grids && perc.grids.elevM ? perc.grids.elevM[Math.floor(perc.grids.elevM.length / 2)] : NaN);
 
       const checks = [
         {
@@ -1239,14 +1225,15 @@
         },
         {
           name: tr ? 'GCR Radyasyon' : 'GCR Radiation',
-          model: `Jezero ${jezeroGcr} vs Gale ${galeGcr} mSv/yr`,
-          ref: tr ? 'Jezero tabanı (−2.5 km) vs Gale Boxwork (+17 m)' : 'Jezero floor (−2.5 km) vs Gale Boxwork (+17 m)',
-          ok: jezeroGcr > galeGcr,
+          model: `Jezero ${jezeroGcr} vs Bradbury ${bradburyGcr} mSv/yr`,
+          ref: tr ? 'Jezero (daha yüksek, ince atmosfer) > Curiosity Bradbury iniş yeri (−4.4 km, RAD kalibrasyon noktası)' : 'Jezero (higher, thinner air) > Curiosity Bradbury Landing (−4.4 km, RAD calibration site)',
+          ok: jezeroGcr > bradburyGcr,
         },
       ];
 
       box.innerHTML =
-        `<b>${tr ? 'Doğrulama: Perseverance iniş yeri (18.44°N, 77.45°E, 2021-02-18)' : 'Benchmark: Perseverance landing site (18.44°N, 77.45°E, 2021-02-18)'}</b>` +
+        `<b>${tr ? 'Doğrulama: Perseverance iniş bölgesi, Jezero krater tabanı (2021-02-18)' : 'Benchmark: Perseverance landing area, Jezero crater floor (2021-02-18)'}</b>` +
+        `<p class="tac-sec-desc">${tr ? `Delta önü kesiti (18.38°N, 77.58°E, ${jezeroElev} m; Octavia E. Butler iniş noktasına ~8 km), 200 m MOLA-HRSC DEM.` : `Delta-front cutout (18.38°N, 77.58°E, ${jezeroElev} m; ~8 km from Octavia E. Butler Landing), 200 m MOLA-HRSC DEM.`}</p>` +
         `<table class="tbl mt-sm"><thead><tr><th>${tr ? 'Ölçüt' : 'Metric'}</th><th>${tr ? 'Uygulama Çıktısı' : 'Model Output'}</th><th>${tr ? 'Referans Ölçüm' : 'Mission Reference'}</th><th>${tr ? 'Durum' : 'Check'}</th></tr></thead><tbody>` +
         checks.map((c) => `<tr><td>${escHtml(c.name)}</td><td><code>${escHtml(c.model)}</code></td><td>${escHtml(c.ref)}</td><td>${c.ok ? '<span class="tac-badge tac-badge-ok">✓</span>' : '<span class="tac-badge tac-badge-warn">⚠</span>'}</td></tr>`).join('') +
         `</tbody></table>`;

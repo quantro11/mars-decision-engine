@@ -222,6 +222,16 @@ const percBench = ENGINE.generateAnalysis({
 });
 check(percBench.ok && percBench.centerBase.pressurePa >= 705 && percBench.centerBase.pressurePa <= 735, `Perseverance Jezero surface pressure at -2569 m within 705-735 Pa (got ${percBench.centerBase.pressurePa} Pa)`);
 
+// Perseverance benchmark on the bundled Jezero 200 m DEM cutout (deterministic, no global-layer dependency)
+const percCut = ENGINE.generateAnalysis({
+  inputs: { ...baseInputs, presetZoneId: 'jezero_delta', lat: 18.38, lonInput: 77.58, earthDateUtc: '2021-02-18', ltstHours: 14, tau: 0.6, solarCycle: 'min', vehicleClass: 'lab_rover' },
+  cutouts: cutoutsJson, vehiclesCfg: vehiclesJson, tacticalCfg: tacticalJson, marsTime: MARS_TIME, scoring: SCORING, storm: STORM,
+});
+check(percCut.ok && percCut.centerBase.pressurePa >= 705 && percCut.centerBase.pressurePa <= 735, `Jezero cutout pressure at Ls~5 within MEDA 705-735 Pa (got ${percCut.centerBase.pressurePa} Pa)`);
+const bradburyGcr = SCORING.radDose(-4400, 0, percCut.environment.lsDeg) * tacticalJson.radiation.solarCycle.min.factor;
+check(percCut.centerBase.gcrMSvYr > bradburyGcr, `Jezero GCR (${percCut.centerBase.gcrMSvYr}) exceeds Curiosity Bradbury -4.4 km anchor (${bradburyGcr.toFixed(1)}) at same Ls/solar cycle`);
+check(Math.abs(SCORING.radDose(-4400, 0) - 0.64 * 365.25) / (0.64 * 365.25) < 0.05, 'Dose model reproduces MSL/RAD 0.64 mSv/day at the -4.4 km anchor (no season term)');
+
 const fieldRes = ENGINE.generateAnalysis({
   inputs: { ...baseInputs, presetZoneId: 'jezero_delta', lat: 18.38, lonInput: 77.58 },
   cutouts: cutoutsJson, vehiclesCfg: vehiclesJson, tacticalCfg: tacticalJson, marsTime: MARS_TIME, scoring: SCORING, storm: STORM,
