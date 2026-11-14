@@ -121,6 +121,9 @@
         env_conditions: evaSim.envConditions || null,
         completion_report: evaSim.completionReport || null,
       } : null,
+      tactical_16km2_analysis: (S.tacticalAnalysis && S.tacticalAnalysis.ok && global.MDE_TACTICAL_EVA_ENGINE)
+        ? global.MDE_TACTICAL_EVA_ENGINE.exportAnalysisJSON(S.tacticalAnalysis)
+        : null,
       traverse_plan: S.route.safe && S.route.safe.ok ? {
         travel_mode: S.route.travelMode || 'rover',
         direct_km: +S.route.straight.stats.km.toFixed(1),
@@ -320,6 +323,13 @@
       });
     }
 
+    if (S.tacticalAnalysis && S.tacticalAnalysis.ok && global.MDE_TACTICAL_EVA_ENGINE) {
+      const tacGeo = global.MDE_TACTICAL_EVA_ENGINE.exportAnalysisGeoJSON(S.tacticalAnalysis);
+      if (tacGeo && Array.isArray(tacGeo.features)) {
+        for (const f of tacGeo.features) features.push(f);
+      }
+    }
+
     return {
       type: 'FeatureCollection',
       metadata: {
@@ -379,7 +389,13 @@
       </table>
       <div class="modal-grid mt-sm">
         <div>
-          <h3>${tr ? '2. Taktik EVA (HiRISE 1–2 m/post), Görev Tamamlama Raporu & Yüzey Rotası' : '2. Tactical EVA (HiRISE 1–2 m/post), Mission Completion Report &amp; Traverse'}</h3>
+          <h3>${tr ? '2. Taktik EVA (16 km² Rover) & Yüzey Rotası' : '2. Tactical EVA (16 km² Rover) &amp; Traverse'}</h3>
+          ${p.tactical_16km2_analysis ? (() => {
+            const t16 = p.tactical_16km2_analysis;
+            const s16 = t16.summary || {};
+            const v16 = t16.vehicle || {};
+            return `<p><b>16 km² Tactical EVA (${esc(t16.dataMode)})</b> — Center <code>${t16.location.latDeg}°, ${t16.location.lon180}°</code> · Vehicle <code>${esc(v16.name || v16.classId)}</code> (limit <code>${v16.slopeLimitDeg ? v16.slopeLimitDeg.value : ''}°</code>) · Score Mean/Min/Max <code>${s16.meanScore}/${s16.minScore}/${s16.maxScore}</code> · Impassable <code>${s16.impassablePct}%</code> · Limiting factor: <b>${esc(s16.limitingFactorLabel || '')}</b>.</p>`;
+          })() : ''}
           ${eva ? (tr
             ? `<p><b>${esc(eva.zone_name)}</b> (${eva.dtm_metadata ? `HiRISE <code>${esc(eva.dtm_metadata.productId)}</code> · ${esc(eva.dtm_metadata.trueResolution)}` : esc(eva.architecture)}) — Uydu Öncülü <code>%${eva.orbital_prior_confidence_pct ?? 34}</code> → Canlı xGDS Güveni <code>%${eva.assimilated_confidence_pct ?? 95}</code> (5-Alan: <code>${eva.domain_scores_5d ? eva.domain_scores_5d.composite : 78}/100</code>, TRN ±${eva.trn_touchdown_error_m ?? 28} m, MGL ±${eva.mgl_pose_error_m ?? 1.8} m). Rotada <b>${eva.discrepancies_detected} dinamik anomali</b> tespit edildi; ${eva.reroute_explanation && eva.reroute_explanation.cancelledHazardHits > 0 ? `otomatik alternatif rota seçildi (${esc(eva.reroute_explanation.reasonTr || eva.reroute_explanation.newRouteStatusTr)}).` : 'mevcut güvenli A* rotası doğrulandı.'}</p>
             <p><b>PLSS &amp; Çevre Senkronu (HUD ile Birebir):</b> Yürüyüş <code>${eva.astar_safe_footpath_m} m</code> (Kalan: <code>${rt ? rt.remainDistM : 0} m</code> · ETA <code>${rt ? rt.etaReturnBaseMin : 0} dk</code>), Walkback <b>${eva.walkback_safety_limit_m} m</b>, O₂ <code>%${eva.o2_reserve_remain_pct}</code>, Batarya <code>%${eva.suit_battery_remain_pct}</code>, CO₂ RCA Kalan <code>%${eva.co2_scrubber_remain_pct ?? 64}</code>, Dönüş Rezervi <code>${eva.return_reserve_protected !== false ? '%25+ KORUNDU' : 'DAR'}</code>${env ? `, Çevre <code>${env.ambientTempC}°C · τ=${env.tau} · Hız ${env.effSpeedKmh} km/sa</code>` : ''}. <i>Not: ${esc(eva.suit_architecture_note)}</i>.</p>

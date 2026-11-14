@@ -103,75 +103,195 @@
     </section>
 
     <section id="panel-eva" class="mode-panel hidden">
-      <div class="sec-head"><h2>xGDS · TRN+AutoNav+MGL Map Builder</h2><span class="hint">1 km × 1 km · 10 m/cell (1 m AutoNav)</span></div>
-      <p class="help" id="eva-intro">Post-landing 5-domain surface assimilation (Topography, Geomorphology, Thermal, Radiation, Optical): replaces stale orbital priors with live Perseverance TRN + AutoNav + MGL localization, dynamic scoring, and real-time astronaut walkback routing.</p>
+      <div class="sec-head"><h2>Tactical EVA · 16 km² Analyzer</h2><span class="hint">4 km × 4 km · 100 m/cell (40×40)</span></div>
+      <label class="check tac-online-row"><input type="checkbox" id="tac-online-toggle" checked>
+        <span><b>ONLINE-ONLY</b> live WMS / CTX / SIM 3292 queries <small>(uncheck for offline preset / global fallback)</small></span></label>
 
-      <div class="control-group">
-        <label for="eva-zone-select">Target Landing Zone / Biome
-          <select id="eva-zone-select">
-            <option value="jezero_delta" selected>Jezero Crater · Cheyava Falls &amp; Western Delta (TRN+AutoNav)</option>
-            <option value="gale_boxwork">Gale Crater · Mount Sharp Boxwork (2025–2026)</option>
-            <option value="nili_fossae">Nili Fossae · Carbonate &amp; Clay Trough (Unexplored Adjacent)</option>
-            <option value="arcadia_ice">Arcadia Planitia · Polygon Ice Sheet</option>
-          </select>
-        </label>
-        <label for="eva-domain-layer">5-Domain Assimilation Layer (xGDS)
-          <select id="eva-domain-layer">
-            <option value="composite">5-Domain Composite Relief &amp; Route</option>
-            <option value="topography">Domain 1 · Topography (Stereo DEM Slope &amp; Scarp)</option>
-            <option value="geomorphology">Domain 2 · Geomorphology (Boulders, Fractures &amp; Dunes)</option>
-            <option value="thermal">Domain 3 · Thermal (In-Situ TI &amp; Dust Drift)</option>
-            <option value="radiation">Domain 4 · Radiation (RAD &amp; Horizon Sky-View)</option>
-            <option value="optical">Domain 5 · Optical (SuperCam VNIR &amp; Albedo)</option>
-          </select>
-        </label>
-        <label for="eva-score-mode">xGDS Live Scoring Objective
-          <select id="eva-score-mode">
-            <option value="balanced">Balanced Mission (Hab Safety + Science)</option>
-            <option value="hab_safety">Habitat &amp; Traverse Engineering Safety</option>
-            <option value="science_bio">Astrobiology &amp; Geochemistry Discovery</option>
-            <option value="isru_water">ISRU Water &amp; Thermal Stability</option>
-            <option value="custom">Custom 5-Domain Weights (Manual Sliders)</option>
-          </select>
-        </label>
-        <div id="eva-custom-weights" class="eva-custom-weights hidden">
-          <label>Topography weight <span id="eva-w-topo-v">24%</span>
-            <input type="range" id="eva-w-topo" min="0" max="100" step="1" value="24"></label>
-          <label>Geomorphology weight <span id="eva-w-geo-v">24%</span>
-            <input type="range" id="eva-w-geo" min="0" max="100" step="1" value="24"></label>
-          <label>Thermal inertia weight <span id="eva-w-therm-v">16%</span>
-            <input type="range" id="eva-w-therm" min="0" max="100" step="1" value="16"></label>
-          <label>Radiation shield weight <span id="eva-w-rad-v">18%</span>
-            <input type="range" id="eva-w-rad" min="0" max="100" step="1" value="18"></label>
-          <label>Optical spectral weight <span id="eva-w-opt-v">18%</span>
-            <input type="range" id="eva-w-opt" min="0" max="100" step="1" value="18"></label>
+      <details id="tac-sec-a" class="tac-sec" open>
+        <summary>Section A · Location (Center of 4 km × 4 km Box)</summary>
+        <div class="tac-sec-body">
+          <label for="tac-preset-zone">Offline Pre-Cut Site (or Custom Coordinate)
+            <select id="tac-preset-zone">
+              <option value="jezero_delta" selected>Jezero Delta Front (18.38°, 77.58° E)</option>
+              <option value="gale_boxwork">Gale Mt. Sharp Boxwork (−5.08°, 137.85° E)</option>
+              <option value="nili_fossae">Nili Fossae Trough (21.00°, 74.00° E)</option>
+              <option value="arcadia_ice">Arcadia Planitia Shallow Ice (39.20°, −175.00°)</option>
+              <option value="custom">Custom Coordinate</option>
+            </select>
+          </label>
+          <div class="tac-coord-row">
+            <label for="tac-lat">Center Lat (°) <small>−90…90</small>
+              <input type="number" id="tac-lat" min="-90" max="90" step="0.001" value="18.38">
+            </label>
+            <label for="tac-lon">Center Lon (<span id="tac-lon-range-lbl">−180…180°</span>)
+              <input type="number" id="tac-lon" min="-180" max="360" step="0.001" value="77.58">
+            </label>
+          </div>
+          <label for="tac-lon-conv">Planetocentric Longitude Convention
+            <select id="tac-lon-conv">
+              <option value="-180_180" selected>−180° … +180° E</option>
+              <option value="0_360">0° … 360° E</option>
+            </select>
+          </label>
+          <div class="tac-readout">Nearest named feature: <b id="tac-region-name">Jezero Crater · NASA 2020</b></div>
+          <div id="tac-loc-error" class="tac-error hidden" role="alert"></div>
+          <p class="help">Tip: Click any cell on the global Mars map or any top candidate card to populate center coordinates automatically.</p>
         </div>
-        <label>AutoNav Surface Assimilation Progress <span id="eva-scan-step-v">Step 4/8 · 56%</span>
-          <input type="range" id="eva-scan-step" min="0" max="8" step="1" value="4"></label>
-        <div class="eva-sim-btns">
-          <button type="button" id="btn-eva-reset" class="ghost">Orbital Prior (0%)</button>
-          <button type="button" id="btn-eva-step" class="ghost">+1 Scan</button>
-          <button type="button" id="btn-eva-play" class="btn-spec">Auto-Scan</button>
-          <button type="button" id="btn-eva-scan" class="ghost">100% Verified</button>
-          <button type="button" id="btn-eva-mgl" class="ghost">MGL Pose Lock: ON</button>
-          <button type="button" id="btn-eva-spe" class="ghost">SPE 30m Escape Sim</button>
-          <button type="button" id="btn-eva-hazard" class="ghost">+ Inject Hazard</button>
+      </details>
+
+      <details id="tac-sec-b" class="tac-sec" open>
+        <summary>Section B · Time &amp; Environment</summary>
+        <div class="tac-sec-body">
+          <label for="tac-date">Earth Date (UTC → Mars24 / Allison &amp; McEwen 2000)
+            <input type="date" id="tac-date" value="2026-06-01">
+          </label>
+          <div class="tac-readout" id="tac-mars-time">MY 38 · Ls 220.0° · Northern Autumn / Southern Spring</div>
+          <label for="tac-ltst">Local Solar Time (LTST) <span id="tac-ltst-v">12.00 h LTST</span>
+            <input type="range" id="tac-ltst" min="0" max="24" step="0.25" value="12">
+          </label>
+          <label for="tac-tau">Dust optical depth τ <span id="tac-tau-v">τ 0.5</span>
+            <input type="range" id="tac-tau" min="0.2" max="11" step="0.1" value="0.5">
+          </label>
+          <div id="tac-tau-presets" class="seg tac-seg-sm" role="group" aria-label="Dust tau presets">
+            <button type="button" data-tau="0.5" class="active" aria-pressed="true">Clear 0.5</button>
+            <button type="button" data-tau="1.5" aria-pressed="false">Dusty 1.5</button>
+            <button type="button" data-tau="4" aria-pressed="false">Regional 4</button>
+            <button type="button" data-tau="10.8" aria-pressed="false">2018 Global 10.8</button>
+          </div>
+          <div class="tac-sub-lbl">Solar Cycle Phase (RAD GCR Modulation)</div>
+          <div id="tac-solar-cycle" class="seg tac-seg-sm" role="group" aria-label="Solar cycle phase">
+            <button type="button" data-cycle="min" aria-pressed="false">Solar Min</button>
+            <button type="button" data-cycle="mid" class="active" aria-pressed="true">Solar Mid</button>
+            <button type="button" data-cycle="max" aria-pressed="false">Solar Max</button>
+          </div>
+          <label class="check tac-spe-check"><input type="checkbox" id="tac-spe-toggle">
+            <span><b>Solar particle event (SPE) in progress</b> <small>(elevated SEP surface dose)</small></span></label>
         </div>
-        <label for="eva-buddy-mode">EVA Crew &amp; Mobility Architecture
-          <select id="eva-buddy-mode">
-            <option value="buddy">2-Crew Buddy System (EV-1 + EV-2 Foot Pair)</option>
-            <option value="rover_eva">Pressurized Rover + Foot EVA Combination</option>
-          </select>
-        </label>
-        <label>Science equipment / sample load <span id="eva-load-v">15 kg</span>
-          <input type="range" id="eva-load" min="0" max="35" step="1" value="15"></label>
-        <label>Astronaut walking speed <span id="eva-speed-v">2.4 km/h</span>
-          <input type="range" id="eva-speed" min="10" max="45" step="1" value="24"></label>
-        <label>Model EVA max slope (soil-adjusted) <span id="eva-maxslope-v">15°</span>
-          <input type="range" id="eva-maxslope" min="8" max="24" step="1" value="15"></label>
+      </details>
+
+      <details id="tac-sec-c" class="tac-sec" open>
+        <summary>Section C · Vehicle (Rover Classes Only)</summary>
+        <div class="tac-sec-body">
+          <label for="tac-veh-class">Rover Class
+            <select id="tac-veh-class">
+              <option value="mini_rover">Mini rover (Sojourner-class, ~11.5 kg, Solar)</option>
+              <option value="lab_rover" selected>Lab rover (Curiosity / Perseverance-class, MMRTG)</option>
+              <option value="manned_rover">Manned rover (CONCEPT – not flight data)</option>
+            </select>
+          </label>
+          <div id="tac-veh-concept-banner" class="tac-concept-banner hidden">CONCEPT – not flight data: pressurized crewed rover parameters are engineering concepts, not flight-certified hardware.</div>
+          <div id="tac-veh-specs" class="tac-specs"></div>
+          <label for="tac-veh-speed">Traverse speed <span id="tac-veh-speed-v">0.10 km/h</span>
+            <input type="range" id="tac-veh-speed" min="0.02" max="0.15" step="0.005" value="0.10">
+          </label>
+          <label for="tac-veh-load">Extra payload / crew + cargo <span id="tac-veh-load-v">25 kg</span>
+            <input type="range" id="tac-veh-load" min="0" max="100" step="1" value="25">
+          </label>
+          <label id="tac-veh-power-wrap" for="tac-veh-power-mode" class="tac-single-power">Power Architecture
+            <select id="tac-veh-power-mode">
+              <option value="nuclear">Nuclear (MMRTG / RTG)</option>
+              <option value="solar">Solar Array</option>
+              <option value="battery">Primary / Rechargeable Battery (Concept)</option>
+            </select>
+          </label>
+          <p id="tac-veh-effects-note" class="help"></p>
+        </div>
+      </details>
+
+      <details id="tac-sec-weights" class="tac-sec">
+        <summary>Domain Weights, Veto &amp; Orbital Blend</summary>
+        <div class="tac-sec-body">
+          <label for="tac-blend">User conditions ↔ Orbital data <span id="tac-blend-v">50% User ↔ 50% Orbital</span>
+            <input type="range" id="tac-blend" min="0" max="100" step="5" value="50">
+          </label>
+          <div class="tac-sub-lbl">Final Compatibility Aggregation (NASA HLS-2015 Veto Active)</div>
+          <div id="tac-agg-mode" class="seg tac-seg-sm" role="group" aria-label="Aggregation mode">
+            <button type="button" data-agg="weighted" class="active" aria-pressed="true">Weighted Sum</button>
+            <button type="button" data-agg="nocomp" aria-pressed="false">No Compensation (Geom.)</button>
+          </div>
+          <div id="tac-weights-box" class="tac-weights-box"></div>
+        </div>
+      </details>
+
+      <div class="tac-actions">
+        <button type="button" id="tac-generate-btn" class="btn-spec">Generate 16 km² analysis</button>
+        <div class="tac-export-row">
+          <button type="button" id="tac-export-json" class="ghost">Export 16 km² JSON</button>
+          <button type="button" id="tac-export-geojson" class="ghost">Export 16 km² GeoJSON</button>
+        </div>
       </div>
 
-      <div id="eva-results"></div>
+      <details id="eva-legacy-details" class="tac-legacy">
+        <summary>Legacy demo (not part of analysis)</summary>
+        <div class="tac-legacy-body">
+          <p class="help" id="eva-intro">Legacy demo: post-landing 5-domain surface assimilation (Topography, Geomorphology, Thermal, Radiation, Optical) with simulated AutoNav walkback demo.</p>
+          <div class="control-group">
+            <label for="eva-zone-select">Target Landing Zone / Biome
+              <select id="eva-zone-select">
+                <option value="jezero_delta" selected>Jezero Crater · Cheyava Falls &amp; Western Delta (TRN+AutoNav)</option>
+                <option value="gale_boxwork">Gale Crater · Mount Sharp Boxwork (2025–2026)</option>
+                <option value="nili_fossae">Nili Fossae · Carbonate &amp; Clay Trough (Unexplored Adjacent)</option>
+                <option value="arcadia_ice">Arcadia Planitia · Polygon Ice Sheet</option>
+              </select>
+            </label>
+            <label for="eva-domain-layer">5-Domain Assimilation Layer (xGDS)
+              <select id="eva-domain-layer">
+                <option value="composite">5-Domain Composite Relief &amp; Route</option>
+                <option value="topography">Domain 1 · Topography (Stereo DEM Slope &amp; Scarp)</option>
+                <option value="geomorphology">Domain 2 · Geomorphology (Boulders, Fractures &amp; Dunes)</option>
+                <option value="thermal">Domain 3 · Thermal (In-Situ TI &amp; Dust Drift)</option>
+                <option value="radiation">Domain 4 · Radiation (RAD &amp; Horizon Sky-View)</option>
+                <option value="optical">Domain 5 · Optical (SuperCam VNIR &amp; Albedo)</option>
+              </select>
+            </label>
+            <label for="eva-score-mode">xGDS Live Scoring Objective
+              <select id="eva-score-mode">
+                <option value="balanced">Balanced Mission (Hab Safety + Science)</option>
+                <option value="hab_safety">Habitat &amp; Traverse Engineering Safety</option>
+                <option value="science_bio">Astrobiology &amp; Geochemistry Discovery</option>
+                <option value="isru_water">ISRU Water &amp; Thermal Stability</option>
+                <option value="custom">Custom 5-Domain Weights (Manual Sliders)</option>
+              </select>
+            </label>
+            <div id="eva-custom-weights" class="eva-custom-weights hidden">
+              <label>Topography weight <span id="eva-w-topo-v">24%</span>
+                <input type="range" id="eva-w-topo" min="0" max="100" step="1" value="24"></label>
+              <label>Geomorphology weight <span id="eva-w-geo-v">24%</span>
+                <input type="range" id="eva-w-geo" min="0" max="100" step="1" value="24"></label>
+              <label>Thermal inertia weight <span id="eva-w-therm-v">16%</span>
+                <input type="range" id="eva-w-therm" min="0" max="100" step="1" value="16"></label>
+              <label>Radiation shield weight <span id="eva-w-rad-v">18%</span>
+                <input type="range" id="eva-w-rad" min="0" max="100" step="1" value="18"></label>
+              <label>Optical spectral weight <span id="eva-w-opt-v">18%</span>
+                <input type="range" id="eva-w-opt" min="0" max="100" step="1" value="18"></label>
+            </div>
+            <label>AutoNav Surface Assimilation Progress <span id="eva-scan-step-v">Step 4/8 · 56%</span>
+              <input type="range" id="eva-scan-step" min="0" max="8" step="1" value="4"></label>
+            <div class="eva-sim-btns">
+              <button type="button" id="btn-eva-reset" class="ghost">Orbital Prior (0%)</button>
+              <button type="button" id="btn-eva-step" class="ghost">+1 Scan</button>
+              <button type="button" id="btn-eva-play" class="btn-spec">Auto-Scan</button>
+              <button type="button" id="btn-eva-scan" class="ghost">100% Verified</button>
+              <button type="button" id="btn-eva-mgl" class="ghost">MGL Pose Lock: ON</button>
+              <button type="button" id="btn-eva-spe" class="ghost">SPE 30m Escape Sim</button>
+              <button type="button" id="btn-eva-hazard" class="ghost">+ Inject Hazard</button>
+            </div>
+            <label for="eva-buddy-mode">EVA Crew &amp; Mobility Architecture
+              <select id="eva-buddy-mode">
+                <option value="buddy">2-Crew Buddy System (EV-1 + EV-2 Foot Pair)</option>
+                <option value="rover_eva">Pressurized Rover + Foot EVA Combination</option>
+              </select>
+            </label>
+            <label>Science equipment / sample load <span id="eva-load-v">15 kg</span>
+              <input type="range" id="eva-load" min="0" max="35" step="1" value="15"></label>
+            <label>Astronaut walking speed <span id="eva-speed-v">2.4 km/h</span>
+              <input type="range" id="eva-speed" min="10" max="45" step="1" value="24"></label>
+            <label>Model EVA max slope (soil-adjusted) <span id="eva-maxslope-v">15°</span>
+              <input type="range" id="eva-maxslope" min="8" max="24" step="1" value="15"></label>
+          </div>
+          <div id="eva-results"></div>
+        </div>
+      </details>
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
@@ -320,6 +440,54 @@
       <div class="loading-title">Mars Decision Engine</div>
       <div class="loading-sub" id="loading-sub">Loading NASA elevation, ice, and thermal layers…</div>
     </div>
+
+    <div id="tac-workspace" class="tac-workspace hidden" role="region" aria-label="16 km² Tactical EVA Local Map & Analysis">
+      <div class="tac-ws-bar">
+        <div class="tac-ws-title">
+          <strong>4 km × 4 km (16 km²) Local Tactical Map</strong>
+          <span id="tac-res-label" class="tac-res-lbl">Native data resolution: 100 m (ML layer: 60 s scalar forecast)</span>
+        </div>
+        <div class="tac-ws-ctrls">
+          <span id="tac-mode-pill" class="tac-mode-pill">OFFLINE PRE-CUT</span>
+          <button type="button" id="tac-collapse-map-btn" class="ghost">Compact</button>
+        </div>
+      </div>
+
+      <div class="tac-stage-grid">
+        <div class="tac-left-col">
+          <div class="tac-corner-row">
+            <span id="tac-corner-nw" class="tac-corner">NW</span>
+            <span id="tac-corner-ne" class="tac-corner">NE</span>
+          </div>
+          <div id="tac-map-box" class="tac-map-box">
+            <canvas id="tac-canvas" width="400" height="400" role="img" aria-label="16 square kilometer tactical EVA local analysis grid"></canvas>
+            <div class="tac-center-mark" aria-hidden="true" title="Input center coordinate"></div>
+            <div class="tac-north-arrow" aria-label="North up">
+              <span class="tac-n-glyph">▲</span>
+              <span>N</span>
+            </div>
+            <div class="tac-scale-bar">
+              <div id="tac-scale-line" class="tac-scale-line"></div>
+              <span id="tac-scale-lbl">1 km</span>
+            </div>
+          </div>
+          <div class="tac-corner-row">
+            <span id="tac-corner-sw" class="tac-corner">SW</span>
+            <span id="tac-corner-se" class="tac-corner">SE</span>
+          </div>
+          <div id="tac-summary" class="tac-summary"></div>
+        </div>
+
+        <div class="tac-right-col">
+          <details id="tac-layers-det" class="tac-layers-det" open>
+            <summary>Map Layers &amp; Legend (Toggle + Opacity)</summary>
+            <div id="tac-layer-list" class="tac-layer-list"></div>
+            <div id="tac-legend" class="tac-legend"></div>
+          </details>
+          <div id="tac-cell-popup" class="tac-cell-popup">Click any cell on the 40×40 grid to inspect domain scores, raw values, units, sources and MEASURED / MODEL / SIMULATED badges.</div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- RIGHT -->
@@ -413,6 +581,13 @@
       <li><b>Orbital benchmark (9 landers + 39 HLS-2015 zones).</b> Against 200 random-longitude draws per ±5° latitude band, historical Mars landers rank at the <b>90th percentile</b> (<code>p &lt; 0.005</code>, weighted sum; <b>89th</b> geometric mean) and all 39 NASA HLS-2015 Exploration Zones rank at the <b>71st percentile</b> (<code>p &lt; 0.005</code>).</li>
       <li><b>Independent EVA Scenario Validation (Test 3).</b> Because orbital landing suitability does not prove footpath safety, EVA routing and PLSS math are tested separately across 4 terrain biomes (Jezero Delta, Gale Boxwork, Nili Fossae, Arcadia Planitia) for obstacle detouring, dynamic hazard rerouting, slope bounds, and ≥25% return reserve protection.</li>
     </ul>
+
+    <h3>9 · Tactical EVA 16 km² Blend Method, Vehicle Config &amp; Provenance</h3>
+    <ul class="spec-list">
+      <li><b>Local Blend Formula (Step 1 + Step 2).</b> Each 4 km × 4 km (40×40, 100 m/cell) box fills a baseline environment state at the input center coordinate using the user's Earth date (Allison &amp; McEwen 2000 Mars24 <code>Lₛ</code>), local solar time, dust <code>τ</code>, solar cycle, SPE flag, vehicle class, and storm forecast <code>STORM.predictDustML</code> (60 s scalar forecast, not a spatial raster). Each cell then blends center state and finest available orbital data via <code>V_cell = (1 − w) · V_center + w · V_local</code>, where <code>w ∈ [0, 1]</code> is controlled by the <i>User conditions ↔ Orbital data</i> slider (default <code>w = 0.50</code> in <code>web/tactical_config.json</code>).</li>
+      <li><b>Finest Public Orbital Sources &amp; Dates.</b> Pre-cut offline bundles (4 preset sites) and live <code>ONLINE-ONLY</code> queries use: <code>thm_ti_100m_32bit</code> (100 m THEMIS TI, 2014-05-30), <code>mola_hrsc_blend_topo_v2</code> &amp; <code>slope_v2</code> (200 m USGS/MOLA-HRSC, 2018-01-31; plus 2020-08 HiRISE Jezero DTM inside Jezero footprint), Caltech Murray Lab <code>OnMars/CTX</code> mosaic (~5–6 m/px native, 20 m/px display, 2023-04), <code>TES_dust_index_16ppd_numeric</code> (~3.7 km, 1999–2001 Ruff &amp; Christensen 2002), <code>omega_albedo_r1080</code> + <code>TES_Lambert_Albedo</code> (2001–2010), <code>GRS_K/Th</code> (~550 km Odyssey GRS, Boynton 2007 — displayed as coarse composition only, unscored), and USGS SIM 3292 geology (Tanaka et al. 2014, ~1:20M). Coarse layers (&gt;500 m) display a hatched low-resolution overlay toggle and explicit resolution labels.</li>
+      <li><b>Vehicle Config &amp; Constraints.</b> All vehicle masses, speeds, slope limits, power architectures, sinkage/speed coefficients, and SIM 3292 unit weights live in <code>web/vehicles.json</code> and <code>web/tactical_config.json</code> with explicit <code>source</code> and <code>verified</code> flags. Unverified parameters show ⚠; every Manned rover parameter is tagged <code>CONCEPT – not flight data</code>.</li>
+    </ul>
     </div>
   </div>
 </div>
@@ -463,6 +638,12 @@
 <script src="ui/overlays.js"></script>
 <script src="ui/layers.js"></script>
 <script src="ui/i18n.js"></script>
+<script src="mars_time.js"></script>
+<script src="vehicles_data.js"></script>
+<script src="tactical_config_data.js"></script>
+<script src="eva_cutouts_data.js"></script>
+<script src="tactical_eva_engine.js"></script>
+<script src="ui/tactical_eva_ui.js"></script>
 <script src="ui/eva_zones.js"></script>
 <script src="ui/eva.js"></script>
 <script src="ui/panels.js"></script>

@@ -38,7 +38,7 @@
     if ($('#btn-relief') && globe) $('#btn-relief').textContent = `${t('relief')} ${globe.state.exaggeration}×`;
     if ($('#ls-v')) $('#ls-v').textContent = `${S.crisis.ls}° · ${(I18N.trDomain ? I18N.trDomain(STORM.seasonName(S.crisis.ls)) : STORM.seasonName(S.crisis.ls)).split(' /')[0]}`;
     if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
-    if (eva) eva.renderPanel();
+    if (eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onLangChange();
     if (globalThis.MDE_LIVE_STATE && renderHabitability) renderHabitability(false, { useCache: true });
     if (viewport) viewport.draw();
   }
@@ -164,6 +164,7 @@
   // ------------------------------------------------------------ selection & views
   function select(x, y, cand) {
     S.selected = { x, y, cand };
+    if (window.MDE_TACTICAL_EVA && L.latOfRow) window.MDE_TACTICAL_EVA.onGlobalSelect(L.latOfRow(y), L.lonOfCol(x));
     panels.renderDetail(x, y);
     panels.renderCandidates();
     viewport.draw();
@@ -193,7 +194,7 @@
     },
     onOpenHud: (idx) => { if (eva) eva.openHudModal(idx); },
     onUseEva: (x, y, v, regionName) => {
-      if (eva) eva.zoomToZone({ lat: L.latOfRow(y), lon: L.lonOfCol(x), v, regionName });
+      if (eva) eva.zoomToZone({ lat: L.latOfRow(y), lon: L.lonOfCol(x), v, regionName }); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onGlobalSelect(L.latOfRow(y), L.lonOfCol(x));
       setMode('eva');
       if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 6.0); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
@@ -211,6 +212,7 @@
     });
     eva.bindControls();
   }
+  if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.createController({ doc: document, S, layers, onToast: (msg) => setHudHint(msg, true) });
 
   viewport = window.MDE_MAP2D.createViewport({
     doc: document, S, layers, SCORING, REGIONS, OVERLAYS, MARKERS: window.MDE_MARKERS, FMT, globe, globeCanvas,
@@ -270,7 +272,7 @@
     if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'score') S.overlay = 'score';
     document.querySelectorAll('#overlay button').forEach(b => { const isActive = b.dataset.ov === S.overlay; b.classList.toggle('active', isActive); b.setAttribute('aria-pressed', String(isActive)); });
     updateHudLayer(); viewport.markOverlayDirty(); renderLegend();
-    if (m === 'eva' && eva) eva.renderPanel();
+    if (m === 'eva' && eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
     if (m === 'habitability') renderHabitability();

@@ -1,0 +1,743 @@
+// Auto-generated from web/tactical_config.json — do not edit manually; run node tools/sync_configs_to_js.js
+(function (global) {
+  'use strict';
+  var DATA = {
+  "_meta": {
+    "title": "Mars Tactical EVA Configuration & Model Constants",
+    "note": "All scoring bounds, dataset provenance, SIM 3292 geologic unit suitabilities, and solar-cycle radiation factors are declared here with explicit sources."
+  },
+  "planet": {
+    "radiusM": {
+      "value": 3396190,
+      "unit": "m",
+      "verified": true,
+      "source": "IAU/IAG Mars 2000 Sphere (USGS SIM 3292 & MOLA standard)"
+    },
+    "degToMeters": {
+      "value": 59274.697,
+      "unit": "m/deg",
+      "verified": true,
+      "source": "pi * 3396190 / 180"
+    },
+    "boxSizeKm": {
+      "value": 4,
+      "unit": "km",
+      "verified": true,
+      "source": "Prompt spec: 4 km x 4 km (16 km^2) local EVA grid"
+    },
+    "gridN": {
+      "value": 40,
+      "unit": "cells",
+      "verified": true,
+      "source": "Prompt spec: 40 x 40 grid at 100 m/cell"
+    },
+    "cellSizeM": {
+      "value": 100,
+      "unit": "m",
+      "verified": true,
+      "source": "Prompt spec: 4000 m / 40 = 100 m per cell"
+    }
+  },
+  "resolution": {
+    "globalBaselineDeliveredM": {
+      "value": 5209,
+      "unit": "m/px",
+      "verified": true,
+      "source": "web/layers/meta.json: 4096x2048 global equirectangular grid (pi*3396190*2 / 4096 = 5209.2 m/px at equator)"
+    },
+    "globalMolaSampledM": {
+      "value": 2315,
+      "unit": "m/px",
+      "verified": true,
+      "source": "web/layers/meta.json: MOLA 463 m source sampled to 9216x4608 (~2.3 km) before 4096x2048 cell averaging"
+    },
+    "globalTesDeliveredM": {
+      "value": 10418,
+      "unit": "m/px",
+      "verified": true,
+      "source": "web/layers/meta.json: TES_Thermal_Inertia_numeric & TES_Dust_numeric fetched at 2048x1024 and upsampled 2x (~10.4 km/px)"
+    },
+    "mlLayerNativeResM": {
+      "value": null,
+      "label": "non-spatial (60 s point time-series)",
+      "label_tr": "mekansal değil (60 sn nokta zaman serisi)",
+      "modelId": "PIML-GBDT-v3.2",
+      "verified": true,
+      "source": "Inspected web/storm.js & data_pipeline/train_dust_ml.py: STORM.predictDustML classifies 60 s scalar telemetry windows; zero spatial ML raster exists in codebase"
+    }
+  },
+  "blend": {
+    "defaultOrbitalWeight": {
+      "value": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "unit": "fraction",
+      "verified": false,
+      "source": "Prompt default 50/50 blend between center user-condition base and local orbital data: blended(r,c) = (1 - w) * centerBase + w * localOrbital(r,c)"
+    }
+  },
+  "environment": {
+    "defaultDate": "2026-07-01",
+    "defaultLtstHours": 12,
+    "tauRange": {
+      "min": 0.2,
+      "max": 11,
+      "step": 0.1,
+      "default": 0.5,
+      "unit": "optical depth",
+      "verified": true,
+      "source": "MGS TES / MER / MSL observed atmospheric column visible optical depth tau (~0.2 clearest aphelion to 10.8 MY34 global dust storm peak)"
+    },
+    "tauPresets": [
+      {
+        "id": "clear",
+        "label": "Clear",
+        "label_tr": "Açık",
+        "tau": 0.5,
+        "verified": true,
+        "source": "Typical northern spring/summer clear background tau ~0.4-0.6 (Smith 2004 / Guzewich et al.)"
+      },
+      {
+        "id": "dusty",
+        "label": "Dusty season",
+        "label_tr": "Tozlu mevsim",
+        "tau": 1.5,
+        "verified": true,
+        "source": "Perihelion dusty season nominal regional haze tau ~1.5 (Ls ~180-330)"
+      },
+      {
+        "id": "regional",
+        "label": "Regional storm",
+        "label_tr": "Bölgesel fırtına",
+        "tau": 4,
+        "verified": true,
+        "source": "Major regional dust storm opacity tau ~3-5"
+      },
+      {
+        "id": "global2018",
+        "label": "2018 global storm",
+        "label_tr": "2018 küresel fırtına",
+        "tau": 10.8,
+        "verified": true,
+        "source": "NASA Opportunity / Curiosity MY34 (June 2018) planet-encircling dust storm peak tau ~10.8"
+      }
+    ]
+  },
+  "radiation": {
+    "baselineModelRef": "SCORING.radDose (web/scoring.js, anchored to MSL/RAD Hassler et al. 2014 Science 343: 0.64 mSv/day = 233.6 mSv/yr at 0 km, Cycle-24 mid)",
+    "solarCycle": {
+      "min": {
+        "id": "min",
+        "label": "Solar min",
+        "label_tr": "Güneş minimumu",
+        "factor": 1.33,
+        "approxSurfaceMSvDay": 0.85,
+        "verified": true,
+        "source": "Guo et al. (2015) / Matthia et al. (2016) / Hassler et al. (2014): Solar minimum GCR unshielded surface dose rate ~0.82-0.90 mSv/day (~1.33x Cycle-24 0.64 mSv/day baseline)"
+      },
+      "mid": {
+        "id": "mid",
+        "label": "Solar mid",
+        "label_tr": "Güneş orta",
+        "factor": 1,
+        "approxSurfaceMSvDay": 0.64,
+        "verified": true,
+        "source": "Hassler et al. (2014) Science 343: MSL/RAD surface measurement during Cycle-24 mid/declining phase (~0.64 +/- 0.12 mSv/day)"
+      },
+      "max": {
+        "id": "max",
+        "label": "Solar max",
+        "label_tr": "Güneş maksimumu",
+        "factor": 0.52,
+        "approxSurfaceMSvDay": 0.33,
+        "verified": true,
+        "source": "Matthia et al. (2017) / Guo et al. (2018): Solar maximum heliospheric GCR modulation lowers surface dose rate to ~0.30-0.36 mSv/day (~0.52x Cycle-24 baseline)"
+      }
+    },
+    "scoring": {
+      "doseBestMSvYr": {
+        "value": 80,
+        "unit": "mSv/yr",
+        "verified": false,
+        "source": "Normalization lower bound near low-elevation Solar Max GCR floor (~80-110 mSv/yr -> score 100)"
+      },
+      "doseWorstMSvYr": {
+        "value": 360,
+        "unit": "mSv/yr",
+        "verified": false,
+        "source": "Normalization upper bound near high-elevation Solar Min GCR (~360 mSv/yr -> score ~0 before SPE)"
+      },
+      "speAcutePenaltyDivisorMSv": {
+        "value": 600,
+        "unit": "mSv",
+        "verified": false,
+        "source": "Assumption: normalizes acute SCORING.calcSPE unshielded dose (300-500 mSv) into 0-100 score reduction when SPE toggle is ON"
+      }
+    },
+    "grs": {
+      "kGlobalMeanWtPct": {
+        "value": 0.32,
+        "unit": "wt%",
+        "verified": true,
+        "source": "Boynton et al. (2007) JGR 112 E12S99 (Mars Odyssey GRS 5x5 deg global average K ~0.32 wt%)"
+      },
+      "thGlobalMeanPpm": {
+        "value": 0.59,
+        "unit": "ppm",
+        "verified": true,
+        "source": "Boynton et al. (2007) JGR 112 E12S99 (Mars Odyssey GRS 5x5 deg global average Th ~0.59 ppm)"
+      },
+      "footprintKm": {
+        "value": 550,
+        "unit": "km",
+        "verified": true,
+        "source": "Boynton et al. (2007): GRS spatial resolution ~550 km FWHM binned at 5x5 deg; unreliable > +/-60 deg high-latitude H-diluted zones"
+      },
+      "scoredHazard": false
+    }
+  },
+  "weights": {
+    "thermal": {
+      "value": 0.15,
+      "label": "Thermal",
+      "label_tr": "Termal"
+    },
+    "radiation": {
+      "value": 0.12,
+      "label": "Space Radiation",
+      "label_tr": "Uzay Radyasyonu"
+    },
+    "topography": {
+      "value": 0.15,
+      "label": "Topography",
+      "label_tr": "Topografya"
+    },
+    "optics": {
+      "value": 0.1,
+      "label": "Optics",
+      "label_tr": "Optik"
+    },
+    "geology": {
+      "value": 0.13,
+      "label": "Geology",
+      "label_tr": "Jeoloji"
+    },
+    "elevSlope": {
+      "value": 0.25,
+      "label": "Elevation / Slope",
+      "label_tr": "Yükseklik / Eğim"
+    },
+    "dust": {
+      "value": 0.1,
+      "label": "Dust",
+      "label_tr": "Toz"
+    }
+  },
+  "domainParams": {
+    "thermal": {
+      "tiWeight": {
+        "value": 0.7,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: relative weight of soil firmness (TI) vs operating surface temperature"
+      },
+      "tempWeight": {
+        "value": 0.3,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: relative weight of instantaneous diurnal surface temperature from STORM.surfaceTempC"
+      },
+      "tiFineDustM": {
+        "value": 100,
+        "unit": "tiu",
+        "verified": true,
+        "source": "Mellon et al. (2000) / Fergason et al. (2006): fine dust/loose drift TI < ~100 J m^-2 K^-1 s^-1/2"
+      },
+      "tiOptLow": {
+        "value": 250,
+        "unit": "tiu",
+        "verified": true,
+        "source": "Christensen (1986) / Mellon et al. (2000): cohesive duricrust / coarse sand-gravel mix (~250-500 tiu)"
+      },
+      "tiOptHigh": {
+        "value": 500,
+        "unit": "tiu",
+        "verified": true,
+        "source": "Optimal rover traction / regolith load-bearing window upper knee (~500 tiu)"
+      },
+      "tiRockUpper": {
+        "value": 900,
+        "unit": "tiu",
+        "verified": false,
+        "source": "Assumption: high-TI bedrock blockfield penalty knee (>500 up to 900+ tiu indicates exposed hard bedrock/boulders)"
+      },
+      "tempWarmOptC": {
+        "value": -10,
+        "unit": "degC",
+        "verified": false,
+        "source": "Assumption: benign rover/actuator daytime thermal operating band near -10 C"
+      },
+      "tempColdFloorC": {
+        "value": -125,
+        "unit": "degC",
+        "verified": true,
+        "source": "Viking/MSL thermal floor: near CO2 frost point -125 C imposes max cold thermal penalty"
+      }
+    },
+    "topography": {
+      "reliefMaxM": {
+        "value": 45,
+        "unit": "m",
+        "verified": false,
+        "source": "Assumption: 300 m neighborhood relief >= 45 m yields near-zero local relief score before speed risk"
+      },
+      "roughMaxM": {
+        "value": 25,
+        "unit": "m",
+        "verified": false,
+        "source": "Assumption: MOLA baseline roughness std-dev >= 25 m (scaled down when 100 m DEM available) maps to worst roughness score"
+      },
+      "reliefShare": {
+        "value": 0.65,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: weight of 100-200 m DEM local 3x3 relief vs global MOLA roughness / CTX texture contrast"
+      }
+    },
+    "optics": {
+      "albedoIdealMin": {
+        "value": 0.14,
+        "unit": "dim",
+        "verified": true,
+        "source": "Christensen et al. (2001): dark/intermediate basaltic-mixed surfaces (0.14-0.25 Lambert albedo; brighter >0.28 indicates thick dust mantle)"
+      },
+      "albedoIdealMax": {
+        "value": 0.25,
+        "unit": "dim",
+        "verified": true,
+        "source": "Christensen et al. (2001): above ~0.25-0.30 corresponds to high-albedo dust-mantled regions (e.g. Tharsis/Arabia)"
+      },
+      "albedoHighDust": {
+        "value": 0.35,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: high bright-dust albedo bound reducing trafficability/rock exposure contrast"
+      },
+      "tauVisibilityScale": {
+        "value": 4,
+        "unit": "optical depth",
+        "verified": false,
+        "source": "Assumption: Beer-Lambert optical navigation / stereo-camera haze visibility attenuation exp(-tau / 4.0)"
+      },
+      "nightSolarZenithPenalty": {
+        "value": 0.45,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: low solar elevation / night-time LTST reduces optical camera visibility factor via solarZenithCos"
+      }
+    },
+    "elevSlope": {
+      "elevShare": {
+        "value": 0.3,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: 30% weight on existing SCORING.F.elev rule (lower = thicker air), 70% weight on traversable slope margin & mass sinkage"
+      },
+      "slopeShare": {
+        "value": 0.7,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: primary weighting of slope headroom against active vehicle slopeLimitDeg (zero score if slope > limit)"
+      }
+    },
+    "dust": {
+      "dciClean": {
+        "value": 0.98,
+        "unit": "DCI",
+        "verified": true,
+        "source": "Ruff & Christensen (2002) JGR 107(E12): TES Dust Cover Index >= 0.96-0.98 indicates nearly dust-free bedrock/sand"
+      },
+      "dciDusty": {
+        "value": 0.9,
+        "unit": "DCI",
+        "verified": true,
+        "source": "Ruff & Christensen (2002): TES DCI <= 0.90 indicates optically thick surface dust cover"
+      },
+      "surfaceDciShare": {
+        "value": 0.5,
+        "unit": "dim",
+        "verified": false,
+        "source": "Assumption: equal split between archival surface dust cover index (DCI) and active atmospheric optical depth tau"
+      }
+    },
+    "confidence": {
+      "baseFineCutout": {
+        "value": 88,
+        "unit": "score",
+        "verified": false,
+        "source": "Assumption: base confidence for 100 m THEMIS TI + 200 m MOLA-HRSC + 5 m CTX local cutout"
+      },
+      "hiriseBoost": {
+        "value": 8,
+        "unit": "score",
+        "verified": false,
+        "source": "Assumption: additional confidence boost where 1 m USGS HiRISE DTM coverage is present"
+      },
+      "baseGlobalFallback": {
+        "value": 36,
+        "unit": "score",
+        "verified": false,
+        "source": "Assumption: reduced confidence when offline custom coordinates rely on ~5.2 km/px global rasters"
+      },
+      "tauUncertaintyPenalty": {
+        "value": 12,
+        "unit": "score",
+        "verified": false,
+        "source": "Assumption: maximum optical/thermal retrieval uncertainty penalty under tau -> 10.8 storm dust load"
+      },
+      "geologyFallbackScore": {
+        "value": 65,
+        "unit": "score",
+        "verified": false,
+        "source": "Assumption: neutral prior suitability when a custom polygon unit is outside known lookup keys"
+      }
+    }
+  },
+  "nasaVeto": {
+    "elevMaxM": {
+      "value": 2000,
+      "unit": "m",
+      "verified": true,
+      "source": "Existing web/scoring.js SCORING.HARD.elevMax (NASA HLS-2015 MOLA <= +2.0 km landing elevation constraint)"
+    },
+    "absLatMaxDeg": {
+      "value": 50,
+      "unit": "deg",
+      "verified": true,
+      "source": "Existing web/scoring.js SCORING.HARD.latMax (NASA HLS-2015 |lat| <= 50 deg latitude band)"
+    },
+    "slopeMaxDeg": {
+      "value": 15,
+      "unit": "deg",
+      "verified": true,
+      "source": "Existing web/scoring.js SCORING.HARD.slopeMax (NASA HLS-2015 landing footprint slope <= 15 deg)"
+    }
+  },
+  "geologySim3292": {
+    "citation": "Tanaka, K.L., Skinner, J.A., Jr., Dohm, J.M., Irwin, R.P., III, Kolb, E.J., Fortezzo, C.M., Platz, T., Michael, G.G., & Hare, T.M. (2014). Geologic Map of Mars, 1:20,000,000. USGS SIM 3292.",
+    "units": {
+      "lHl": {
+        "desc": "Late Hesperian lowland unit",
+        "group": "Lowland Units",
+        "score": 90,
+        "verified": false,
+        "source": "Assumption (SIM 3292): broad planar sediment/flood-plain lowland favorable for mobility"
+      },
+      "mAl": {
+        "desc": "Middle Amazonian lowland unit",
+        "group": "Lowland Units",
+        "score": 88,
+        "verified": false,
+        "source": "Assumption (SIM 3292): low-relief sedimentary/eolian lowland plains"
+      },
+      "eHb": {
+        "desc": "Early Hesperian basin unit",
+        "group": "Basin Units",
+        "score": 86,
+        "verified": false,
+        "source": "Assumption (SIM 3292): smooth basin fill with fluvial/lacustrine plains potential"
+      },
+      "lHb": {
+        "desc": "Late Hesperian basin unit",
+        "group": "Basin Units",
+        "score": 85,
+        "verified": false,
+        "source": "Assumption (SIM 3292): flat basin deposits favorable for wheeled traverses"
+      },
+      "eAb": {
+        "desc": "Early Amazonian basin unit",
+        "group": "Basin Units",
+        "score": 84,
+        "verified": false,
+        "source": "Assumption (SIM 3292): lowland basin fill, low relief"
+      },
+      "HNb": {
+        "desc": "Hesperian and Noachian basin unit",
+        "group": "Basin Units",
+        "score": 82,
+        "verified": false,
+        "source": "Assumption (SIM 3292): ancient basin fill with high mineralogic interest & subdued relief"
+      },
+      "HNt": {
+        "desc": "Hesperian and Noachian transition unit",
+        "group": "Transition Units",
+        "score": 78,
+        "verified": false,
+        "source": "Assumption (SIM 3292): highland/lowland boundary knobs, mesas & plains (Jezero/Syrtis margins)"
+      },
+      "Htu": {
+        "desc": "Hesperian transition undivided unit",
+        "group": "Transition Units",
+        "score": 76,
+        "verified": false,
+        "source": "Assumption (SIM 3292): layered yardang/sedimentary plateaus with sulfate alteration"
+      },
+      "Ht": {
+        "desc": "Hesperian transition unit",
+        "group": "Transition Units",
+        "score": 76,
+        "verified": false,
+        "source": "Assumption (SIM 3292): knobby/mesa transition plains"
+      },
+      "eHt": {
+        "desc": "Early Hesperian transition unit",
+        "group": "Transition Units",
+        "score": 75,
+        "verified": false,
+        "source": "Assumption (SIM 3292): terraced/ridged transition sediments"
+      },
+      "lHt": {
+        "desc": "Late Hesperian transition unit",
+        "group": "Transition Units",
+        "score": 75,
+        "verified": false,
+        "source": "Assumption (SIM 3292): late transition deposits & dissected plateaus"
+      },
+      "Hto": {
+        "desc": "Hesperian transition outflow unit",
+        "group": "Transition Units",
+        "score": 74,
+        "verified": false,
+        "source": "Assumption (SIM 3292): outflow channel bar/scour terrain (locally streamlined/bouldery)"
+      },
+      "AHtu": {
+        "desc": "Amazonian and Hesperian transition undivided unit",
+        "group": "Transition Units",
+        "score": 72,
+        "verified": false,
+        "source": "Assumption (SIM 3292): mantled knobby aprons along dichotomy boundary"
+      },
+      "lAv": {
+        "desc": "Late Amazonian volcanic unit",
+        "group": "Volcanic Units",
+        "score": 72,
+        "verified": false,
+        "source": "Assumption (SIM 3292): planar flood lavas; competent substrate but platy/ridged textures locally"
+      },
+      "lHv": {
+        "desc": "Late Hesperian volcanic unit",
+        "group": "Volcanic Units",
+        "score": 74,
+        "verified": false,
+        "source": "Assumption (SIM 3292): coherent ridged volcanic plains"
+      },
+      "eHv": {
+        "desc": "Early Hesperian volcanic unit",
+        "group": "Volcanic Units",
+        "score": 73,
+        "verified": false,
+        "source": "Assumption (SIM 3292): ridged basaltic plains"
+      },
+      "AHv": {
+        "desc": "Amazonian and Hesperian volcanic unit",
+        "group": "Volcanic Units",
+        "score": 71,
+        "verified": false,
+        "source": "Assumption (SIM 3292): lava sheet flows with local roughness"
+      },
+      "Av": {
+        "desc": "Amazonian volcanic unit",
+        "group": "Volcanic Units",
+        "score": 70,
+        "verified": false,
+        "source": "Assumption (SIM 3292): young volcanic flows"
+      },
+      "lNv": {
+        "desc": "Late Noachian volcanic unit",
+        "group": "Volcanic Units",
+        "score": 70,
+        "verified": false,
+        "source": "Assumption (SIM 3292): degraded ancient volcanic plains"
+      },
+      "lAvf": {
+        "desc": "Late Amazonian volcanic field unit",
+        "group": "Volcanic Units",
+        "score": 66,
+        "verified": false,
+        "source": "Assumption (SIM 3292): rough flow fields & shields"
+      },
+      "lHvf": {
+        "desc": "Late Hesperian volcanic field unit",
+        "group": "Volcanic Units",
+        "score": 66,
+        "verified": false,
+        "source": "Assumption (SIM 3292): pitted/shield volcanic field"
+      },
+      "lNh": {
+        "desc": "Late Noachian highland unit",
+        "group": "Highland Units",
+        "score": 68,
+        "verified": false,
+        "source": "Assumption (SIM 3292): cratered/dissected highlands with valley networks"
+      },
+      "mNh": {
+        "desc": "Middle Noachian highland unit",
+        "group": "Highland Units",
+        "score": 65,
+        "verified": false,
+        "source": "Assumption (SIM 3292): uneven rolling cratered highlands (Nili Fossae basement); moderate local relief"
+      },
+      "eHh": {
+        "desc": "Early Hesperian highland unit",
+        "group": "Highland Units",
+        "score": 67,
+        "verified": false,
+        "source": "Assumption (SIM 3292): heavily cratered highland plains"
+      },
+      "eNh": {
+        "desc": "Early Noachian highland unit",
+        "group": "Highland Units",
+        "score": 60,
+        "verified": false,
+        "source": "Assumption (SIM 3292): ancient degraded highland crustal terrain"
+      },
+      "Nhu": {
+        "desc": "Noachian highland undivided unit",
+        "group": "Highland Units",
+        "score": 62,
+        "verified": false,
+        "source": "Assumption (SIM 3292): rugged undivided Noachian highlands"
+      },
+      "HNhu": {
+        "desc": "Hesperian and Noachian highland undivided unit",
+        "group": "Highland Units",
+        "score": 61,
+        "verified": false,
+        "source": "Assumption (SIM 3292): steep/cratered undivided highland outcrops"
+      },
+      "Aa": {
+        "desc": "Amazonian apron unit",
+        "group": "Apron Units",
+        "score": 56,
+        "verified": false,
+        "source": "Assumption (SIM 3292): debris aprons & piedmont talus near scarps"
+      },
+      "lAa": {
+        "desc": "Late Amazonian apron unit",
+        "group": "Apron Units",
+        "score": 54,
+        "verified": false,
+        "source": "Assumption (SIM 3292): blocky glacis / talus aprons around domes & scarps"
+      },
+      "ANa": {
+        "desc": "Amazonian and Noachian apron unit",
+        "group": "Apron Units",
+        "score": 55,
+        "verified": false,
+        "source": "Assumption (SIM 3292): slope-wash aprons and mass-wasted talus"
+      },
+      "AHi": {
+        "desc": "Amazonian and Hesperian impact unit",
+        "group": "Impact Unit",
+        "score": 52,
+        "verified": false,
+        "source": "Assumption (SIM 3292): impact crater ejecta, terraced walls & central peaks (blocky/hummocky)"
+      },
+      "mNhm": {
+        "desc": "Middle Noachian highland massif unit",
+        "group": "Highland Units",
+        "score": 44,
+        "verified": false,
+        "source": "Assumption (SIM 3292): steep high-relief basin rim massifs"
+      },
+      "eNhm": {
+        "desc": "Early Noachian highland massif unit",
+        "group": "Highland Units",
+        "score": 42,
+        "verified": false,
+        "source": "Assumption (SIM 3292): rugged high-relief highland massifs"
+      },
+      "Nhe": {
+        "desc": "Noachian highland edifice unit",
+        "group": "Highland Units",
+        "score": 40,
+        "verified": false,
+        "source": "Assumption (SIM 3292): steep highland tectonic/volcanic edifices"
+      },
+      "Nve": {
+        "desc": "Noachian volcanic edifice unit",
+        "group": "Volcanic Units",
+        "score": 45,
+        "verified": false,
+        "source": "Assumption (SIM 3292): eroded volcanic shield edifices (steep flank slopes)"
+      },
+      "Hve": {
+        "desc": "Hesperian volcanic edifice unit",
+        "group": "Volcanic Units",
+        "score": 45,
+        "verified": false,
+        "source": "Assumption (SIM 3292): Hesperian shield volcano edifices"
+      },
+      "Ave": {
+        "desc": "Amazonian volcanic edifice",
+        "group": "Volcanic Units",
+        "score": 38,
+        "verified": false,
+        "source": "Assumption (SIM 3292): Tharsis/Elysium high-elevation edifice slopes"
+      },
+      "Hp": {
+        "desc": "Hesperian polar unit",
+        "group": "Polar Units",
+        "score": 34,
+        "verified": false,
+        "source": "Assumption (SIM 3292): high-latitude polar terrain (extreme cold, low solar)"
+      },
+      "Hpu": {
+        "desc": "Hesperian polar undivided unit",
+        "group": "Polar Units",
+        "score": 32,
+        "verified": false,
+        "source": "Assumption (SIM 3292): undivided polar terrain"
+      },
+      "Hpe": {
+        "desc": "Hesperian polar edifice unit",
+        "group": "Polar Units",
+        "score": 30,
+        "verified": false,
+        "source": "Assumption (SIM 3292): polar volcanic/knobby edifice"
+      },
+      "Ap": {
+        "desc": "Amazonian polar unit",
+        "group": "Polar Units",
+        "score": 28,
+        "verified": false,
+        "source": "Assumption (SIM 3292): polar layered/ice-rich terrain"
+      },
+      "Apu": {
+        "desc": "Amazonian polar undivided unit",
+        "group": "Polar Units",
+        "score": 28,
+        "verified": false,
+        "source": "Assumption (SIM 3292): polar layered deposits & scarp troughs"
+      },
+      "lApd": {
+        "desc": "Late Amazonian polar dunes unit",
+        "group": "Polar Units",
+        "score": 18,
+        "verified": false,
+        "source": "Assumption (SIM 3292): polar erg sand dunes (high wheel sinkage risk)"
+      },
+      "lApc": {
+        "desc": "Late Amazonian polar cap unit",
+        "group": "Polar Units",
+        "score": 15,
+        "verified": false,
+        "source": "Assumption (SIM 3292): perennial CO2/H2O polar ice cap (unsuited to baseline wheeled EVA)"
+      }
+    }
+  }
+};
+  if (typeof module !== 'undefined' && module.exports) module.exports = DATA;
+  else global.MDE_TACTICAL_CONFIG = DATA;
+})(typeof window !== 'undefined' ? window : globalThis);

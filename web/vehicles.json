@@ -1,0 +1,313 @@
+{
+  "_meta": {
+    "title": "Mars Tactical EVA Vehicle Classes",
+    "note": "Every numeric value carries explicit source and verified flags. Unverified values display a warning badge in the UI; every Manned rover value is flagged CONCEPT - not flight data.",
+    "marsGravityMps2": {
+      "value": 3.72076,
+      "unit": "m/s^2",
+      "verified": true,
+      "source": "NASA Mars Fact Sheet (NSSDC, equatorial surface gravity 3.72076 m/s^2)"
+    }
+  },
+  "effects": {
+    "massEnergyCoeffWhPerKgKm": {
+      "value": 0.28,
+      "unit": "Wh/(kg*km)",
+      "verified": false,
+      "source": "Assumption: regolith rolling resistance C_rr ~0.18 at g_Mars=3.72 m/s^2 and drivetrain efficiency ~0.65 yields ~1.03 J/(kg*m) = 0.28 Wh/(kg*km)"
+    },
+    "gradeWorkEfficiency": {
+      "value": 0.65,
+      "unit": "dim",
+      "verified": false,
+      "source": "Assumption: electromechanical drive efficiency for uphill gravity work m*g*sin(slope)/eta"
+    },
+    "tiLooseThreshold": {
+      "value": 200,
+      "unit": "J m^-2 K^-1 s^-1/2",
+      "verified": true,
+      "source": "Existing web/scoring.js SCORING.effectiveSlopeLimit threshold (Mellon et al. 2000; fine unconsolidated dust/sand < 200 tiu)"
+    },
+    "sinkageMassRefKg": {
+      "value": 1000,
+      "unit": "kg",
+      "verified": false,
+      "source": "Assumption: reference rover mass (~MSL/Perseverance scale) for dimensionless mass sinkage multiplier"
+    },
+    "sinkageMassExponent": {
+      "value": 0.35,
+      "unit": "dim",
+      "verified": false,
+      "source": "Assumption: sub-linear sinkage sensitivity exponent (totalMass / refMass)^0.35 on loose low-TI regolith"
+    },
+    "sinkageMaxPenalty": {
+      "value": 30,
+      "unit": "score_pts",
+      "verified": false,
+      "source": "Assumption: maximum cell suitability penalty applied to low-TI sand/dust for heavier vehicles"
+    },
+    "roughnessRiskThresholdM": {
+      "value": 0.8,
+      "unit": "m",
+      "verified": false,
+      "source": "Assumption: local topographic relief/roughness onset above which higher speed increases dynamic tip/wheel impact risk"
+    },
+    "speedRiskMaxPenalty": {
+      "value": 25,
+      "unit": "score_pts",
+      "verified": false,
+      "source": "Assumption: maximum suitability penalty at max class speed over high-roughness terrain"
+    },
+    "solarPanelEfficiency": {
+      "value": 0.26,
+      "unit": "dim",
+      "verified": false,
+      "source": "Assumption: space-grade triple-junction GaInP/GaAs/Ge solar cell conversion efficiency under Martian spectrum + optical dust attenuation via STORM.dailySolar"
+    },
+    "solarSpecIrradiancePeakWm2": {
+      "value": 586,
+      "unit": "W/m^2",
+      "verified": true,
+      "source": "NASA Mars Fact Sheet (mean Mars solar irradiance at 1.524 AU = 586.2 W/m^2)"
+    },
+    "heaterBaseTempC": {
+      "value": 0,
+      "unit": "degC",
+      "verified": false,
+      "source": "Assumption: actuator/avionics/cabin survival heating onset temperature; below 0 C heater demand rises linearly with cold (coupled to STORM.surfaceTempC)"
+    },
+    "nuclearHeaterWPerKgDegC": {
+      "value": 0.0018,
+      "unit": "W/(kg*degC)",
+      "verified": false,
+      "source": "Assumption: electrical trace-heater demand growth per kg below 0 C (MMRTG waste heat offsets part of rover bus load; electrical peak draw rises in extreme cold)"
+    }
+  },
+  "classes": {
+    "mini_rover": {
+      "id": "mini_rover",
+      "name": "Mini rover",
+      "name_tr": "Mini gezgin",
+      "reference": "Sojourner-class (Mars Pathfinder 1997)",
+      "reference_tr": "Sojourner sınıfı (Mars Pathfinder 1997)",
+      "concept": false,
+      "baseMassKg": {
+        "value": 11.5,
+        "unit": "kg",
+        "verified": true,
+        "source": "NASA Mars Pathfinder / JPL Sojourner Fact Sheet (~11.5 kg / 25 lbs wet rover mass; 10.6 kg dry)"
+      },
+      "speedKmh": {
+        "min": 0.01,
+        "max": 0.04,
+        "default": 0.025,
+        "step": 0.005,
+        "unit": "km/h",
+        "verified": true,
+        "source": "NASA/JPL Pathfinder Sojourner documentation (~0.7-1.0 cm/s = 0.025-0.036 km/h top nominal ground speed)"
+      },
+      "extraLoadKg": {
+        "min": 0,
+        "max": 5,
+        "default": 0,
+        "step": 0.5,
+        "unit": "kg",
+        "verified": false,
+        "source": "Unverified micro-rover auxiliary payload/cargo slider range (flight Sojourner integrated APXS science instrument)"
+      },
+      "slopeLimitDeg": {
+        "value": 20,
+        "unit": "deg",
+        "verified": false,
+        "source": "Prompt seed ~20 deg (unverified operational bound); NASA/JPL Pathfinder hazard-avoidance software avoided tilts >30 deg with 45 deg static tip-over design"
+      },
+      "power": {
+        "defaultMode": "solar",
+        "selectableModes": ["solar"],
+        "mode": {
+          "value": "solar",
+          "unit": "mode",
+          "verified": true,
+          "source": "NASA Pathfinder Sojourner GaAs/Ge solar array (~13 W peak at Mars noon) + non-rechargeable primary backup battery"
+        },
+        "ratedPowerW": {
+          "value": 13,
+          "unit": "W",
+          "verified": true,
+          "source": "NASA Pathfinder Sojourner solar panel peak electrical output (~13 W)"
+        },
+        "solarAreaM2": {
+          "value": 0.22,
+          "unit": "m^2",
+          "verified": false,
+          "source": "Estimated effective horizontal GaAs/Ge panel area (~0.22 m^2 producing ~13 W at clear noon)"
+        },
+        "hotelPowerW": {
+          "value": 4.5,
+          "unit": "W",
+          "verified": false,
+          "source": "Assumption: avionics + thermal standby power draw during daytime drive window"
+        }
+      }
+    },
+    "lab_rover": {
+      "id": "lab_rover",
+      "name": "Lab rover",
+      "name_tr": "Lab gezgini",
+      "reference": "Curiosity / Perseverance-class (MSL 2012 / Mars 2020)",
+      "reference_tr": "Curiosity / Perseverance sınıfı (MSL / Mars 2020)",
+      "concept": false,
+      "baseMassKg": {
+        "value": 1025,
+        "rangeMin": 899,
+        "rangeMax": 1025,
+        "unit": "kg",
+        "verified": true,
+        "source": "NASA Mars 2020 Perseverance launch rover mass 1,025 kg; NASA MSL Curiosity rover mass 899 kg"
+      },
+      "speedKmh": {
+        "min": 0.02,
+        "max": 0.15,
+        "default": 0.10,
+        "step": 0.01,
+        "unit": "km/h",
+        "verified": true,
+        "source": "NASA MSL/Perseverance maximum flat hard-ground speed ~4.2 cm/s (0.151 km/h)"
+      },
+      "extraLoadKg": {
+        "min": 0,
+        "max": 100,
+        "default": 20,
+        "step": 5,
+        "unit": "kg",
+        "verified": false,
+        "source": "Unverified extra science/sample cargo margin slider (0-100 kg; Perseverance carries ~59 kg science payload + caching system)"
+      },
+      "slopeLimitDeg": {
+        "value": 30,
+        "ratedStaticDeg": 45,
+        "unit": "deg",
+        "verified": true,
+        "source": "NASA/JPL MSL & MER operational practice (avoided tilts >30 deg in route planning; rocker-bogie stability rated to 45 deg; Perseverance cross-slope fault patch 24 deg)"
+      },
+      "power": {
+        "defaultMode": "nuclear",
+        "selectableModes": ["nuclear"],
+        "mode": {
+          "value": "nuclear",
+          "unit": "mode",
+          "verified": true,
+          "source": "NASA/DOE Multi-Mission Radioisotope Thermoelectric Generator (MMRTG, Pu-238)"
+        },
+        "ratedPowerW": {
+          "value": 110,
+          "unit": "W",
+          "verified": true,
+          "source": "NASA/DOE MMRTG beginning-of-mission electrical output ~110 W (recharges two Li-ion batteries for ~200 W driving peaks)"
+        },
+        "solarAreaM2": {
+          "value": 0,
+          "unit": "m^2",
+          "verified": true,
+          "source": "No solar array (MMRTG radioisotope power source is independent of optical depth tau)"
+        },
+        "hotelPowerW": {
+          "value": 60,
+          "unit": "W",
+          "verified": false,
+          "source": "Assumption: baseline flight computer + avionics + science bus electrical draw (~60 W before cold actuator/heater demand)"
+        }
+      }
+    },
+    "manned_rover": {
+      "id": "manned_rover",
+      "name": "Manned rover",
+      "name_tr": "İnsanlı gezgin",
+      "reference": "Pressurized crewed rover (CONCEPT - not flight data)",
+      "reference_tr": "Basınçlı insanlı gezgin (KONSEPT - uçuş verisi değil)",
+      "concept": true,
+      "baseMassKg": {
+        "value": 5000,
+        "rangeMin": 3000,
+        "rangeMax": 8000,
+        "unit": "kg",
+        "verified": false,
+        "concept": true,
+        "source": "CONCEPT - not flight data: prompt range ~3,000-8,000 kg (NASA SPR / LER / SEV ~3,000-4,000 kg lightweight chassis; Artemis/JAXA large rover concepts scale higher)"
+      },
+      "speedKmh": {
+        "min": 2,
+        "max": 15,
+        "default": 8,
+        "step": 0.5,
+        "unit": "km/h",
+        "verified": false,
+        "concept": true,
+        "source": "CONCEPT - not flight data: pressurized rover concept speed range 2-15 km/h (NASA LER/SEV nominal field testing ~5-10 km/h)"
+      },
+      "extraLoadKg": {
+        "min": 0,
+        "max": 1000,
+        "default": 400,
+        "step": 25,
+        "unit": "kg",
+        "verified": false,
+        "concept": true,
+        "source": "CONCEPT - not flight data: 0-1,000 kg crew + EVA suits + science/consumables allocation"
+      },
+      "slopeLimitDeg": {
+        "value": 15,
+        "unit": "deg",
+        "verified": false,
+        "concept": true,
+        "source": "CONCEPT - not flight data: existing app SCORING.HARD.slopeMax crewed rover default (15 deg conservative tilt limit)"
+      },
+      "power": {
+        "defaultMode": "battery",
+        "selectableModes": ["battery", "nuclear", "solar"],
+        "mode": {
+          "value": "battery",
+          "unit": "mode",
+          "verified": false,
+          "concept": true,
+          "source": "CONCEPT - not flight data: selectable conceptual power architecture (rechargeable battery / RTG-hybrid / deployable solar)"
+        },
+        "ratedPowerW": {
+          "value": 8000,
+          "unit": "W",
+          "verified": false,
+          "concept": true,
+          "source": "CONCEPT - not flight data: notional 8 kW average bus capacity for drive + ECLSS crew life support"
+        },
+        "batteryCapacityKwh": {
+          "value": 60,
+          "unit": "kWh",
+          "verified": false,
+          "concept": true,
+          "source": "CONCEPT - not flight data: notional 60 kWh traction + ECLSS battery pack (not affected by tau, cold increases heating load)"
+        },
+        "nuclearRtgW": {
+          "value": 2000,
+          "unit": "W",
+          "verified": false,
+          "concept": true,
+          "source": "CONCEPT - not flight data: notional Kilopower/multi-RTG continuous electrical output (~2 kWe) + battery buffer"
+        },
+        "solarAreaM2": {
+          "value": 24,
+          "unit": "m^2",
+          "verified": false,
+          "concept": true,
+          "source": "CONCEPT - not flight data: notional 24 m^2 deployable pressurized-rover solar array (~3.6 kW peak at clear noon)"
+        },
+        "hotelPowerW": {
+          "value": 1500,
+          "unit": "W",
+          "verified": false,
+          "concept": true,
+          "source": "CONCEPT - not flight data: cabin pressurization, ECLSS O2/CO2 scrubbing, avionics, and crew thermal control"
+        }
+      }
+    }
+  }
+}

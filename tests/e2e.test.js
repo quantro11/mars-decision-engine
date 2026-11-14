@@ -426,6 +426,105 @@ async function runHttpE2E(browserPath, securityHeaders) {
     })()`), 'Helmet Visor HUD modal & Ground POV canvas');
     assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT') && hudCheck.text.includes('MGL POSE') && hudCheck.text.includes('CO2 RCA:') && hudCheck.text.includes('RETURN RSV:'), 'Helmet Visor HUD renders Ground POV, MGL lock, LIBS oxides, CO2 RCA, and Return Reserve');
     await evalJS(`document.getElementById('hud-close').click()`);
+
+    // Verify rebuilt Tactical EVA 16 km2 UI & local analysis workflow (Sections A/B/C, 50% square map, 11 layers, popup, persistence)
+    const tacInit = await evalJS(`(() => {
+      const leg = document.getElementById('eva-legacy-details');
+      const ws = document.getElementById('tac-workspace');
+      const clsOpts = Array.from(document.querySelectorAll('#tac-veh-class option')).map(o => o.value);
+      const box = document.getElementById('tac-map-box').getBoundingClientRect();
+      const wrap = document.querySelector('.map-wrap').getBoundingClientRect();
+      return {
+        legacyOpen: !!(leg && leg.open),
+        wsVisible: !!(ws && !ws.classList.contains('hidden')),
+        clsOpts,
+        squareDiffPx: Math.abs(box.width - box.height),
+        boxW: box.width,
+        wrapW: wrap.width,
+        layerCount: document.querySelectorAll('#tac-layer-list input[type="checkbox"]').length,
+        resLabel: document.getElementById('tac-res-label').textContent,
+      };
+    })()`);
+    assert.strictEqual(tacInit.legacyOpen, false, 'Legacy demo accordion must start collapsed by default');
+    assert.strictEqual(tacInit.wsVisible, true, '16 km2 tactical workspace must be visible on Tactical EVA tab');
+    assert.deepStrictEqual(tacInit.clsOpts, ['mini_rover', 'lab_rover', 'manned_rover'], 'Only the 3 rover classes (no on-foot option) in #tac-veh-class');
+    assert(tacInit.squareDiffPx <= 2 && tacInit.boxW >= 180 && tacInit.boxW <= tacInit.wrapW * 0.56, `16 km2 map must remain square and ~50% viewport size (box=${tacInit.boxW}, wrap=${tacInit.wrapW}, diff=${tacInit.squareDiffPx})`);
+    assert.strictEqual(tacInit.layerCount, 11, '11 toggleable map layers with opacity sliders expected');
+    assert(tacInit.resLabel.includes('Native data resolution'), `Native resolution label expected, got: ${tacInit.resLabel}`);
+
+    await evalJS(`(() => {
+      const d = document.getElementById('tac-date');
+      d.value = '2021-02-18';
+      d.dispatchEvent(new Event('change'));
+    })()`);
+    const percClock = await evalJS(`document.getElementById('tac-mars-time').textContent`);
+    assert(percClock.includes('MY 36') && percClock.includes('Ls 5.'), `Mars24 clock should compute MY 36 Ls ~5 deg for 2021-02-18, got: ${percClock}`);
+
+    await evalJS(`(() => {
+      const vc = document.getElementById('tac-veh-class');
+      vc.value = 'manned_rover';
+      vc.dispatchEvent(new Event('change'));
+    })()`);
+    const mannedUi = await evalJS(`({
+      bannerHidden: document.getElementById('tac-veh-concept-banner').classList.contains('hidden'),
+      bannerTxt: document.getElementById('tac-veh-concept-banner').textContent,
+      spMax: document.getElementById('tac-veh-speed').max,
+      ldMax: document.getElementById('tac-veh-load').max,
+      pwDisabled: document.getElementById('tac-veh-power-mode').disabled,
+    })`);
+    assert(!mannedUi.bannerHidden && mannedUi.bannerTxt.includes('CONCEPT – not flight data'), 'Manned rover shows CONCEPT – not flight data banner');
+    assert.strictEqual(mannedUi.spMax, '15');
+    assert.strictEqual(mannedUi.ldMax, '1000');
+    assert.strictEqual(mannedUi.pwDisabled, false);
+
+    await evalJS(`(() => {
+      const vc = document.getElementById('tac-veh-class');
+      vc.value = 'mini_rover';
+      vc.dispatchEvent(new Event('change'));
+      const on = document.getElementById('tac-online-toggle');
+      on.checked = false;
+      on.dispatchEvent(new Event('change'));
+      const pz = document.getElementById('tac-preset-zone');
+      pz.value = 'arcadia_ice';
+      pz.dispatchEvent(new Event('change'));
+      document.querySelector('#tac-tau-presets button[data-tau="10.8"]').click();
+      document.getElementById('tac-generate-btn').click();
+    })()`);
+    const arcRes = await waitFor(() => evalJS(`(() => {
+      const s = document.getElementById('tac-summary').textContent;
+      const nw = document.getElementById('tac-corner-nw').textContent;
+      const sp = document.getElementById('tac-veh-specs').textContent;
+      return s.includes('OFFLINE PRE-CUT') && nw.includes('39.2') ? { s, nw, sp } : null;
+    })()`), 'Arcadia offline 16 km2 pre-cut analysis');
+    assert(arcRes.sp.includes('⚠ unverified'), 'Mini rover displays ⚠ unverified badge on seed slope limit');
+    assert(arcRes.s.includes('Mean / Min / Max') && arcRes.s.includes('% Impassable'), 'Summary renders area mean/min/max and % impassable');
+
+    await evalJS(`(() => {
+      const cvs = document.getElementById('tac-canvas');
+      const r = cvs.getBoundingClientRect();
+      cvs.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + r.width * 0.5, clientY: r.top + r.height * 0.5 }));
+    })()`);
+    const popTxt = await evalJS(`document.getElementById('tac-cell-popup').textContent`);
+    assert(
+      popTxt.includes('Cell (') && popTxt.includes('Ground Composition (orbital, coarse resolution)') && popTxt.includes('MEASURED') && popTxt.includes('MODEL') && !/Mastcam|SuperCam|SHERLOC|PIXL/i.test(popTxt),
+      `Cell popup renders scores, separated coarse K/Th, badges, and no fake instruments on Arcadia: ${popTxt.slice(0, 240)}`
+    );
+
+    await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+    const cardCoord = await evalJS(`(() => {
+      const card = document.querySelector('#candidates .card');
+      card.click();
+      document.querySelector('.mode-btn[data-mode="eva"]').click();
+      return {
+        lat: document.getElementById('tac-lat').value,
+        veh: document.getElementById('tac-veh-class').value,
+        tau: document.getElementById('tac-tau').value,
+      };
+    })()`);
+    assert.notStrictEqual(Number(cardCoord.lat), 39.2, 'Clicking candidate card updates Section A latitude');
+    assert.strictEqual(cardCoord.veh, 'mini_rover', 'Vehicle class input persists across tab switches');
+    assert.strictEqual(cardCoord.tau, '10.8', 'Dust tau input persists across tab switches');
+
     await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
 
     await evalJS(`document.getElementById('guide-dismiss').click()`);
@@ -594,8 +693,30 @@ async function runFileProtocolCheck(browserPath) {
     }, 'offline file:// boot with layers_data.js');
 
     assert.strictEqual(fileBoot.c, 5);
+    await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        document.querySelector('.mode-btn[data-mode="eva"]').click();
+        const on = document.getElementById('tac-online-toggle');
+        on.checked = false;
+        on.dispatchEvent(new Event('change'));
+        document.getElementById('tac-generate-btn').click();
+      })()`,
+      returnByValue: true
+    }, sessionId);
+    const fileTac = await waitFor(async () => {
+      const res = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const ws = document.getElementById('tac-workspace');
+          const s = document.getElementById('tac-summary');
+          return ws && !ws.classList.contains('hidden') && s && s.textContent.includes('OFFLINE PRE-CUT') ? s.textContent : null;
+        })()`,
+        returnByValue: true
+      }, sessionId);
+      return res.result ? res.result.value : null;
+    }, 'offline file:// Tactical EVA 16 km2 analysis');
+    assert(fileTac.includes('OFFLINE PRE-CUT') && fileTac.includes('Mean / Min / Max'), 'file:// offline Tactical EVA preset renders cleanly');
     assert.strictEqual(pageErrors.length, 0, `file:// errors: ${pageErrors.join(' | ')}`);
-    console.log('PASS file:// offline E2E (5 candidates rendered, 0 errors)');
+    console.log('PASS file:// offline E2E (5 candidates + Tactical EVA 16 km2 pre-cut rendered, 0 errors)');
   } finally {
     await new Promise((resolve) => {
       let done = false;
