@@ -206,6 +206,12 @@
         ? `${escHtml(nc.distKm.toFixed(0) + ' km · ' + nc.type + (nc.diameter ? ' · ~' + nc.diameter + ' m' : ''))} <small>(${tr ? 'doğrulanmamış aday' : 'unconfirmed candidate'})</small>`
         : (tr ? 'katalog yüklenmedi' : 'catalogue not loaded');
       const radMsv = SCORING.radDoseMsvYr(v.elev);
+      const locTi = v.ti !== null ? v.ti : 215, locDust = v.dust !== null ? v.dust : 0.25;
+      const locMetW = Math.round(245 + v.slope * 14.5 + Math.max(0, 120 - locTi) * 0.45 + locDust * 35);
+      const locWalkH = +(4.2 + v.slope * 0.11 + (v.rough / 180)).toFixed(1);
+      const locO2Rem = Math.max(12, Math.min(92, Math.round(100 - (0.255 * locMetW * locWalkH / 850) * 100)));
+      const locWaterL = +((0.72 * locMetW / 675) * locWalkH).toFixed(2);
+      const locDoseMsv = (radMsv / (365.25 * 24) * locWalkH).toFixed(3);
       const plainSummary = buildPlainSummary(v, vetoed, passElev, passSlope, passLat, ice, nr, radMsv, tr);
 
       el.innerHTML = `
@@ -251,8 +257,8 @@
           <div class="help note-sm">${tr
             ? `${escHtml(nr.region.name)} çevresinde bireysel astronot yürüyüşü (Marswalk): <b>SWIM 2.0 Buz Sondajı</b> (${v.ice === null ? 'soğuk tuzak' : v.ice.toFixed(2)}), <b>Boxwork Kırık Sırtları</b> ve <b>TES Mineral Mostrası</b> (${v.ti.toFixed(0)} tiu) duraklarını kapsar.`
             : `Individual astronaut surface walk (Marswalk) near ${escHtml(nr.region.name)} targeting <b>SWIM 2.0 Ice Core</b> (${v.ice === null ? 'cold trap' : v.ice.toFixed(2)}), <b>Boxwork Fracture Ridges</b>, and <b>TES Mineral Outcrop</b> (${v.ti.toFixed(0)} tiu).`}</div>
-          <div class="kv"><span>${tr ? 'Tahmini EVA Süresi & Limit' : 'Est. Marswalk Duration & Limit'}</span><b class="ok">5.2 h / 8.0 h max EVA ✓</b></div>
-          <div class="kv"><span>${tr ? 'Giysi O₂ / Soğutma Suyu / Doz' : 'Suit O₂ / Cooling H₂O / Dose'}</span><b>O₂ 68% rem · 1.4 L H₂O · ${(radMsv / (365.25 * 24) * 5.2).toFixed(3)} mSv</b></div>
+          <div class="kv"><span>${tr ? 'Tahmini EVA Süresi & Limit' : 'Est. Marswalk Duration & Limit'}</span><b class="${locWalkH <= 8.0 ? 'ok' : 'warn'}">${locWalkH} h / 8.0 h max EVA ${locWalkH <= 8.0 ? '✓' : '⚠'}</b></div>
+          <div class="kv"><span>${tr ? 'Giysi O₂ / Soğutma Suyu / Doz' : 'Suit O₂ / Cooling H₂O / Dose'}</span><b>O₂ ${locO2Rem}% rem · ${locWaterL} L H₂O · ${locDoseMsv} mSv</b></div>
         </div>
         <div class="row">
           <button id="plan-marswalk-btn" class="btn-spec btn-full">${escHtml(tr ? 'Bu Sahada Marswalk Rotası Planla (A* + Bilim POI)' : 'Plan Marswalk at this Site (A* + Science POIs)')}</button>
