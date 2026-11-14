@@ -6,6 +6,7 @@
   const LAYER_DEFS = [
     { key: 'optics',          label: 'Optics (imagery)',         labelTr: 'Optik (görüntü)',          unit: 'CTX / 0–100', defOn: true,  defOp: 90, lowRes: false, stops: ['#181c24', '#6d7888', '#d8dee8'] },
     { key: 'final',           label: 'Final landing score',      labelTr: 'Nihai iniş skoru',         unit: '0–100',       defOn: true,  defOp: 65, lowRes: false, stops: ['#9d2820', '#d88a2e', '#2ea35a'] },
+    { key: 'power',           label: 'Power & Energy',           labelTr: 'Güç & Enerji',             unit: '0–100 / Wh',  defOn: false, defOp: 70, lowRes: false, stops: ['#8c2317', '#dfa13b', '#2eb369'] },
     { key: 'topography',      label: 'Topography',               labelTr: 'Topografya',               unit: '0–100 / m',   defOn: false, defOp: 70, lowRes: false, stops: ['#24303c', '#7fa2bf', '#e2b86d'] },
     { key: 'thermal',         label: 'Thermal',                  labelTr: 'Termal',                   unit: '0–100 / tiu', defOn: false, defOp: 70, lowRes: false, stops: ['#2b4c7e', '#3da36b', '#df8d3e'] },
     { key: 'radiation',       label: 'Radiation (space dose)',   labelTr: 'Radyasyon (uzay dozu)',    unit: '0–100 / mSv', defOn: false, defOp: 70, lowRes: false, stops: ['#8a2936', '#d6a33a', '#3aa884'] },
@@ -323,6 +324,12 @@
     return base;
   }
 
+  const FIELD_STORE_KEY = 'mde_tac_field_data_v1';
+
+  function escHtml(v) {
+    return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   function createTacticalEvaController(ctx) {
     const { doc = global.document, S, layers, onToast } = ctx;
     const engine = global.MDE_TACTICAL_EVA_ENGINE;
@@ -345,15 +352,37 @@
       layerState[def.key] = { visible: def.defOn, opacity: def.defOp / 100 };
     }
 
+    let fieldMeasurements = [];
+    try {
+      const saved = global.localStorage && global.localStorage.getItem(FIELD_STORE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) fieldMeasurements = parsed;
+      }
+    } catch (_) {
+      fieldMeasurements = [];
+    }
+
     let analysis = null;
     let selectedCellIdx = null;
-    let mapExpanded = false;
+    let mapClosed = false;
+    let editingFieldId = null;
+    let lastNormalMean = null;
+    let lastScenarioTag = null;
     let loadedCtxUrl = null;
     let loadedCtxImg = null;
     let resizeObs = null;
 
     function isTr() {
-      return !!(global.MDE_I18N && typeof global.MDE_I18N.isTr === 'function' && global.MDE_I18N.isTr());
+      return !!(global.MDE_I18N && global.MDE_I18N.getLang && global.MDE_I18N.getLang() === 'tr');
+    }
+
+    function saveFieldData() {
+      try {
+        if (global.localStorage) {
+          global.localStorage.setItem(FIELD_STORE_KEY, JSON.stringify(fieldMeasurements));
+        }
+      } catch (_) { /* ignore private-mode quota errors */ }
     }
 
     function fmtLonDisp(lon180, conv) {
@@ -388,19 +417,18 @@
       }
       const nr = engine.nearestRegionName(loc.latDeg, loc.lon180, { layers, regions: global.REGIONS });
       const cutout = engine.findPresetCutout(cutouts, loc.latDeg, loc.lon180);
+      const featTxt = nr ? `${nr.name} (${nr.distKm} km)` : (isTr() ? 'Yakında isimli özellik yok' : 'No nearby named feature');
       if (cutout) {
-        regEl.textContent = `${cutout.name}${nr ? ' · ' + nr.name + ' (' + nr.distKm + ' km)' : ''}`;
-      } else if (nr) {
-        regEl.textContent = `${nr.name} (~${nr.distKm} km)`;
+        regEl.textContent = nr ? `${cutout.name} · ${featTxt}` : cutout.name;
       } else {
-        regEl.textContent = isTr() ? 'Özel koordinat' : 'Custom site';
+        regEl.textContent = featTxt;
       }
     }
 
     function makeBadge(verified, concept, sourceText) {
       const cls = concept ? 'tac-badge tac-badge-concept' : (verified ? 'tac-badge tac-badge-ok' : 'tac-badge tac-badge-warn');
       const label = concept ? 'CONCEPT – not flight data' : (verified ? 'NASA verified' : '⚠ unverified');
-      return `<span class="${cls}" title="${(sourceText || '').replace(/"/g, '&quot;')}">${label}</span>`;
+      return `<span class="${cls}" title="${escHtml(sourceText)}">${label}</span>`;
     }
 
     function syncVehiclePanel(resetSliders) {
@@ -439,7 +467,9 @@
       const banner = $('tac-veh-concept-banner');
       if (banner) {
         banner.classList.toggle('hidden', !veh.concept);
-        if (veh.concept) banner.textContent = 'CONCEPT – not flight data · All crewed rover specifications are architectural assumptions.';
+        if (veh.concept) banner.textContent = isTr()
+          ? 'CONCEPT – uçuş verisi değil · Mürettebatlı rover değerleri mühendislik kavramıdır.'
+          : 'CONCEPT – not flight data · All crewed rover specifications are architectural assumptions.';
       }
 
       const pwWrap = $('tac-veh-power-wrap');
@@ -461,19 +491,22 @@
       if (specs) {
         const massRange = veh.baseMassKg.rangeMin ? ` (${veh.baseMassKg.rangeMin}–${veh.baseMassKg.rangeMax} kg)` : '';
         specs.innerHTML =
-          `<div class="tac-spec-row"><span>Base / Total mass</span><b>${veh.baseMassKg.value} / ${veh.totalMassKg} kg${massRange}</b> ${makeBadge(veh.baseMassKg.verified, veh.concept, veh.baseMassKg.source)}</div>` +
-          `<div class="tac-spec-row"><span>Slope limit</span><b>${veh.slopeLimitDeg.value}°</b> ${makeBadge(veh.slopeLimitDeg.verified, veh.concept, veh.slopeLimitDeg.source)}</div>` +
-          `<div class="tac-spec-row"><span>Power</span><b>${veh.powerMode.toUpperCase()} (${veh.power.ratedPowerW.value} W)</b> ${makeBadge(veh.power.ratedPowerW.verified, veh.concept, veh.power.ratedPowerW.source)}</div>`;
+          `<div class="tac-spec-row"><span>${isTr() ? 'Boş / Toplam kütle' : 'Base / Total mass'}</span><b>${veh.baseMassKg.value} / ${veh.totalMassKg} kg${massRange}</b> ${makeBadge(veh.baseMassKg.verified, veh.concept, veh.baseMassKg.source)}</div>` +
+          `<div class="tac-spec-row"><span>${isTr() ? 'Eğim sınırı' : 'Slope limit'}</span><b>${veh.slopeLimitDeg.value}°</b> ${makeBadge(veh.slopeLimitDeg.verified, veh.concept, veh.slopeLimitDeg.source)}</div>` +
+          `<div class="tac-spec-row"><span>${isTr() ? 'Güç' : 'Power'}</span><b>${veh.powerMode.toUpperCase()} (${veh.power.ratedPowerW.value} W)</b> ${makeBadge(veh.power.ratedPowerW.verified, veh.concept, veh.power.ratedPowerW.source)}</div>`;
       }
 
       const fxEl = $('tac-veh-effects-note');
       if (fxEl) {
         fxEl.innerHTML =
-          `<b>Vehicle rules ${makeBadge(false, veh.concept, veh.effects.massEnergyCoeffWhPerKgKm.source)}:</b> ` +
-          `Higher mass raises energy/km and loose-sand (low-TI) sinkage; higher speed cuts traverse time but adds roughness risk; ` +
-          (veh.powerMode === 'solar'
-            ? 'Solar output tracks τ &amp; Ls via STORM dust model.'
-            : 'Nuclear/Battery ignores τ, but cold rises trace-heater draw.');
+          `<b>${isTr() ? 'Araç kuralları' : 'Vehicle rules'} ${makeBadge(false, veh.concept, veh.effects.massEnergyCoeffWhPerKgKm.source)}:</b> ` +
+          (isTr()
+            ? (veh.powerMode === 'solar'
+              ? 'Yüksek kütle km başına enerjiyi ve gevşek kumda batmayı artırır; güneş üretimi τ ve Ls ile düşer.'
+              : 'Nükleer/Batarya τ tozundan etkilenmez, ancak soğuk ısıtıcı çekişini artırır.')
+            : (veh.powerMode === 'solar'
+              ? 'Higher mass raises energy/km and loose-sand (low-TI) sinkage; solar output tracks τ & Ls via STORM dust model.'
+              : 'Nuclear/Battery ignores τ, while cold raises trace-heater draw.'));
       }
     }
 
@@ -486,7 +519,7 @@
         const wDef = tacticalCfg.weights[k];
         const row = doc.createElement('label');
         row.innerHTML = `${isTr() ? wDef.label_tr : wDef.label} <span id="tac-wval-${k}">${Math.round(norm[k] * 100)}%</span>` +
-          `<input type="range" min="0" max="100" step="1" value="${Math.round(inputs.weights[k] * 100)}" data-wkey="${k}">`;
+          `<input type="range" min="0" max="100" step="1" value="${Math.round((inputs.weights[k] ?? wDef.default) * 100)}" data-wkey="${k}">`;
         row.querySelector('input').oninput = (e) => {
           inputs.weights[k] = Number(e.target.value) / 100;
           const n = scoring.normalize(inputs.weights);
@@ -504,43 +537,52 @@
       const list = $('tac-layer-list');
       if (!list) return;
       list.innerHTML = '';
+      const tr = isTr();
       for (const def of LAYER_DEFS) {
         const st = layerState[def.key];
         const row = doc.createElement('div');
         row.className = 'tac-layer-row';
-        const lowTag = def.lowRes ? ' <span class="tac-coarse-tag">coarse</span>' : '';
         row.innerHTML =
-          `<label class="tac-layer-chk"><input type="checkbox" ${st.visible ? 'checked' : ''} data-lkey="${def.key}"> <span>${isTr() ? def.labelTr : def.label}</span>${lowTag}</label>` +
-          `<div class="tac-layer-op-wrap"><input type="range" min="0" max="100" step="5" value="${Math.round(st.opacity * 100)}" data-opkey="${def.key}" aria-label="${def.label} opacity"><span class="tac-op-num">${Math.round(st.opacity * 100)}%</span></div>`;
+          `<label class="tac-layer-chk"><input type="checkbox" ${st.visible ? 'checked' : ''} data-lkey="${def.key}"> <span>${tr ? def.labelTr : def.label}</span></label>` +
+          `<div class="tac-layer-op-wrap"><input type="range" min="0" max="100" step="5" value="${Math.round(st.opacity * 100)}" data-opkey="${def.key}" aria-label="${def.label} opacity"><span class="tac-op-num">%${Math.round(st.opacity * 100)}</span></div>`;
         row.querySelector('[data-lkey]').onchange = (e) => {
           st.visible = e.target.checked;
           renderCanvasAndLegend();
         };
         row.querySelector('[data-opkey]').oninput = (e) => {
           st.opacity = Number(e.target.value) / 100;
-          row.querySelector('.tac-op-num').textContent = `${Math.round(st.opacity * 100)}%`;
+          row.querySelector('.tac-op-num').textContent = `%${Math.round(st.opacity * 100)}`;
           renderCanvasAndLegend();
         };
         list.appendChild(row);
       }
     }
 
+    function getLayerDef(key) {
+      return LAYER_DEFS.find((d) => d.key === key) || LAYER_DEFS[0];
+    }
+
     function colorForLayerCell(defKey, idx) {
       const g = analysis.grids;
+      const def = getLayerDef(defKey);
       if (defKey === 'final') {
-        if (g.impassable[idx] || g.nasaVeto[idx]) return [145, 34, 28];
-        return interpColor3(LAYER_DEFS[1].stops, g.final[idx] / 100);
+        if (g.impassable[idx] || g.nasaVeto[idx] || g.powerDeficit[idx]) return [145, 34, 28];
+        return interpColor3(def.stops, g.final[idx] / 100);
+      }
+      if (defKey === 'power') {
+        if (g.powerDeficit[idx]) return [140, 35, 23];
+        return interpColor3(def.stops, g.power[idx] / 100);
       }
       if (defKey === 'optics') {
-        if (analysis.ctxImgDataUri) return null; // Base CTX image drawn separately
-        return interpColor3(LAYER_DEFS[0].stops, g.optics[idx] / 100);
+        if (analysis.ctxImgDataUri && !inputs.useCoarseBaseline) return null;
+        return interpColor3(def.stops, g.optics[idx] / 100);
       }
-      if (defKey === 'topography') return interpColor3(LAYER_DEFS[2].stops, g.topography[idx] / 100);
-      if (defKey === 'thermal') return interpColor3(LAYER_DEFS[3].stops, g.thermal[idx] / 100);
-      if (defKey === 'radiation') return interpColor3(LAYER_DEFS[4].stops, g.radiation[idx] / 100);
+      if (defKey === 'topography') return interpColor3(def.stops, g.topography[idx] / 100);
+      if (defKey === 'thermal') return interpColor3(def.stops, g.thermal[idx] / 100);
+      if (defKey === 'radiation') return interpColor3(def.stops, g.radiation[idx] / 100);
       if (defKey === 'groundComp') {
         const kNorm = clamp((g.grsK[idx] - 0.1) / 0.5, 0, 1);
-        return interpColor3(LAYER_DEFS[5].stops, kNorm);
+        return interpColor3(def.stops, kNorm);
       }
       if (defKey === 'geology') {
         const u = tacticalCfg.geologySim3292.units[g.geolUnits[idx]];
@@ -549,21 +591,21 @@
       if (defKey === 'elevation') {
         const mn = analysis._elevMin, mx = analysis._elevMax;
         const t = mx > mn ? (g.elevM[idx] - mn) / (mx - mn) : 0.5;
-        return interpColor3(LAYER_DEFS[7].stops, t);
+        return interpColor3(def.stops, t);
       }
       if (defKey === 'slope') {
         const lim = analysis.vehicle.slopeLimitDeg.value;
         if (g.slopeDeg[idx] > lim) return [185, 35, 35];
-        return interpColor3(LAYER_DEFS[8].stops, clamp(g.slopeDeg[idx] / Math.max(1, lim), 0, 1));
+        return interpColor3(def.stops, clamp(g.slopeDeg[idx] / Math.max(1, lim), 0, 1));
       }
-      if (defKey === 'dust') return interpColor3(LAYER_DEFS[9].stops, g.dust[idx] / 100);
-      if (defKey === 'confidence') return interpColor3(LAYER_DEFS[10].stops, g.confidence[idx] / 100);
+      if (defKey === 'dust') return interpColor3(def.stops, g.dust[idx] / 100);
+      if (defKey === 'confidence') return interpColor3(def.stops, g.confidence[idx] / 100);
       return [128, 128, 128];
     }
 
     function drawHatchedOverlay(c2d, w, h, labelText) {
       c2d.save();
-      c2d.strokeStyle = 'rgba(255, 215, 130, 0.28)';
+      c2d.strokeStyle = 'rgba(205, 212, 222, 0.24)';
       c2d.lineWidth = 1.2;
       for (let d = -h; d < w + h; d += 12) {
         c2d.beginPath();
@@ -581,7 +623,7 @@
     }
 
     function ensureLoadedCtxImage() {
-      const uri = analysis && analysis.ctxImgDataUri;
+      const uri = !inputs.useCoarseBaseline && analysis && analysis.ctxImgDataUri;
       if (!uri) { loadedCtxUrl = null; loadedCtxImg = null; return; }
       if (uri === loadedCtxUrl) return;
       loadedCtxUrl = uri;
@@ -607,11 +649,10 @@
 
       // Optics base raster imagery if loaded & toggled
       const optSt = layerState.optics;
-      if (optSt.visible && loadedCtxImg && loadedCtxImg.complete) {
+      if (optSt.visible && !inputs.useCoarseBaseline && loadedCtxImg && loadedCtxImg.complete) {
         c2d.save();
         c2d.globalAlpha = optSt.opacity;
         c2d.drawImage(loadedCtxImg, 0, 0, W, H);
-        // Dust haze veil proportional to tau if tau > 0.5
         if (analysis.environment.tau > 0.8) {
           const hazeA = clamp((analysis.environment.tau - 0.5) / 12, 0, 0.55) * optSt.opacity;
           c2d.fillStyle = `rgba(210, 142, 82, ${hazeA.toFixed(3)})`;
@@ -624,7 +665,7 @@
       for (const def of LAYER_DEFS) {
         const st = layerState[def.key];
         if (!st.visible || st.opacity <= 0) continue;
-        if (def.key === 'optics' && analysis.ctxImgDataUri) continue;
+        if (def.key === 'optics' && !inputs.useCoarseBaseline && analysis.ctxImgDataUri) continue;
         c2d.save();
         c2d.globalAlpha = st.opacity;
         for (let r = 0; r < n; r++) {
@@ -639,15 +680,15 @@
         c2d.restore();
       }
 
-      // Highlight impassable cells if final or slope visible
-      if (layerState.final.visible || layerState.slope.visible) {
+      // Highlight impassable cells if final, power or slope visible
+      if (layerState.final.visible || layerState.slope.visible || layerState.power.visible) {
         c2d.save();
         c2d.strokeStyle = 'rgba(255, 95, 85, 0.72)';
         c2d.lineWidth = 1;
         for (let r = 0; r < n; r++) {
           for (let c = 0; c < n; c++) {
             const i = r * n + c;
-            if (analysis.grids.impassable[i]) {
+            if (analysis.grids.impassable[i] || analysis.grids.powerDeficit[i]) {
               const x = c * cw, y = r * ch;
               c2d.beginPath();
               c2d.moveTo(x, y);
@@ -670,12 +711,48 @@
       }
       c2d.restore();
 
-      // Hatched low-resolution overlay when global coarse fallback OR active primary coarse layer
-      const activeCoarseOnly = LAYER_DEFS.some((d) => d.lowRes && layerState[d.key].visible);
-      if (analysis.isLowResGrid) {
-        drawHatchedOverlay(c2d, W, H, 'LOW RESOLUTION OVERLAY (~5.2 km global offline fallback)');
-      } else if (activeCoarseOnly && !layerState.final.visible && !layerState.elevation.visible && !layerState.slope.visible && !layerState.thermal.visible) {
-        drawHatchedOverlay(c2d, W, H, 'LOW RESOLUTION ORBITAL LAYER (3.7–550 km footprint)');
+      // Hatched low-resolution overlay when coarse global grid OR only coarse orbital layer visible
+      const tr = isTr();
+      const coarseNote = $('tac-coarse-note');
+      const anyCoarseVisible = LAYER_DEFS.some((d) => d.lowRes && layerState[d.key].visible && layerState[d.key].opacity > 0);
+      const fineVisible = ['final', 'power', 'elevation', 'slope', 'thermal', 'topography', 'optics'].some((k) => layerState[k].visible && layerState[k].opacity > 0);
+      if (coarseNote) coarseNote.classList.toggle('hidden', !analysis.isLowResGrid && !anyCoarseVisible);
+
+      if (analysis.isLowResGrid || inputs.useCoarseBaseline) {
+        drawHatchedOverlay(c2d, W, H, tr ? 'KABA VERİ KATMANI (~5 km)' : 'COARSE DATA (~5 km global grid)');
+      } else if (anyCoarseVisible && !fineVisible) {
+        drawHatchedOverlay(c2d, W, H, tr ? 'KABA YÖRÜNGE KATMANI (>3.7 km)' : 'COARSE ORBITAL LAYER (>3.7 km)');
+      }
+
+      // Section D field measurement & hazard markers
+      const fmPts = (analysis.fieldAssimilated && analysis.fieldAssimilated.hazardMarkers) || [];
+      if (fmPts.length) {
+        c2d.save();
+        for (const p of fmPts) {
+          const px = (p.col + 0.5) * cw;
+          const py = (p.row + 0.5) * ch;
+          if (p.type === 'hazard') {
+            c2d.fillStyle = '#e04f44';
+            c2d.strokeStyle = '#ffffff';
+            c2d.lineWidth = 1.4;
+            c2d.beginPath();
+            c2d.moveTo(px, py - 6);
+            c2d.lineTo(px + 6, py + 5);
+            c2d.lineTo(px - 6, py + 5);
+            c2d.closePath();
+            c2d.fill();
+            c2d.stroke();
+          } else {
+            c2d.fillStyle = (p.isSimulated || p.simulated) ? '#f5b971' : '#58d69c';
+            c2d.strokeStyle = '#0c0f15';
+            c2d.lineWidth = 1.5;
+            c2d.beginPath();
+            c2d.arc(px, py, 4.5, 0, Math.PI * 2);
+            c2d.fill();
+            c2d.stroke();
+          }
+        }
+        c2d.restore();
       }
 
       // Center marker
@@ -702,84 +779,157 @@
       }
     }
 
+    function getTopVisibleLayerDef() {
+      let top = null;
+      for (const def of LAYER_DEFS) {
+        if (layerState[def.key].visible && layerState[def.key].opacity > 0) top = def;
+      }
+      return top;
+    }
+
     function renderLegend() {
       const leg = $('tac-legend');
       if (!leg || !analysis || !analysis.ok) return;
       leg.innerHTML = '';
-      const active = LAYER_DEFS.filter((d) => layerState[d.key].visible && layerState[d.key].opacity > 0);
-      if (!active.length) {
-        leg.textContent = isTr() ? 'Görünür katman yok.' : 'No active layers toggled on.';
+      const def = getTopVisibleLayerDef();
+      if (!def) {
+        leg.textContent = isTr() ? 'Görünür katman yok.' : 'No active layers visible.';
         return;
       }
-      for (const def of active) {
-        const row = doc.createElement('div');
-        row.className = 'tac-leg-row';
-        const sw = doc.createElement('span');
-        sw.className = 'tac-leg-bar';
-        sw.style.background = `linear-gradient(90deg, ${def.stops[0]}, ${def.stops[1]}, ${def.stops[2]})`;
-        let rangeTxt = def.unit;
-        if (def.key === 'elevation') {
-          rangeTxt = `${analysis._elevMin.toFixed(0)} … ${analysis._elevMax.toFixed(0)} m`;
-        } else if (def.key === 'slope') {
-          rangeTxt = `0° … ${analysis.vehicle.slopeLimitDeg.value}° (>limit impassable)`;
-        } else if (def.key === 'groundComp') {
-          rangeTxt = `K wt% · Th ppm (coarse ~550 km)`;
-        }
-        const lbl = doc.createElement('span');
-        lbl.className = 'tac-leg-lbl';
-        lbl.innerHTML = `<b>${isTr() ? def.labelTr : def.label}</b> <small>${rangeTxt}</small>`;
-        row.appendChild(sw);
-        row.appendChild(lbl);
-        leg.appendChild(row);
+      const row = doc.createElement('div');
+      row.className = 'tac-leg-row';
+      const sw = doc.createElement('span');
+      sw.className = 'tac-leg-bar';
+      sw.style.background = `linear-gradient(90deg, ${def.stops[0]}, ${def.stops[1]}, ${def.stops[2]})`;
+      let rangeTxt = def.unit;
+      if (def.key === 'elevation') {
+        rangeTxt = `${analysis._elevMin.toFixed(0)} … ${analysis._elevMax.toFixed(0)} m`;
+      } else if (def.key === 'slope') {
+        rangeTxt = `0° … ${analysis.vehicle.slopeLimitDeg.value}°`;
+      } else if (def.key === 'groundComp') {
+        rangeTxt = 'K wt% · Th ppm (~550 km)';
       }
+      const lbl = doc.createElement('span');
+      lbl.className = 'tac-leg-lbl';
+      lbl.innerHTML = `<b>${isTr() ? def.labelTr : def.label}</b> <small>${rangeTxt}</small>`;
+      row.appendChild(sw);
+      row.appendChild(lbl);
+      leg.appendChild(row);
+    }
+
+    function getPlainModeLabel() {
+      const tr = isTr();
+      const fieldCnt = (analysis && analysis.fieldAssimilated && analysis.fieldAssimilated.appliedCount) || 0;
+      if (analysis && !analysis.isLowResGrid && !inputs.useCoarseBaseline) {
+        return fieldCnt > 0
+          ? (tr ? `Saha ölçümü + 100–200 m (${fieldCnt})` : `Field + 100–200 m (${fieldCnt})`)
+          : (analysis.dataMode === 'ONLINE_ORBITAL'
+            ? (tr ? 'Çevrimiçi veri' : 'Online data')
+            : (tr ? 'Yüksek çözünürlük (100–200 m)' : 'High-res (100–200 m)'));
+      }
+      return fieldCnt > 0
+        ? (tr ? 'Saha ölçümü + Kaba veri (5 km)' : 'Field + Coarse (5 km)')
+        : (tr ? 'Kaba veri (5 km)' : 'Coarse data (5 km)');
     }
 
     function renderSummary() {
       const el = $('tac-summary');
-      if (!el || !analysis || !analysis.ok) return;
+      const sideEl = $('tac-panel-summary');
+      if (!analysis || !analysis.ok) return;
       const sum = analysis.summary;
       const vt = analysis.vehicleTelemetry;
       const veh = analysis.vehicle;
-      const badgeMode = analysis.dataMode === 'OFFLINE_PRECUT'
-        ? '<span class="tac-badge tac-badge-ok">OFFLINE PRE-CUT</span>'
-        : (analysis.dataMode === 'ONLINE_ORBITAL'
-          ? '<span class="tac-badge tac-badge-ok">ONLINE-ONLY LIVE</span>'
-          : '<span class="tac-badge tac-badge-warn">COARSE FALLBACK</span>');
+      const tr = isTr();
+      const modeLbl = getPlainModeLabel();
+      const badgeCls = (!analysis.isLowResGrid && !inputs.useCoarseBaseline) ? 'tac-badge-ok' : 'tac-badge-warn';
+      const badgeMode = `<span class="tac-badge ${badgeCls}" title="${escHtml(analysis.dataMode)}">${escHtml(modeLbl)}</span>`;
 
-      el.innerHTML =
-        `<div class="tac-sum-head"><span>16 km² Compatibility Summary</span>${badgeMode}</div>` +
+      const powerWarn = sum.powerDeficit
+        ? `<div class="tac-power-alert">⚠ ${tr ? 'Araç bu koşullarda kendini besleyemiyor' : 'Vehicle cannot power itself under these conditions'}</div>`
+        : '';
+
+      const compareHtml = (lastNormalMean !== null && lastScenarioTag === 'worst')
+        ? `<div class="tac-compare-badge">${tr ? `Normal: ${Math.round(lastNormalMean)} → En kötü gün: ${Math.round(sum.meanScore)}` : `Normal: ${Math.round(lastNormalMean)} → Worst-day: ${Math.round(sum.meanScore)}`}</div>`
+        : '';
+
+      const html =
+        `<div class="tac-sum-head"><span>${tr ? '16 km² Uyumluluk Özeti' : '16 km² Compatibility Summary'}</span>${badgeMode}</div>` +
+        powerWarn +
+        compareHtml +
         `<div class="tac-sum-grid">` +
         `<div><small>Mean / Min / Max</small><b>${sum.meanScore} / ${sum.minScore} / ${sum.maxScore}</b></div>` +
-        `<div><small>% Impassable (&gt;${veh.slopeLimitDeg.value}°)</small><b>${sum.impassablePct}%</b></div>` +
-        `<div><small>Main limiting factor</small><b>${sum.limitingFactorLabel} (${sum.limitingFactorMean})</b></div>` +
-        `<div><small>4 km traverse · Energy</small><b>${vt.traverse4KmHours} h · ${vt.energyPerKmWh} Wh/km</b></div>` +
+        `<div><small>% ${tr ? 'Geçilmez' : 'Impassable'} (&gt;${veh.slopeLimitDeg.value}°)</small><b>${sum.impassablePct}%</b></div>` +
+        `<div><small>${tr ? 'Ana sınırlayıcı faktör' : 'Main limiting factor'}</small><b>${escHtml(sum.limitingFactorLabel)} (${sum.limitingFactorMean})</b></div>` +
+        `<div><small>${tr ? 'Güç ort · Üretim/İhtiyaç' : 'Power mean · Gen/Need'}</small><b>${Math.round(sum.domainMeans.power)} · ${Math.round(vt.dailyGenWh)}/${Math.round(vt.dailyNeedWh)} Wh</b></div>` +
         `</div>` +
-        `<div class="tac-sum-note">${vt.powerNote} · Avg sinkage penalty: -${vt.avgSinkagePenalty} pts · Avg speed risk: -${vt.avgSpeedRiskPenalty} pts` +
-        `${sum.nasaVetoPct > 0 ? ` · NASA HLS-2015 Veto: ${sum.nasaVetoPct}% cells = 0` : ''}</div>`;
+        `<div class="tac-sum-note">${vt.powerNote} · ${vt.traverse4KmHours} h (4 km)${sum.nasaVetoPct > 0 ? ` · NASA HLS-2015 Veto: ${sum.nasaVetoPct}%` : ''}</div>`;
+
+      if (el) el.innerHTML = html;
+      if (sideEl) {
+        sideEl.classList.remove('hidden');
+        sideEl.innerHTML = html;
+      }
+    }
+
+    function popupBadgeClass(badge) {
+      if (String(badge).startsWith('MEASURED')) return 'tac-badge tac-badge-ok';
+      if (badge === 'MODEL') return 'tac-badge tac-badge-model';
+      return 'tac-badge tac-badge-warn';
     }
 
     function renderCellPopup(idx) {
       const el = $('tac-cell-popup');
       if (!el || !analysis || !analysis.ok) return;
-      const p = engine.getCellPopup(analysis, idx);
+      const tr = isTr();
+      const p = engine.getCellPopup(analysis, idx, tr ? 'tr' : 'en');
       if (!p) return;
-      const badgeHtml = (b) => {
-        const cls = b === 'MEASURED' ? 'tac-badge tac-badge-ok' : (b === 'MODEL' ? 'tac-badge tac-badge-model' : 'tac-badge tac-badge-warn');
-        return `<span class="${cls}">${b}</span>`;
-      };
-      const rows = p.domains.map((d) => {
-        const sc = d.score == null ? '<i>Info only</i>' : `<b>${d.score}/100</b>`;
-        return `<tr><td>${d.label}</td><td>${sc}</td><td>${d.raw}</td><td>${d.unit}</td><td>${badgeHtml(d.badge)} <small>${d.source}</small></td></tr>`;
+
+      const rowsHtml = p.domains.map((d) => {
+        const lbl = tr ? (d.labelTr || d.label) : d.label;
+        const scTxt = d.score == null ? (tr ? 'Bilgi' : 'Info') : `${d.score}/100`;
+        let rawTxt = `${d.raw}${d.unit ? ' ' + d.unit : ''}`;
+        if (d.key === 'thermal') rawTxt = `${p.ti} tiu, ${p.tempC} °C`;
+        return `<div class="tac-popup-row"><span><b>${escHtml(lbl)}</b> — ${scTxt} · ${escHtml(rawTxt)}</span>` +
+          `<span class="${popupBadgeClass(d.badge)}">${escHtml(d.badge)}</span></div>`;
       }).join('');
+
+      const detailsHtml = p.domains.map((d) => {
+        const lbl = tr ? (d.labelTr || d.label) : d.label;
+        return `<div><b>${escHtml(lbl)}:</b> ${escHtml(d.source)}${d.date ? ' (' + escHtml(d.date) + ')' : ''}</div>`;
+      }).join('');
+
       const vetoStr = p.vetoReasons.length
-        ? `<div class="tac-popup-veto">VETO / IMPASSABLE: ${p.vetoReasons.join(' · ')}</div>`
+        ? `<div class="tac-popup-veto">VETO: ${escHtml(p.vetoReasons.join(' · '))}</div>`
+        : '';
+
+      const discStr = p.discrepancies && p.discrepancies.length
+        ? `<div class="tac-popup-disc">⚠ ${tr ? 'Saha–yörünge farkı (>%50)' : 'Field–orbital difference (>50%)'}: ${escHtml(p.discrepancies.map((d) => (typeof d === 'string' ? d : `${d.type}`)).join(' · '))}</div>`
         : '';
 
       el.innerHTML =
-        `<div class="tac-popup-head"><span>Cell (${p.row}, ${p.col}) · ${p.lat.toFixed(4)}°, ${fmtLonDisp(p.lon180, inputs.lonConvention)}</span>` +
-        `<b>Final: ${p.finalScore}/100</b></div>` +
+        `<div class="tac-popup-hero">${tr ? 'İniş uyumluluğu' : 'Landing compatibility'}: ${p.finalScore}/100</div>` +
+        `<div class="tac-popup-why">${escHtml(p.explanation)}</div>` +
+        `<div class="tac-popup-head"><span>Cell (${p.row}, ${p.col}) · ${p.lat.toFixed(4)}°, ${fmtLonDisp(p.lon180, inputs.lonConvention)}</span><span>${p.elevM} m</span></div>` +
         vetoStr +
-        `<div class="tac-popup-tbl-wrap"><table class="tbl tac-popup-tbl"><thead><tr><th>Domain</th><th>Score</th><th>Raw value</th><th>Unit</th><th>Badge &amp; Source</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        discStr +
+        `<div class="tac-popup-rows">${rowsHtml}</div>` +
+        `<details class="tac-popup-det"><summary>${tr ? 'Detay (kaynak & tarih)' : 'Details (source & date)'}</summary>${detailsHtml}</details>`;
+    }
+
+    function formatHoverLayerValue(def, idx) {
+      const g = analysis.grids;
+      if (def.key === 'final') return `${g.final[idx].toFixed(1)}/100`;
+      if (def.key === 'power') return `${g.power[idx].toFixed(0)}/100 (${Math.round(g.dailyGenWh[idx])}/${Math.round(g.dailyNeedWh[idx])} Wh)`;
+      if (def.key === 'slope') return `${g.slopeDeg[idx].toFixed(1)}°`;
+      if (def.key === 'elevation') return `${Math.round(g.elevM[idx])} m`;
+      if (def.key === 'thermal') return `${Math.round(g.ti[idx])} tiu, ${g.tempC[idx].toFixed(1)} °C`;
+      if (def.key === 'radiation') return `${g.gcrMSvYr[idx].toFixed(0)} mSv/yr`;
+      if (def.key === 'confidence') return `${Math.round(g.confidence[idx])}%`;
+      if (def.key === 'groundComp') return `K ${g.grsK[idx].toFixed(2)}%`;
+      if (def.key === 'geology') return g.geolUnits[idx];
+      if (def.key === 'dust') return `DCI ${g.dci[idx].toFixed(2)}`;
+      if (def.key === 'topography') return `${Math.round(g.topography[idx])}/100 (Δ${g.reliefM[idx].toFixed(0)} m)`;
+      return `${Math.round(g.optics[idx])}/100`;
     }
 
     function renderCanvasAndLegend() {
@@ -801,13 +951,30 @@
       setTxt('tac-corner-se', cn.se);
       setTxt('tac-corner-sw', cn.sw);
 
+      const tr = isTr();
       const resEl = $('tac-res-label');
-      if (resEl) resEl.textContent = analysis.nativeResLabel;
+      if (resEl) {
+        const resNum = inputs.useCoarseBaseline || analysis.isLowResGrid ? '5 km' : '100–200 m';
+        resEl.textContent = tr ? `Veri çözünürlüğü: ${resNum}` : `Data resolution: ${resNum}`;
+        resEl.title = analysis.nativeResLabel || '';
+      }
+
       const pill = $('tac-mode-pill');
       if (pill) {
-        const online = typeof navigator !== 'undefined' && navigator.onLine === false ? 'OFFLINE' : (inputs.onlineEnabled ? 'ONLINE-ONLY READY' : 'OFFLINE MODE');
-        pill.textContent = `${analysis.dataMode} · ${online}`;
+        pill.textContent = getPlainModeLabel();
+        const net = typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : (inputs.onlineEnabled ? 'online-ready' : 'offline-bundle');
+        pill.title = `${analysis.dataMode} · ${net}`;
       }
+
+      const cmpBtn = $('tac-before-after-btn');
+      if (cmpBtn) {
+        cmpBtn.classList.toggle('hidden', !analysis.hasCoarseBaseline);
+        cmpBtn.classList.toggle('active', !!inputs.useCoarseBaseline);
+        cmpBtn.textContent = inputs.useCoarseBaseline
+          ? (tr ? 'Önce: 5 km (Aktif) ↔ Sonra: 100–200 m' : 'Before: 5 km (Active) ↔ After: 100–200 m')
+          : (tr ? 'Önce: 5 km ↔ Sonra: 100–200 m' : 'Before: 5 km ↔ After: 100–200 m');
+      }
+
       const lineEl = $('tac-scale-line');
       const box = $('tac-map-box');
       if (lineEl && box) {
@@ -824,12 +991,265 @@
       if (!rect.width || !rect.height) return;
       const narrow = global.innerWidth <= 680;
       const target = narrow
-        ? Math.max(180, Math.min(340, Math.round(rect.width * 0.85)))
-        : Math.max(200, Math.min(460, Math.round(Math.min(rect.width * 0.50, rect.height * 0.56))));
+        ? Math.max(180, Math.min(340, Math.round(rect.width * 0.86)))
+        : Math.max(240, Math.min(620, Math.round(Math.min(rect.width * 0.70, rect.height * 0.72))));
       box.style.width = `${target}px`;
       box.style.height = `${target}px`;
       const lineEl = $('tac-scale-line');
       if (lineEl) lineEl.style.width = `${Math.round(target * 0.25)}px`;
+    }
+
+    function syncEnvInputsToDom() {
+      if ($('tac-date')) $('tac-date').value = inputs.earthDateUtc;
+      if ($('tac-ltst')) $('tac-ltst').value = String(inputs.ltstHours);
+      if ($('tac-ltst-v')) $('tac-ltst-v').textContent = `${Number(inputs.ltstHours).toFixed(2)} h LTST`;
+      if ($('tac-tau')) $('tac-tau').value = String(inputs.tau);
+      if ($('tac-tau-v')) $('tac-tau-v').textContent = `τ ${Number(inputs.tau).toFixed(1)}`;
+      doc.querySelectorAll('#tac-tau-presets button').forEach((b) => {
+        const hit = Math.abs(Number(b.dataset.tau) - Number(inputs.tau)) < 0.05;
+        b.classList.toggle('active', hit);
+        b.setAttribute('aria-pressed', String(hit));
+      });
+      doc.querySelectorAll('#tac-solar-cycle button').forEach((b) => {
+        const on = b.dataset.cycle === inputs.solarCycle;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
+      if ($('tac-spe-toggle')) $('tac-spe-toggle').checked = !!inputs.speActive;
+      updateMarsClockReadout();
+    }
+
+    function computeBaselineNormalMean() {
+      const normalInputs = {
+        ...inputs,
+        tau: 0.5,
+        solarCycle: 'mid',
+        speActive: false,
+        ltstHours: 12,
+        earthDateUtc: engine.getUtcTodayIso(),
+      };
+      const baseRes = engine.generateAnalysis({
+        inputs: normalInputs,
+        cutouts,
+        layers,
+        vehiclesCfg,
+        tacticalCfg,
+        marsTime,
+        scoring,
+        storm,
+        fieldMeasurements,
+        fieldRadiusM: inputs.fieldRadiusM,
+      });
+      return baseRes && baseRes.ok ? baseRes.summary.meanScore : null;
+    }
+
+    function renderFieldList() {
+      const box = $('tac-fd-list');
+      if (!box) return;
+      const tr = isTr();
+      if (!fieldMeasurements.length) {
+        box.innerHTML = `<div class="help">${tr ? 'Henüz eklenen saha ölçümü yok.' : 'No field measurements added yet.'}</div>`;
+        return;
+      }
+      box.innerHTML = fieldMeasurements.map((m, idx) => {
+        const spec = engine.FIELD_MEASUREMENT_SPECS[m.type] || { unit: '' };
+        const simTag = m.simulated ? `<span class="tac-badge tac-badge-warn">${tr ? 'SİMÜLE' : 'SIMULATED'}</span>` : `<span class="tac-badge tac-badge-ok">${tr ? 'ÖLÇÜLDÜ' : 'MEASURED'}</span>`;
+        const valDisp = (m.type === 'soilType' || m.type === 'hazard') ? String(m.value) : `${m.value} ${spec.unit || m.unit || ''}`;
+        return `<div class="tac-fd-item"><div><b>${escHtml(m.type)}</b>: ${escHtml(valDisp)} ${simTag}` +
+          `<div class="tac-fd-item-meta">${Number(m.lat).toFixed(4)}°, ${Number(m.lon).toFixed(4)}° · ${escHtml(m.source || 'manual')}${m.date ? ' · ' + escHtml(m.date) : ''}${m.note ? ' · ' + escHtml(m.note) : ''}</div></div>` +
+          `<div class="tac-fd-item-acts"><button type="button" class="ghost" data-fedit="${idx}">${tr ? 'Düzenle' : 'Edit'}</button>` +
+          `<button type="button" class="ghost" data-fdel="${idx}">${tr ? 'Sil' : 'Del'}</button></div></div>`;
+      }).join('');
+
+      box.querySelectorAll('[data-fedit]').forEach((b) => {
+        b.onclick = () => {
+          const i = Number(b.dataset.fedit);
+          const m = fieldMeasurements[i];
+          if (!m) return;
+          editingFieldId = i;
+          if ($('tac-fd-lat')) $('tac-fd-lat').value = String(m.lat);
+          if ($('tac-fd-lon')) $('tac-fd-lon').value = String(m.lon);
+          if ($('tac-fd-type')) $('tac-fd-type').value = m.type;
+          syncFieldTypeUi();
+          if (m.type === 'soilType' && $('tac-fd-soil-val')) $('tac-fd-soil-val').value = String(m.value);
+          else if (m.type === 'hazard' && $('tac-fd-hazard-val')) $('tac-fd-hazard-val').value = String(m.value);
+          else if ($('tac-fd-val')) $('tac-fd-val').value = String(m.value);
+          if ($('tac-fd-date')) $('tac-fd-date').value = m.date || '';
+          if ($('tac-fd-source')) $('tac-fd-source').value = m.source || '';
+          if ($('tac-fd-note')) $('tac-fd-note').value = m.note || '';
+          if ($('tac-fd-add-btn')) $('tac-fd-add-btn').textContent = tr ? 'Kaydet' : 'Save';
+          if ($('tac-fd-cancel-btn')) $('tac-fd-cancel-btn').classList.remove('hidden');
+        };
+      });
+
+      box.querySelectorAll('[data-fdel]').forEach((b) => {
+        b.onclick = () => {
+          const i = Number(b.dataset.fdel);
+          fieldMeasurements.splice(i, 1);
+          if (editingFieldId === i) editingFieldId = null;
+          saveFieldData();
+          renderFieldList();
+          runAnalysis(true);
+        };
+      });
+    }
+
+    function syncFieldTypeUi() {
+      const sel = $('tac-fd-type');
+      const type = sel ? sel.value : 'ti';
+      const spec = engine.FIELD_MEASUREMENT_SPECS[type] || { unit: '' };
+      if ($('tac-fd-unit')) $('tac-fd-unit').textContent = spec.unit || '—';
+      if ($('tac-fd-num-wrap')) $('tac-fd-num-wrap').classList.toggle('hidden', type === 'soilType' || type === 'hazard');
+      if ($('tac-fd-soil-wrap')) $('tac-fd-soil-wrap').classList.toggle('hidden', type !== 'soilType');
+      if ($('tac-fd-hazard-wrap')) $('tac-fd-hazard-wrap').classList.toggle('hidden', type !== 'hazard');
+    }
+
+    function parseBulkRows(text, isJson) {
+      let rows = [];
+      let skipped = 0;
+      if (isJson) {
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)) throw new Error('Expected JSON array');
+        rows = parsed;
+      } else {
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length < 2) return { valid: [], skipped: lines.length };
+        const hdr = lines[0].split(',').map((h) => h.trim().toLowerCase());
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(',').map((c) => c.trim());
+          if (parts.length < 4) { skipped++; continue; }
+          const obj = {};
+          hdr.forEach((h, idx) => { obj[h] = parts[idx] ?? ''; });
+          rows.push(obj);
+        }
+      }
+      const valid = [];
+      for (const r of rows) {
+        const lat = Number(r.lat);
+        const lon = Number(r.lon);
+        const type = String(r.type || '').trim();
+        const spec = engine.FIELD_MEASUREMENT_SPECS[type];
+        if (!Number.isFinite(lat) || Math.abs(lat) > 90 || !Number.isFinite(lon) || !spec) {
+          skipped++;
+          continue;
+        }
+        let value = r.value;
+        if (type !== 'soilType' && type !== 'hazard') {
+          value = Number(value);
+          if (!Number.isFinite(value)) { skipped++; continue; }
+        } else if (!value) {
+          skipped++;
+          continue;
+        }
+        valid.push({
+          lat,
+          lon,
+          type,
+          value,
+          unit: String(r.unit || spec.unit || ''),
+          date: String(r.date || ''),
+          source: String(r.source || 'upload'),
+          note: String(r.note || ''),
+          simulated: !!r.simulated,
+        });
+      }
+      return { valid, skipped };
+    }
+
+    function renderPerseveranceBenchmark() {
+      const box = $('tac-benchmark-box');
+      if (!box) return;
+      const tr = isTr();
+      const perc = engine.generateAnalysis({
+        inputs: {
+          ...engine.getDefaultInputs(vehiclesCfg, tacticalCfg),
+          presetZoneId: 'jezero_delta',
+          lat: 18.44,
+          lonInput: 77.45,
+          lonConvention: '-180_180',
+          earthDateUtc: '2021-02-18',
+          ltstHours: 14.0,
+          tau: 0.6,
+          solarCycle: 'min',
+          speActive: false,
+          vehicleClass: 'lab_rover',
+        },
+        cutouts,
+        layers,
+        vehiclesCfg,
+        tacticalCfg,
+        marsTime,
+        scoring,
+        storm,
+      });
+      const gale = engine.generateAnalysis({
+        inputs: {
+          ...engine.getDefaultInputs(vehiclesCfg, tacticalCfg),
+          presetZoneId: 'gale_boxwork',
+          lat: -5.08,
+          lonInput: 137.85,
+          lonConvention: '-180_180',
+          earthDateUtc: '2021-02-18',
+          ltstHours: 14.0,
+          tau: 0.6,
+          solarCycle: 'min',
+          speActive: false,
+          vehicleClass: 'lab_rover',
+        },
+        cutouts,
+        layers,
+        vehiclesCfg,
+        tacticalCfg,
+        marsTime,
+        scoring,
+        storm,
+      });
+      if (!perc.ok || !gale.ok) return;
+
+      const cb = perc.centerBase;
+      const mt = perc.environment;
+      const tiMean = Math.round(perc.grids.ti.reduce((a, b) => a + b, 0) / perc.grids.ti.length);
+      const jezeroGcr = Math.round(cb.gcrMSvYr);
+      const galeGcr = Math.round(gale.centerBase.gcrMSvYr);
+
+      const checks = [
+        {
+          name: 'Ls (2021-02-18)',
+          model: `${mt.lsDeg.toFixed(1)}°`,
+          ref: '≈ 5° (Harri et al. 2024)',
+          ok: Math.abs(mt.lsDeg - 5) <= 2,
+        },
+        {
+          name: tr ? 'Basınç' : 'Pressure',
+          model: `${cb.pressurePa} Pa`,
+          ref: '718 Pa (MEDA; 705–735 Pa)',
+          ok: cb.pressurePa >= 705 && cb.pressurePa <= 735,
+        },
+        {
+          name: tr ? 'Yüzey/Hava sıcaklığı' : 'Temp min / max',
+          model: `${cb.nightTempC.toFixed(1)} °C … ${cb.dayTempC.toFixed(1)} °C`,
+          ref: '−83 °C … −22 °C (MEDA sol 43–44)',
+          ok: cb.nightTempC >= -92 && cb.nightTempC <= -75 && cb.dayTempC >= -32 && cb.dayTempC <= -12,
+        },
+        {
+          name: tr ? 'Termal atalet' : 'Thermal inertia',
+          model: `${tiMean} tiu`,
+          ref: 'MEDA 180–605 / THEMIS 200–400',
+          ok: tiMean >= 180 && tiMean <= 605,
+        },
+        {
+          name: tr ? 'GCR Radyasyon' : 'GCR Radiation',
+          model: `Jezero ${jezeroGcr} vs Gale ${galeGcr} mSv/yr`,
+          ref: tr ? 'Jezero tabanı (−2.5 km) vs Gale Boxwork (+17 m)' : 'Jezero floor (−2.5 km) vs Gale Boxwork (+17 m)',
+          ok: jezeroGcr > galeGcr,
+        },
+      ];
+
+      box.innerHTML =
+        `<b>${tr ? 'Doğrulama: Perseverance iniş yeri (18.44°N, 77.45°E, 2021-02-18)' : 'Benchmark: Perseverance landing site (18.44°N, 77.45°E, 2021-02-18)'}</b>` +
+        `<table class="tbl mt-sm"><thead><tr><th>${tr ? 'Ölçüt' : 'Metric'}</th><th>${tr ? 'Uygulama Çıktısı' : 'Model Output'}</th><th>${tr ? 'Referans Ölçüm' : 'Mission Reference'}</th><th>${tr ? 'Durum' : 'Check'}</th></tr></thead><tbody>` +
+        checks.map((c) => `<tr><td>${escHtml(c.name)}</td><td><code>${escHtml(c.model)}</code></td><td>${escHtml(c.ref)}</td><td>${c.ok ? '<span class="tac-badge tac-badge-ok">✓</span>' : '<span class="tac-badge tac-badge-warn">⚠</span>'}</td></tr>`).join('') +
+        `</tbody></table>`;
     }
 
     async function runAnalysis(skipOnlineFetch) {
@@ -839,20 +1259,26 @@
       const loc = engine.validateLocation(inputs.lat, inputs.lonInput, inputs.lonConvention, tacticalCfg);
       if (!loc.valid) return;
 
+      if (!skipOnlineFetch) {
+        mapClosed = false;
+        const ws = $('tac-workspace');
+        if (ws && S.mode === 'eva') ws.classList.remove('hidden');
+      }
+
       const btn = $('tac-generate-btn');
       const preset = engine.findPresetCutout(cutouts, loc.latDeg, loc.lon180);
       let onlineGrid = null;
       const canGoOnline = !skipOnlineFetch && !preset && inputs.onlineEnabled && (typeof navigator === 'undefined' || navigator.onLine !== false);
       if (canGoOnline) {
-        if (btn) { btn.disabled = true; btn.textContent = 'Fetching orbital data (ONLINE-ONLY)…'; }
+        if (btn) { btn.disabled = true; btn.textContent = isTr() ? 'Çevrimiçi veri alınıyor…' : 'Fetching orbital data…'; }
         const stPill = $('tac-mode-pill');
-        if (stPill) stPill.textContent = 'ONLINE-ONLY · Fetching CTX + SIM 3292 + WMS…';
+        if (stPill) stPill.textContent = isTr() ? 'Çevrimiçi veri…' : 'Fetching online…';
         try {
           onlineGrid = await fetchOnlineOrbitalGrid(loc, layers, tacticalCfg, engine, cutouts);
         } catch (_) {
           onlineGrid = null;
         }
-        if (btn) { btn.disabled = false; btn.textContent = 'Generate 16 km² analysis'; }
+        if (btn) { btn.disabled = false; btn.textContent = isTr() ? 'Analizi Oluştur' : 'Generate 16 km² analysis'; }
       }
 
       const res = engine.generateAnalysis({
@@ -865,6 +1291,8 @@
         marsTime,
         scoring,
         storm,
+        fieldMeasurements,
+        fieldRadiusM: inputs.fieldRadiusM,
       });
       if (!res.ok) return;
 
@@ -947,7 +1375,7 @@
       const dEl = $('tac-date');
       if (dEl) {
         dEl.value = inputs.earthDateUtc;
-        dEl.onchange = () => { inputs.earthDateUtc = dEl.value; updateMarsClockReadout(); };
+        dEl.onchange = () => { inputs.earthDateUtc = dEl.value; lastScenarioTag = null; updateMarsClockReadout(); };
       }
 
       const ltstEl = $('tac-ltst');
@@ -957,6 +1385,7 @@
         if (ltstV) ltstV.textContent = `${Number(inputs.ltstHours).toFixed(2)} h LTST`;
         ltstEl.oninput = () => {
           inputs.ltstHours = Number(ltstEl.value);
+          lastScenarioTag = null;
           if (ltstV) ltstV.textContent = `${inputs.ltstHours.toFixed(2)} h LTST`;
         };
       }
@@ -975,6 +1404,7 @@
         if (tauV) tauV.textContent = `τ ${Number(inputs.tau).toFixed(1)}`;
         tauEl.oninput = () => {
           inputs.tau = Number(tauEl.value);
+          lastScenarioTag = null;
           if (tauV) tauV.textContent = `τ ${inputs.tau.toFixed(1)}`;
           updateTauButtons();
         };
@@ -982,6 +1412,7 @@
       doc.querySelectorAll('#tac-tau-presets button').forEach((b) => {
         b.onclick = () => {
           inputs.tau = Number(b.dataset.tau);
+          lastScenarioTag = null;
           if (tauEl) tauEl.value = String(inputs.tau);
           if (tauV) tauV.textContent = `τ ${inputs.tau.toFixed(1)}`;
           updateTauButtons();
@@ -992,6 +1423,7 @@
       doc.querySelectorAll('#tac-solar-cycle button').forEach((b) => {
         b.onclick = () => {
           inputs.solarCycle = b.dataset.cycle;
+          lastScenarioTag = null;
           doc.querySelectorAll('#tac-solar-cycle button').forEach((x) => {
             const on = x === b;
             x.classList.toggle('active', on);
@@ -1003,7 +1435,41 @@
       const speEl = $('tac-spe-toggle');
       if (speEl) {
         speEl.checked = !!inputs.speActive;
-        speEl.onchange = () => { inputs.speActive = speEl.checked; };
+        speEl.onchange = () => { inputs.speActive = speEl.checked; lastScenarioTag = null; };
+      }
+
+      const worstBtn = $('tac-worst-day-btn');
+      if (worstBtn) {
+        worstBtn.onclick = () => {
+          lastNormalMean = computeBaselineNormalMean();
+          const loc = engine.validateLocation(inputs.lat, inputs.lonInput, inputs.lonConvention, tacticalCfg);
+          const latDeg = loc.valid ? loc.latDeg : 18.38;
+          const lon360 = loc.valid ? loc.lon360 : 77.58;
+          const elevM = analysis ? analysis.centerBase.elevM : -2500;
+          const cold = engine.findColdestEarthDateForLat(latDeg, lon360, elevM, marsTime, storm, engine.getUtcTodayIso());
+          inputs.tau = 10.8;
+          inputs.solarCycle = 'max';
+          inputs.speActive = true;
+          inputs.ltstHours = 3.0;
+          inputs.earthDateUtc = cold.earthDateUtc;
+          lastScenarioTag = 'worst';
+          syncEnvInputsToDom();
+          runAnalysis(false);
+        };
+      }
+
+      const normBtn = $('tac-normal-day-btn');
+      if (normBtn) {
+        normBtn.onclick = () => {
+          inputs.tau = 0.5;
+          inputs.solarCycle = 'mid';
+          inputs.speActive = false;
+          inputs.ltstHours = 12.0;
+          inputs.earthDateUtc = engine.getUtcTodayIso();
+          lastScenarioTag = 'normal';
+          syncEnvInputsToDom();
+          runAnalysis(false);
+        };
       }
 
       const clsSel = $('tac-veh-class');
@@ -1011,20 +1477,169 @@
         clsSel.value = inputs.vehicleClass;
         clsSel.onchange = () => {
           inputs.vehicleClass = clsSel.value;
-          syncVehiclePanel(true); // Limit sliders to class range & reset
+          syncVehiclePanel(true);
         };
       }
       const spEl = $('tac-veh-speed');
-      if (spEl) {
-        spEl.oninput = () => { inputs.speedKmh = Number(spEl.value); syncVehiclePanel(false); };
-      }
+      if (spEl) spEl.oninput = () => { inputs.speedKmh = Number(spEl.value); syncVehiclePanel(false); };
       const ldEl = $('tac-veh-load');
-      if (ldEl) {
-        ldEl.oninput = () => { inputs.extraLoadKg = Number(ldEl.value); syncVehiclePanel(false); };
-      }
+      if (ldEl) ldEl.oninput = () => { inputs.extraLoadKg = Number(ldEl.value); syncVehiclePanel(false); };
       const pwSel = $('tac-veh-power-mode');
-      if (pwSel) {
-        pwSel.onchange = () => { inputs.powerMode = pwSel.value; syncVehiclePanel(false); };
+      if (pwSel) pwSel.onchange = () => { inputs.powerMode = pwSel.value; syncVehiclePanel(false); };
+
+      // Section D Field Data bindings
+      const fdType = $('tac-fd-type');
+      if (fdType) {
+        syncFieldTypeUi();
+        fdType.onchange = syncFieldTypeUi;
+      }
+
+      const fdAdd = $('tac-fd-add-btn');
+      if (fdAdd) {
+        fdAdd.onclick = () => {
+          const type = fdType ? fdType.value : 'ti';
+          const spec = engine.FIELD_MEASUREMENT_SPECS[type] || { unit: '' };
+          const lat = Number($('tac-fd-lat') && $('tac-fd-lat').value);
+          const lon = Number($('tac-fd-lon') && $('tac-fd-lon').value);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+          let value;
+          if (type === 'soilType') value = $('tac-fd-soil-val') ? $('tac-fd-soil-val').value : 'firm_regolith';
+          else if (type === 'hazard') value = $('tac-fd-hazard-val') ? $('tac-fd-hazard-val').value : 'rock';
+          else {
+            value = Number($('tac-fd-val') && $('tac-fd-val').value);
+            if (!Number.isFinite(value)) return;
+          }
+          const rec = {
+            lat, lon, type, value,
+            unit: spec.unit || '',
+            date: $('tac-fd-date') ? $('tac-fd-date').value.trim() : '',
+            source: ($('tac-fd-source') ? $('tac-fd-source').value.trim() : '') || 'field measurement',
+            note: $('tac-fd-note') ? $('tac-fd-note').value.trim() : '',
+            simulated: false,
+          };
+          if (editingFieldId !== null && fieldMeasurements[editingFieldId]) {
+            fieldMeasurements[editingFieldId] = rec;
+            editingFieldId = null;
+            fdAdd.textContent = isTr() ? '+ Ölçüm Ekle' : '+ Add measurement';
+            if ($('tac-fd-cancel-btn')) $('tac-fd-cancel-btn').classList.add('hidden');
+          } else {
+            fieldMeasurements.push(rec);
+          }
+          saveFieldData();
+          renderFieldList();
+          runAnalysis(true);
+        };
+      }
+
+      const fdCancel = $('tac-fd-cancel-btn');
+      if (fdCancel) {
+        fdCancel.onclick = () => {
+          editingFieldId = null;
+          if (fdAdd) fdAdd.textContent = isTr() ? '+ Ölçüm Ekle' : '+ Add measurement';
+          fdCancel.classList.add('hidden');
+        };
+      }
+
+      const fdSample = $('tac-fd-sample-btn');
+      if (fdSample) {
+        fdSample.onclick = () => {
+          fieldMeasurements = [
+            { lat: 18.382, lon: 77.584, type: 'ti', value: 190, unit: 'tiu', date: 'Sol 45', source: 'MEDA (SIMULATED)', note: 'Soft ripple patch', simulated: true },
+            { lat: 18.374, lon: 77.576, type: 'slopeDeg', value: 14.5, unit: '°', date: 'Sol 46', source: 'Navcam stereo (SIMULATED)', note: 'Delta scarp face', simulated: true },
+            { lat: 18.388, lon: 77.590, type: 'radiationUSvHr', value: 26.2, unit: 'µSv/hr', date: 'Sol 46', source: 'RAD (SIMULATED)', note: 'Local sky exposure', simulated: true },
+            { lat: 18.377, lon: 77.587, type: 'hazard', value: 'soft_sand', unit: '', date: 'Sol 47', source: 'Rover tracks (SIMULATED)', note: 'High slip hazard', simulated: true },
+          ];
+          saveFieldData();
+          renderFieldList();
+          runAnalysis(true);
+        };
+      }
+
+      const fdTmpl = $('tac-fd-template-btn');
+      if (fdTmpl) {
+        fdTmpl.onclick = () => {
+          const csv = 'lat,lon,type,value,unit,date,source,note\n18.382,77.584,ti,315,tiu,Sol 45,MEDA,Sample thermal reading\n';
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = doc.createElement('a');
+          a.href = url;
+          a.download = 'mars-field-template.csv';
+          doc.body.appendChild(a);
+          a.click();
+          doc.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+      }
+
+      const fdUp = $('tac-fd-upload-input');
+      if (fdUp) {
+        fdUp.onchange = () => {
+          const file = fdUp.files && fdUp.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const isJson = file.name.toLowerCase().endsWith('.json') || String(reader.result).trim().startsWith('[');
+              const { valid, skipped } = parseBulkRows(String(reader.result || ''), isJson);
+              fieldMeasurements.push(...valid);
+              saveFieldData();
+              renderFieldList();
+              const msgEl = $('tac-fd-import-msg');
+              if (msgEl) {
+                msgEl.classList.remove('hidden');
+                msgEl.textContent = isTr()
+                  ? `${valid.length} ölçüm eklendi, ${skipped} hatalı satır atlandı.`
+                  : `Loaded ${valid.length} measurements, skipped ${skipped} invalid rows.`;
+              }
+              if (valid.length) runAnalysis(true);
+            } catch (_) {
+              const msgEl = $('tac-fd-import-msg');
+              if (msgEl) {
+                msgEl.classList.remove('hidden');
+                msgEl.textContent = isTr() ? 'Dosya biçimi okunamadı.' : 'Failed to parse file.';
+              }
+            }
+          };
+          reader.readAsText(file);
+        };
+      }
+
+      const fdExp = $('tac-fd-export-btn');
+      if (fdExp) {
+        fdExp.onclick = () => {
+          const blob = new Blob([JSON.stringify(fieldMeasurements, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = doc.createElement('a');
+          a.href = url;
+          a.download = 'mars-field-measurements.json';
+          doc.body.appendChild(a);
+          a.click();
+          doc.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+      }
+
+      const fdClear = $('tac-fd-clear-btn');
+      if (fdClear) {
+        fdClear.onclick = () => {
+          fieldMeasurements = [];
+          editingFieldId = null;
+          saveFieldData();
+          renderFieldList();
+          runAnalysis(true);
+        };
+      }
+
+      const radEl = $('tac-field-radius');
+      const radV = $('tac-field-radius-v');
+      if (radEl) {
+        radEl.value = String(inputs.fieldRadiusM || 300);
+        if (radV) radV.textContent = `${radEl.value} m`;
+        radEl.oninput = () => {
+          inputs.fieldRadiusM = Number(radEl.value);
+          if (radV) radV.textContent = `${inputs.fieldRadiusM} m`;
+          if (analysis && fieldMeasurements.length) runAnalysis(true);
+        };
       }
 
       const blendEl = $('tac-blend');
@@ -1064,6 +1679,14 @@
       const genBtn = $('tac-generate-btn');
       if (genBtn) genBtn.onclick = () => runAnalysis(false);
 
+      const cmpBtn = $('tac-before-after-btn');
+      if (cmpBtn) {
+        cmpBtn.onclick = () => {
+          inputs.useCoarseBaseline = !inputs.useCoarseBaseline;
+          runAnalysis(true);
+        };
+      }
+
       const exJson = $('tac-export-json');
       if (exJson) exJson.onclick = () => {
         if (!analysis) { if (onToast) onToast('Generate an analysis first.'); return; }
@@ -1093,21 +1716,52 @@
           const gx = clamp(Math.floor(((e.clientX - r.left) / r.width) * analysis.gridN), 0, analysis.gridN - 1);
           const gy = clamp(Math.floor(((e.clientY - r.top) / r.height) * analysis.gridN), 0, analysis.gridN - 1);
           selectedCellIdx = gy * analysis.gridN + gx;
+          const bb = analysis.location.bbox180;
+          const cellLat = bb[3] - ((gy + 0.5) / analysis.gridN) * (bb[3] - bb[1]);
+          const cellLon = engine.normalizeLon180(bb[0] + ((gx + 0.5) / analysis.gridN) * (bb[2] - bb[0]));
+          if ($('tac-fd-lat')) $('tac-fd-lat').value = cellLat.toFixed(4);
+          if ($('tac-fd-lon')) $('tac-fd-lon').value = cellLon.toFixed(4);
           renderCanvasOnly();
           renderCellPopup(selectedCellIdx);
         };
-      }
-
-      const colBtn = $('tac-collapse-map-btn');
-      if (colBtn) {
-        colBtn.onclick = () => {
-          mapExpanded = !mapExpanded;
-          const ws = $('tac-workspace');
-          if (ws) ws.classList.toggle('tac-compact', mapExpanded);
-          colBtn.textContent = mapExpanded ? 'Expand 16 km²' : 'Compact';
-          syncSquareViewportSize();
+        cvs.onmousemove = (e) => {
+          const tip = $('tac-hover-tip');
+          if (!tip || !analysis || !analysis.ok) return;
+          const r = cvs.getBoundingClientRect();
+          const gx = clamp(Math.floor(((e.clientX - r.left) / r.width) * analysis.gridN), 0, analysis.gridN - 1);
+          const gy = clamp(Math.floor(((e.clientY - r.top) / r.height) * analysis.gridN), 0, analysis.gridN - 1);
+          const idx = gy * analysis.gridN + gx;
+          const topDef = getTopVisibleLayerDef() || LAYER_DEFS[1];
+          const topName = isTr() ? topDef.labelTr : topDef.label;
+          tip.textContent = `${analysis.grids.final[idx].toFixed(1)}/100 · ${topName}: ${formatHoverLayerValue(topDef, idx)}`;
+          tip.classList.remove('hidden');
+          tip.style.left = `${clamp(Math.round(e.clientX - r.left + 10), 4, Math.max(4, Math.round(r.width - 170)))}px`;
+          tip.style.top = `${clamp(Math.round(e.clientY - r.top - 24), 4, Math.max(4, Math.round(r.height - 26)))}px`;
+        };
+        cvs.onmouseleave = () => {
+          const tip = $('tac-hover-tip');
+          if (tip) tip.classList.add('hidden');
         };
       }
+
+      const closeBtn = $('tac-close-map-btn');
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          mapClosed = true;
+          const ws = $('tac-workspace');
+          if (ws) ws.classList.add('hidden');
+        };
+      }
+
+      doc.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && S.mode === 'eva') {
+          const ws = $('tac-workspace');
+          if (ws && !ws.classList.contains('hidden')) {
+            mapClosed = true;
+            ws.classList.add('hidden');
+          }
+        }
+      });
 
       const wrap = doc.querySelector('.map-wrap');
       if (wrap && typeof ResizeObserver === 'function') {
@@ -1123,6 +1777,8 @@
       inputs.lonInput = engine.formatLonForConvention(lon180, inputs.lonConvention);
       const preset = engine.findPresetCutout(cutouts, inputs.lat, lon180);
       inputs.presetZoneId = preset ? preset.id : 'custom';
+      inputs.useCoarseBaseline = false;
+      mapClosed = false;
       if ($('tac-preset-zone')) $('tac-preset-zone').value = inputs.presetZoneId;
       if ($('tac-lat')) $('tac-lat').value = String(inputs.lat);
       if ($('tac-lon')) $('tac-lon').value = String(inputs.lonInput);
@@ -1133,9 +1789,9 @@
     function onModeChange(mode) {
       const ws = $('tac-workspace');
       if (!ws) return;
-      const show = mode === 'eva';
+      const show = mode === 'eva' && !mapClosed;
       ws.classList.toggle('hidden', !show);
-      if (show) {
+      if (mode === 'eva' && !mapClosed) {
         syncSquareViewportSize();
         if (!analysis) runAnalysis(true);
       }
@@ -1145,9 +1801,11 @@
       buildLayerControls();
       buildWeightSliders();
       syncVehiclePanel(false);
+      renderFieldList();
       bindEvents();
-      updateMarsClockReadout();
+      syncEnvInputsToDom();
       updateRegionReadout();
+      renderPerseveranceBenchmark();
       // Pre-compute initial default 16 km2 grid synchronously using offline cutout so state is immediate
       const initRes = engine.generateAnalysis({
         inputs: { ...inputs },
@@ -1158,6 +1816,8 @@
         marsTime,
         scoring,
         storm,
+        fieldMeasurements,
+        fieldRadiusM: inputs.fieldRadiusM,
       });
       if (initRes && initRes.ok) {
         let eMin = Infinity, eMax = -Infinity;
@@ -1183,7 +1843,18 @@
       setCenterFromCoords,
       onModeChange,
       syncSquareViewportSize,
-      onLangChange: () => { buildLayerControls(); buildWeightSliders(); updateRegionReadout(); renderLegend(); },
+      onLangChange: () => {
+        buildLayerControls();
+        buildWeightSliders();
+        syncVehiclePanel(false);
+        renderFieldList();
+        updateRegionReadout();
+        updateCornersAndLabels();
+        renderLegend();
+        renderSummary();
+        renderCellPopup(selectedCellIdx);
+        renderPerseveranceBenchmark();
+      },
       getAnalysis: () => analysis,
     };
   }

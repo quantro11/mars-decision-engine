@@ -430,13 +430,18 @@ async function runHttpE2E(browserPath, securityHeaders) {
     // Verify rebuilt Tactical EVA 16 km2 UI & local analysis workflow (Sections A/B/C, 50% square map, 11 layers, popup, persistence)
     const tacInit = await evalJS(`(() => {
       const leg = document.getElementById('eva-legacy-details');
+      const secField = document.getElementById('tac-sec-field');
+      const secWeights = document.getElementById('tac-sec-weights');
       const ws = document.getElementById('tac-workspace');
       const clsOpts = Array.from(document.querySelectorAll('#tac-veh-class option')).map(o => o.value);
       const box = document.getElementById('tac-map-box').getBoundingClientRect();
       const wrap = document.querySelector('.map-wrap').getBoundingClientRect();
       return {
         legacyOpen: !!(leg && leg.open),
+        fieldOpen: !!(secField && secField.open),
+        weightsOpen: !!(secWeights && secWeights.open),
         wsVisible: !!(ws && !ws.classList.contains('hidden')),
+        closeBtn: !!document.getElementById('tac-close-map-btn'),
         clsOpts,
         squareDiffPx: Math.abs(box.width - box.height),
         boxW: box.width,
@@ -446,11 +451,14 @@ async function runHttpE2E(browserPath, securityHeaders) {
       };
     })()`);
     assert.strictEqual(tacInit.legacyOpen, false, 'Legacy demo accordion must start collapsed by default');
+    assert.strictEqual(tacInit.fieldOpen, false, 'Section D Field Data must start collapsed by default');
+    assert.strictEqual(tacInit.weightsOpen, false, 'Advanced weights must start collapsed by default');
+    assert.strictEqual(tacInit.closeBtn, true, 'Red X close button must replace Compact button');
     assert.strictEqual(tacInit.wsVisible, true, '16 km2 tactical workspace must be visible on Tactical EVA tab');
     assert.deepStrictEqual(tacInit.clsOpts, ['mini_rover', 'lab_rover', 'manned_rover'], 'Only the 3 rover classes (no on-foot option) in #tac-veh-class');
-    assert(tacInit.squareDiffPx <= 2 && tacInit.boxW >= 180 && tacInit.boxW <= tacInit.wrapW * 0.56, `16 km2 map must remain square and ~50% viewport size (box=${tacInit.boxW}, wrap=${tacInit.wrapW}, diff=${tacInit.squareDiffPx})`);
-    assert.strictEqual(tacInit.layerCount, 11, '11 toggleable map layers with opacity sliders expected');
-    assert(tacInit.resLabel.includes('Native data resolution'), `Native resolution label expected, got: ${tacInit.resLabel}`);
+    assert(tacInit.squareDiffPx <= 2 && tacInit.boxW >= 200 && tacInit.boxW <= tacInit.wrapW * 0.78, `16 km2 map must remain square and ~70% viewport size (box=${tacInit.boxW}, wrap=${tacInit.wrapW}, diff=${tacInit.squareDiffPx})`);
+    assert.strictEqual(tacInit.layerCount, 12, '12 toggleable map layers (incl. Power & Energy) with opacity sliders expected');
+    assert(tacInit.resLabel.includes('Data resolution'), `Data resolution label expected, got: ${tacInit.resLabel}`);
 
     await evalJS(`(() => {
       const d = document.getElementById('tac-date');
@@ -494,10 +502,10 @@ async function runHttpE2E(browserPath, securityHeaders) {
       const s = document.getElementById('tac-summary').textContent;
       const nw = document.getElementById('tac-corner-nw').textContent;
       const sp = document.getElementById('tac-veh-specs').textContent;
-      return s.includes('OFFLINE PRE-CUT') && nw.includes('39.2') ? { s, nw, sp } : null;
+      return s.includes('High-res (100–200 m)') && nw.includes('39.2') ? { s, nw, sp } : null;
     })()`), 'Arcadia offline 16 km2 pre-cut analysis');
     assert(arcRes.sp.includes('⚠ unverified'), 'Mini rover displays ⚠ unverified badge on seed slope limit');
-    assert(arcRes.s.includes('Mean / Min / Max') && arcRes.s.includes('% Impassable'), 'Summary renders area mean/min/max and % impassable');
+    assert(arcRes.s.includes('Mean / Min / Max') && arcRes.s.includes('Impassable') && arcRes.s.includes('cannot power itself'), 'Summary renders area stats and power-deficit alert on Mini Rover tau=10.8');
 
     await evalJS(`(() => {
       const cvs = document.getElementById('tac-canvas');
@@ -506,9 +514,20 @@ async function runHttpE2E(browserPath, securityHeaders) {
     })()`);
     const popTxt = await evalJS(`document.getElementById('tac-cell-popup').textContent`);
     assert(
-      popTxt.includes('Cell (') && popTxt.includes('Ground Composition (orbital, coarse resolution)') && popTxt.includes('MEASURED') && popTxt.includes('MODEL') && !/Mastcam|SuperCam|SHERLOC|PIXL/i.test(popTxt),
-      `Cell popup renders scores, separated coarse K/Th, badges, and no fake instruments on Arcadia: ${popTxt.slice(0, 240)}`
+      popTxt.includes('Landing compatibility:') && popTxt.includes('Cell (') && popTxt.includes('Ground Comp') && popTxt.includes('MEASURED') && popTxt.includes('MODEL') && !/Mastcam|SuperCam|SHERLOC|PIXL/i.test(popTxt),
+      `Cell popup renders hero score, rule explanation, badges, and no fake instruments on Arcadia: ${popTxt.slice(0, 240)}`
     );
+
+    await evalJS(`document.getElementById('tac-close-map-btn').click()`);
+    assert(await evalJS(`document.getElementById('tac-workspace').classList.contains('hidden')`), 'Clicking close X hides #tac-workspace');
+    await evalJS(`document.getElementById('tac-generate-btn').click()`);
+    assert(await evalJS(`!document.getElementById('tac-workspace').classList.contains('hidden')`), 'Clicking Generate reopens #tac-workspace');
+
+    await evalJS(`document.getElementById('tac-worst-day-btn').click()`);
+    const worstTxt = await evalJS(`document.getElementById('tac-summary').textContent`);
+    assert(worstTxt.includes('Worst-day:') && worstTxt.includes('Normal:'), `Worst-day button shows Normal -> Worst-day comparison: ${worstTxt}`);
+    await evalJS(`document.getElementById('tac-normal-day-btn').click()`);
+    await evalJS(`(() => { document.querySelector('#tac-tau-presets button[data-tau="10.8"]').click(); })()`);
 
     await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
     const cardCoord = await evalJS(`(() => {
@@ -630,6 +649,9 @@ async function runHttpE2E(browserPath, securityHeaders) {
       `PASS HTTP E2E (${requestedFiles.length} streamed assets, ` +
       `WebGL "${glState.renderer}", 0 CSP violations, 0 errors)`
     );
+  } catch (err) {
+    console.error('HTTP E2E diagnostic -> pageErrors:', pageErrors, 'consoleErrors:', consoleErrors, 'lastRequests:', requestedFiles.slice(-8));
+    throw err;
   } finally {
     await new Promise((resolve) => {
       let done = false;
@@ -708,13 +730,13 @@ async function runFileProtocolCheck(browserPath) {
         expression: `(() => {
           const ws = document.getElementById('tac-workspace');
           const s = document.getElementById('tac-summary');
-          return ws && !ws.classList.contains('hidden') && s && s.textContent.includes('OFFLINE PRE-CUT') ? s.textContent : null;
+          return ws && !ws.classList.contains('hidden') && s && s.textContent.includes('High-res (100–200 m)') ? s.textContent : null;
         })()`,
         returnByValue: true
       }, sessionId);
       return res.result ? res.result.value : null;
     }, 'offline file:// Tactical EVA 16 km2 analysis');
-    assert(fileTac.includes('OFFLINE PRE-CUT') && fileTac.includes('Mean / Min / Max'), 'file:// offline Tactical EVA preset renders cleanly');
+    assert(fileTac.includes('High-res (100–200 m)') && fileTac.includes('Mean / Min / Max'), 'file:// offline Tactical EVA preset renders cleanly');
     assert.strictEqual(pageErrors.length, 0, `file:// errors: ${pageErrors.join(' | ')}`);
     console.log('PASS file:// offline E2E (5 candidates + Tactical EVA 16 km2 pre-cut rendered, 0 errors)');
   } finally {

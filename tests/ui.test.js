@@ -198,7 +198,7 @@ const fakeDoc = {
 };
 I18N.setLang('tr', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Saha seçimi');
-assert.strictEqual(I18N.t('mode.eva'), 'Taktik EVA · 1m/px');
+assert.strictEqual(I18N.t('mode.eva'), 'Taktik EVA · 16 km²');
 assert.strictEqual(I18N.trDomain('LIKELY'), 'YÜKSEK OLASILIK');
 assert.ok(fakeAbout.innerHTML.includes('Veri Seti') && !fakeAbout.innerHTML.includes('style='), '#about-content swaps cleanly to Turkish');
 assert.ok(OV.renderLegendHTML('score', 'tr').includes('ELENDİ/ZAYIF'), 'Map legend renders Turkish scale labels');

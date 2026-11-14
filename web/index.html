@@ -40,7 +40,7 @@
 
   <nav class="modes" aria-label="Modules">
     <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-label">Site selection</span></button>
-    <button class="mode-btn" data-mode="eva" aria-pressed="false"><span class="mode-label">Tactical EVA · 1m/px</span></button>
+    <button class="mode-btn" data-mode="eva" aria-pressed="false"><span class="mode-label">Tactical EVA · 16 km²</span></button>
     <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-label">Dust-storm power</span></button>
     <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-label">Habitability &amp; APIs</span></button>
@@ -103,19 +103,23 @@
     </section>
 
     <section id="panel-eva" class="mode-panel hidden">
-      <div class="sec-head"><h2>Tactical EVA · 16 km² Analyzer</h2><span class="hint">4 km × 4 km · 100 m/cell (40×40)</span></div>
-      <label class="check tac-online-row"><input type="checkbox" id="tac-online-toggle" checked>
-        <span><b>ONLINE-ONLY</b> live WMS / CTX / SIM 3292 queries <small>(uncheck for offline preset / global fallback)</small></span></label>
+      <div class="sec-head"><h2>Tactical EVA · 16 km² Analyzer</h2><span class="hint">4 km × 4 km · 100 m/cell</span></div>
 
       <details id="tac-sec-a" class="tac-sec" open>
-        <summary>Section A · Location (Center of 4 km × 4 km Box)</summary>
+        <summary>Section A · Location</summary>
         <div class="tac-sec-body">
-          <label for="tac-preset-zone">Offline Pre-Cut Site (or Custom Coordinate)
+          <p class="tac-sec-desc" id="tac-desc-a">Center of the 4 km × 4 km local area to analyze.</p>
+          <label for="tac-preset-zone">Target Region (High-Res Cutout or Custom Coordinate)
             <select id="tac-preset-zone">
               <option value="jezero_delta" selected>Jezero Delta Front (18.38°, 77.58° E)</option>
               <option value="gale_boxwork">Gale Mt. Sharp Boxwork (−5.08°, 137.85° E)</option>
               <option value="nili_fossae">Nili Fossae Trough (21.00°, 74.00° E)</option>
               <option value="arcadia_ice">Arcadia Planitia Shallow Ice (39.20°, −175.00°)</option>
+              <option value="cand_utopia_114">Utopia Planitia · 32.30°N, 114.21°E</option>
+              <option value="cand_cerberus_164">Cerberus / Elysium · 22.19°N, 164.75°E</option>
+              <option value="cand_utopia_100">Utopia West · 32.30°N, 100.06°E</option>
+              <option value="cand_elysium_136">Elysium Mons South · 32.30°N, 136.45°E</option>
+              <option value="cand_hellas_61">Hellas Rim · −36.43°, 61.66°E</option>
               <option value="custom">Custom Coordinate</option>
             </select>
           </label>
@@ -133,19 +137,24 @@
               <option value="0_360">0° … 360° E</option>
             </select>
           </label>
-          <div class="tac-readout">Nearest named feature: <b id="tac-region-name">Jezero Crater · NASA 2020</b></div>
+          <div class="tac-readout">Nearest named feature: <b id="tac-region-name">Jezero Crater</b></div>
           <div id="tac-loc-error" class="tac-error hidden" role="alert"></div>
-          <p class="help">Tip: Click any cell on the global Mars map or any top candidate card to populate center coordinates automatically.</p>
+          <p class="help">Tip: Click any cell on the global Mars map or any candidate card to auto-fill center coordinates.</p>
         </div>
       </details>
 
       <details id="tac-sec-b" class="tac-sec" open>
         <summary>Section B · Time &amp; Environment</summary>
         <div class="tac-sec-body">
+          <p class="tac-sec-desc" id="tac-desc-b">Mission date, local solar time, dust opacity, and solar radiation conditions.</p>
+          <div class="tac-preset-btns">
+            <button type="button" id="tac-worst-day-btn" class="tac-btn-warn">⚡ Worst-day scenario</button>
+            <button type="button" id="tac-normal-day-btn" class="ghost">↺ Normal conditions</button>
+          </div>
           <label for="tac-date">Earth Date (UTC → Mars24 / Allison &amp; McEwen 2000)
-            <input type="date" id="tac-date" value="2026-06-01">
+            <input type="date" id="tac-date" value="">
           </label>
-          <div class="tac-readout" id="tac-mars-time">MY 38 · Ls 220.0° · Northern Autumn / Southern Spring</div>
+          <div class="tac-readout" id="tac-mars-time">MY 38 · Ls —°</div>
           <label for="tac-ltst">Local Solar Time (LTST) <span id="tac-ltst-v">12.00 h LTST</span>
             <input type="range" id="tac-ltst" min="0" max="24" step="0.25" value="12">
           </label>
@@ -170,8 +179,9 @@
       </details>
 
       <details id="tac-sec-c" class="tac-sec" open>
-        <summary>Section C · Vehicle (Rover Classes Only)</summary>
+        <summary>Section C · Vehicle</summary>
         <div class="tac-sec-body">
+          <p class="tac-sec-desc" id="tac-desc-c">Select rover class, speed, payload mass, and power architecture.</p>
           <label for="tac-veh-class">Rover Class
             <select id="tac-veh-class">
               <option value="mini_rover">Mini rover (Sojourner-class, ~11.5 kg, Solar)</option>
@@ -198,9 +208,96 @@
         </div>
       </details>
 
-      <details id="tac-sec-weights" class="tac-sec">
-        <summary>Domain Weights, Veto &amp; Orbital Blend</summary>
+      <details id="tac-sec-field" class="tac-sec">
+        <summary>Section D · Field Data (optional — real mission measurements)</summary>
         <div class="tac-sec-body">
+          <p class="tac-sec-desc" id="tac-desc-d">Add in-situ rover/astronaut measurements to override and propagate locally across cells.</p>
+          <p class="help" id="tac-fd-tip">Click a cell on the local 16 km² map to auto-fill lat/lon below.</p>
+          <div class="tac-coord-row">
+            <label for="tac-fd-lat">Lat (°)
+              <input type="number" id="tac-fd-lat" step="0.0001" min="-90" max="90" value="18.38">
+            </label>
+            <label for="tac-fd-lon">Lon (°E)
+              <input type="number" id="tac-fd-lon" step="0.0001" min="-180" max="360" value="77.58">
+            </label>
+          </div>
+          <label for="tac-fd-type">Measurement type (<span id="tac-fd-unit">tiu</span>)
+            <select id="tac-fd-type">
+              <option value="ti">Thermal inertia (tiu)</option>
+              <option value="surfaceTempC">Surface temperature (°C)</option>
+              <option value="airTempC">Air temperature (°C)</option>
+              <option value="pressurePa">Pressure (Pa)</option>
+              <option value="radiationUSvHr">Radiation dose rate (µSv/hr)</option>
+              <option value="tau">Dust optical depth τ</option>
+              <option value="slopeDeg">Slope (°)</option>
+              <option value="rockPct">Rock abundance (%)</option>
+              <option value="soilType">Soil type</option>
+              <option value="iceDepthM">Ice depth (m)</option>
+              <option value="hazard">Hazard marker</option>
+            </select>
+          </label>
+          <div id="tac-fd-num-wrap">
+            <label for="tac-fd-val">Value
+              <input type="number" id="tac-fd-val" step="any" placeholder="e.g. 320">
+            </label>
+          </div>
+          <div id="tac-fd-soil-wrap" class="hidden">
+            <label for="tac-fd-soil-val">Soil class
+              <select id="tac-fd-soil-val">
+                <option value="sand">Sand (~85 tiu)</option>
+                <option value="firm_regolith" selected>Firm regolith (~260 tiu)</option>
+                <option value="rock">Bedrock / rock (~600 tiu)</option>
+                <option value="ice">Ice-cemented (~480 tiu)</option>
+              </select>
+            </label>
+          </div>
+          <div id="tac-fd-hazard-wrap" class="hidden">
+            <label for="tac-fd-hazard-val">Hazard category
+              <select id="tac-fd-hazard-val">
+                <option value="rock">Boulder / rock hazard</option>
+                <option value="crater_rim">Crater rim / scarp</option>
+                <option value="soft_sand">Soft sand trap</option>
+              </select>
+            </label>
+          </div>
+          <div class="tac-coord-row">
+            <label for="tac-fd-date">Date / Sol
+              <input type="text" id="tac-fd-date" placeholder="Sol 45 / 2021-04-05">
+            </label>
+            <label for="tac-fd-source">Source / Instrument
+              <input type="text" id="tac-fd-source" placeholder="MEDA / RAD / manual">
+            </label>
+          </div>
+          <label for="tac-fd-note">Note (optional)
+            <input type="text" id="tac-fd-note" placeholder="Loose ripples near outcrop">
+          </label>
+          <div class="tac-fd-btn-row">
+            <button type="button" id="tac-fd-add-btn" class="ghost">+ Add measurement</button>
+            <button type="button" id="tac-fd-cancel-btn" class="ghost hidden">Cancel</button>
+          </div>
+          <div class="tac-fd-bulk-row">
+            <button type="button" id="tac-fd-sample-btn" class="ghost">Load sample field data (Jezero, SIMULATED)</button>
+            <button type="button" id="tac-fd-template-btn" class="ghost">CSV template</button>
+            <label for="tac-fd-upload-input" class="tac-file-lbl">Upload CSV/JSON
+              <input type="file" id="tac-fd-upload-input" accept=".csv,.json" class="hidden">
+            </label>
+            <button type="button" id="tac-fd-export-btn" class="ghost">Export JSON</button>
+            <button type="button" id="tac-fd-clear-btn" class="ghost">Clear</button>
+          </div>
+          <div id="tac-fd-import-msg" class="tac-fd-msg hidden" role="status"></div>
+          <div id="tac-fd-list" class="tac-fd-list"></div>
+        </div>
+      </details>
+
+      <details id="tac-sec-weights" class="tac-sec">
+        <summary>Domain Weights, Veto &amp; Orbital Blend (Advanced)</summary>
+        <div class="tac-sec-body">
+          <p class="tac-sec-desc" id="tac-desc-w">Fine-tune scoring weights, field radius, online queries, and veto logic.</p>
+          <label class="check tac-online-row"><input type="checkbox" id="tac-online-toggle" checked>
+            <span><b>Online orbital queries</b> <small>(HiRISE/CTX/USGS/MOLA; uncheck for offline bundle)</small></span></label>
+          <label for="tac-field-radius">Field influence radius <span id="tac-field-radius-v">300 m</span>
+            <input type="range" id="tac-field-radius" min="100" max="1000" step="50" value="300">
+          </label>
           <label for="tac-blend">User conditions ↔ Orbital data <span id="tac-blend-v">50% User ↔ 50% Orbital</span>
             <input type="range" id="tac-blend" min="0" max="100" step="5" value="50">
           </label>
@@ -215,6 +312,7 @@
 
       <div class="tac-actions">
         <button type="button" id="tac-generate-btn" class="btn-spec">Generate 16 km² analysis</button>
+        <div id="tac-panel-summary" class="tac-panel-summary hidden"></div>
         <div class="tac-export-row">
           <button type="button" id="tac-export-json" class="ghost">Export 16 km² JSON</button>
           <button type="button" id="tac-export-geojson" class="ghost">Export 16 km² GeoJSON</button>
@@ -444,12 +542,13 @@
     <div id="tac-workspace" class="tac-workspace hidden" role="region" aria-label="16 km² Tactical EVA Local Map & Analysis">
       <div class="tac-ws-bar">
         <div class="tac-ws-title">
-          <strong>4 km × 4 km (16 km²) Local Tactical Map</strong>
-          <span id="tac-res-label" class="tac-res-lbl">Native data resolution: 100 m (ML layer: 60 s scalar forecast)</span>
+          <strong id="tac-ws-heading">4 km × 4 km (16 km²) Local Tactical Map</strong>
+          <span id="tac-res-label" class="tac-res-lbl">Data resolution: 100–200 m</span>
         </div>
         <div class="tac-ws-ctrls">
-          <span id="tac-mode-pill" class="tac-mode-pill">OFFLINE PRE-CUT</span>
-          <button type="button" id="tac-collapse-map-btn" class="ghost">Compact</button>
+          <button type="button" id="tac-before-after-btn" class="ghost tac-compare-btn hidden">Before: 5 km ↔ After: 100–200 m</button>
+          <span id="tac-mode-pill" class="tac-mode-pill">High-res (100–200 m)</span>
+          <button type="button" id="tac-close-map-btn" class="tac-close-btn" aria-label="Yerel haritayı kapat" title="Close local map (Esc)">✕</button>
         </div>
       </div>
 
@@ -470,6 +569,7 @@
               <div id="tac-scale-line" class="tac-scale-line"></div>
               <span id="tac-scale-lbl">1 km</span>
             </div>
+            <div id="tac-hover-tip" class="tac-hover-tip hidden" role="tooltip"></div>
           </div>
           <div class="tac-corner-row">
             <span id="tac-corner-sw" class="tac-corner">SW</span>
@@ -480,11 +580,13 @@
 
         <div class="tac-right-col">
           <details id="tac-layers-det" class="tac-layers-det" open>
-            <summary>Map Layers &amp; Legend (Toggle + Opacity)</summary>
+            <summary>Map Layers &amp; Legend</summary>
+            <div id="tac-layers-sub" class="tac-layers-sub">Visibility (opacity)</div>
             <div id="tac-layer-list" class="tac-layer-list"></div>
+            <div id="tac-coarse-note" class="tac-coarse-note hidden">⚠ Hatched gray layers are coarse resolution (~5 km)</div>
             <div id="tac-legend" class="tac-legend"></div>
           </details>
-          <div id="tac-cell-popup" class="tac-cell-popup">Click any cell on the 40×40 grid to inspect domain scores, raw values, units, sources and MEASURED / MODEL / SIMULATED badges.</div>
+          <div id="tac-cell-popup" class="tac-cell-popup">Click any cell on the 40×40 grid to inspect domain scores and real values.</div>
         </div>
       </div>
     </div>
@@ -582,12 +684,14 @@
       <li><b>Independent EVA Scenario Validation (Test 3).</b> Because orbital landing suitability does not prove footpath safety, EVA routing and PLSS math are tested separately across 4 terrain biomes (Jezero Delta, Gale Boxwork, Nili Fossae, Arcadia Planitia) for obstacle detouring, dynamic hazard rerouting, slope bounds, and ≥25% return reserve protection.</li>
     </ul>
 
-    <h3>9 · Tactical EVA 16 km² Blend Method, Vehicle Config &amp; Provenance</h3>
+    <h3>9 · Tactical EVA 16 km² Blend, Power Domain, Field Assimilation &amp; Provenance</h3>
     <ul class="spec-list">
-      <li><b>Local Blend Formula (Step 1 + Step 2).</b> Each 4 km × 4 km (40×40, 100 m/cell) box fills a baseline environment state at the input center coordinate using the user's Earth date (Allison &amp; McEwen 2000 Mars24 <code>Lₛ</code>), local solar time, dust <code>τ</code>, solar cycle, SPE flag, vehicle class, and storm forecast <code>STORM.predictDustML</code> (60 s scalar forecast, not a spatial raster). Each cell then blends center state and finest available orbital data via <code>V_cell = (1 − w) · V_center + w · V_local</code>, where <code>w ∈ [0, 1]</code> is controlled by the <i>User conditions ↔ Orbital data</i> slider (default <code>w = 0.50</code> in <code>web/tactical_config.json</code>).</li>
-      <li><b>Finest Public Orbital Sources &amp; Dates.</b> Pre-cut offline bundles (4 preset sites) and live <code>ONLINE-ONLY</code> queries use: <code>thm_ti_100m_32bit</code> (100 m THEMIS TI, 2014-05-30), <code>mola_hrsc_blend_topo_v2</code> &amp; <code>slope_v2</code> (200 m USGS/MOLA-HRSC, 2018-01-31; plus 2020-08 HiRISE Jezero DTM inside Jezero footprint), Caltech Murray Lab <code>OnMars/CTX</code> mosaic (~5–6 m/px native, 20 m/px display, 2023-04), <code>TES_dust_index_16ppd_numeric</code> (~3.7 km, 1999–2001 Ruff &amp; Christensen 2002), <code>omega_albedo_r1080</code> + <code>TES_Lambert_Albedo</code> (2001–2010), <code>GRS_K/Th</code> (~550 km Odyssey GRS, Boynton 2007 — displayed as coarse composition only, unscored), and USGS SIM 3292 geology (Tanaka et al. 2014, ~1:20M). Coarse layers (&gt;500 m) display a hatched low-resolution overlay toggle and explicit resolution labels.</li>
-      <li><b>Vehicle Config &amp; Constraints.</b> All vehicle masses, speeds, slope limits, power architectures, sinkage/speed coefficients, and SIM 3292 unit weights live in <code>web/vehicles.json</code> and <code>web/tactical_config.json</code> with explicit <code>source</code> and <code>verified</code> flags. Unverified parameters show ⚠; every Manned rover parameter is tagged <code>CONCEPT – not flight data</code>.</li>
+      <li><b>Local Blend &amp; Field Propagation Formula.</b> Each 4 km × 4 km (40×40, 100 m/cell) box blends center conditions and local orbital data via <code>V_cell = (1 − w) · V_center + w · V_local</code> (<code>w = 0.50</code> default in Advanced). Manual in-situ measurements in Section D override the target cell and propagate radially across neighboring cells using compact-support smoothing <code>k(d) = (1 − (d / R)²)²</code> (default <code>R = 300 m</code>) with confidence boost and orbital discrepancy warning when difference exceeds 50%.</li>
+      <li><b>8 Scored Domains (incl. Power &amp; Energy).</b> Scores integrate Thermal, Radiation, Topography, Optics, Geology, Elevation &amp; Slope, Dust, and Power &amp; Energy using the active STORM solar/MMRTG + trace-heater budget. Daily energy deficit sets Power = 0 and caps Final Compatibility at ≤ 20 (VETO).</li>
+      <li><b>Orbital Data Sources &amp; Integrity.</b> Pre-cut bundles (4 preset sites + 5 balanced candidates) integrate USGS/MOLA-HRSC 200 m Blended DEM slope (<code>Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2</code>) and 100 m THEMIS Day IR relative brightness (<code>Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12</code>) as normalized thermal/optical modulation (labeled <code>MODEL</code>, never fake TI).</li>
+      <li><b>Vehicle Config &amp; Constraints.</b> All vehicle specs live in <code>web/vehicles.json</code> and <code>web/tactical_config.json</code> with explicit <code>source</code> and <code>verified</code> flags; placeholder/fallback sources render as <code>ESTIMATE / TAHMİN</code>.</li>
     </ul>
+    <div id="tac-benchmark-box" class="tac-benchmark-box"></div>
     </div>
   </div>
 </div>

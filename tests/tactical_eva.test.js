@@ -97,7 +97,7 @@ const blendedRes = ENGINE.generateAnalysis({
   cutouts: cutoutsJson, vehiclesCfg: vehiclesJson, tacticalCfg: tacticalJson, marsTime: MARS_TIME, scoring: SCORING, storm: STORM,
 });
 check(blendedRes.ok && blendedRes.summary.maxScore > blendedRes.summary.minScore, `orbitalBlendWeight=0.5 blends real orbital variance (${blendedRes.summary.minScore}..${blendedRes.summary.maxScore})`);
-check(blendedRes.nativeResLabel.includes('100') && blendedRes.nativeResLabel.includes('non-spatial'), 'resolution label honestly reports 100 m & non-spatial 60 s ML layer');
+check(blendedRes.nativeResLabel.includes('100') && !blendedRes.nativeResLabel.includes('non-spatial'), 'resolution label reports 100-200 m without fake spatial ML text');
 
 // 7. Qualitative vehicle effects (mass/sinkage/speed) & dust-storm solar vs nuclear
 const miniClear = ENGINE.generateAnalysis({
@@ -147,14 +147,14 @@ check(galeFast.vehicleTelemetry.avgSpeedRiskPenalty > galeSlow.vehicleTelemetry.
 
 // 8. NASA HLS-2015 veto & vehicle slope limit = 0
 const dummyVeh = ENGINE.resolveVehicleConfig(vehiclesJson, 'lab_rover', {}, true);
-const normW = SCORING.normalize({ thermal: 1, radiation: 1, topography: 1, optics: 1, geology: 1, elevSlope: 1, dust: 1 });
-const mockSc = { thermal: 85, radiation: 85, topography: 85, optics: 85, geology: 85, elevSlope: 85, dust: 85 };
+const normW = SCORING.normalize({ thermal: 1, radiation: 1, topography: 1, optics: 1, geology: 1, elevSlope: 1, dust: 1, power: 1 });
+const mockSc = { thermal: 85, radiation: 85, topography: 85, optics: 85, geology: 85, elevSlope: 85, dust: 85, power: 85 };
 check(ENGINE.evaluateFinalCompatibility(mockSc, { elevM: 2500, lat: 0, slopeDeg: 2 }, dummyVeh, normW, 'weighted', tacticalJson).finalScore === 0, 'NASA veto elev > +2000 m forces cell score 0');
 check(ENGINE.evaluateFinalCompatibility(mockSc, { elevM: -500, lat: 55, slopeDeg: 2 }, dummyVeh, normW, 'weighted', tacticalJson).finalScore === 0, 'NASA veto |lat| > 50 deg forces cell score 0');
 check(ENGINE.evaluateFinalCompatibility(mockSc, { elevM: -500, lat: 0, slopeDeg: 32 }, dummyVeh, normW, 'weighted', tacticalJson).finalScore === 0, 'Slope above vehicle limit forces cell score 0');
 
 // No compensation (geometric mean) drags down when one domain is near-zero
-const weakDomainSc = { thermal: 95, radiation: 95, topography: 95, optics: 95, geology: 95, elevSlope: 95, dust: 2 };
+const weakDomainSc = { thermal: 95, radiation: 95, topography: 95, optics: 95, geology: 95, elevSlope: 95, dust: 2, power: 95 };
 const wSum = ENGINE.evaluateFinalCompatibility(weakDomainSc, { elevM: -500, lat: 0, slopeDeg: 2 }, dummyVeh, normW, 'weighted', tacticalJson).finalScore;
 const nComp = ENGINE.evaluateFinalCompatibility(weakDomainSc, { elevM: -500, lat: 0, slopeDeg: 2 }, dummyVeh, normW, 'nocomp', tacticalJson).finalScore;
 check(nComp < wSum - 15, `geometric mean (nocomp=${nComp}) strongly penalizes weak factor vs weighted sum (${wSum})`);
@@ -168,7 +168,7 @@ check(radSpe.grids.radiation[0] < radMax.grids.radiation[0], 'Active SPE reduces
 
 const niliPopup = ENGINE.getCellPopup(radMin, 820);
 const grsDom = niliPopup.domains.find((d) => d.key === 'groundComp');
-check(grsDom && grsDom.score === null && /coarse/i.test(grsDom.label), 'GRS K/Th separated as unscored coarse orbital composition');
+check(grsDom && grsDom.score === null && /GRS/i.test(grsDom.label), 'GRS K/Th separated as unscored coarse orbital composition');
 const popupTxt = JSON.stringify(niliPopup);
 check(!/SuperCam|SHERLOC|PIXL|Mastcam|AutoNav|REMS/i.test(popupTxt), 'No rover instrument claims attributed to unvisited Nili Fossae');
 
@@ -191,5 +191,57 @@ pixBuf.writeFloatLE(999.0, 12);
 const parsedVicar = wmsProxy.parseVicar(Buffer.concat([hdrBuf, pixBuf]));
 check(parsedVicar.width === 2 && parsedVicar.height === 2 && parsedVicar.values[0] === -123.5 && parsedVicar.values[3] === 999, 'api/wms VICAR little-endian REAL parser decodes cleanly');
 check(wmsProxy.ALLOWED_LAYERS.has('thm_ti_100m_32bit'), 'api/wms whitelist includes thm_ti_100m_32bit');
+
+// 12. Upgrade features: Bug 2.2/2.3, Power & Energy veto (3.1), Rule explanation (3.2), Worst-day (3.3), Benchmark (3.4), Field Data (4.4), 200m+100m Candidate Cutouts (5)
+const nrFound = ENGINE.nearestRegionName(18.38, 77.58, {
+  layers: { nearestRegion: () => ({ region: { name: 'Jezero Crater', lat: 18.38, lon: 77.58 }, distDeg: 0.05 }) },
+});
+check(nrFound && nrFound.name === 'Jezero Crater' && !String(nrFound.name).includes('undefined'), 'nearestRegionName unpacks { region, distDeg } cleanly with zero undefined');
+check(ENGINE.nearestRegionName(0, 0, {}) === null, 'nearestRegionName returns null safely when unavailable');
+
+check(ENGINE.classifySourceBadge('placeholder global model', 'MEASURED', null, 'en') === 'ESTIMATE', 'Placeholder sources classify as ESTIMATE in EN (never MEASURED)');
+check(ENGINE.classifySourceBadge('5 km global fallback proxy', 'MEASURED', null, 'tr') === 'TAHMİN', 'Fallback/proxy sources classify as TAHMİN in TR');
+
+check(miniStorm.summary.powerDeficit === true && miniStorm.summary.domainMeans.power === 0 && miniStorm.summary.meanScore <= 20, `Solar Mini Rover at tau=10.8 triggers power deficit & VETO <= 20 (mean=${miniStorm.summary.meanScore})`);
+check(nucStormCold.summary.powerDeficit === false && nucStormCold.summary.domainMeans.power > 40, `Nuclear Lab Rover at tau=10.8 avoids power deficit (powerMean=${nucStormCold.summary.domainMeans.power})`);
+
+const cellExp = ENGINE.getCellPopup(blendedRes, 820, 'en');
+check(typeof cellExp.explanation === 'string' && cellExp.explanation.length > 15, `Cell explanation renders rule-based sentence: ${cellExp.explanation}`);
+
+const coldEst = ENGINE.findColdestEarthDateForLat(32.3, 114.2, -4500, MARS_TIME, STORM, '2026-06-01');
+check(coldEst && typeof coldEst.earthDateUtc === 'string' && coldEst.earthDateUtc.length === 10, `Coldest seasonal date found for northern plains: ${coldEst.earthDateUtc} (Ls ${coldEst.lsDeg})`);
+
+const mockJezeroLayers = {
+  L: { elev: [1] },
+  cellValues: () => ({ elev: -2569, slope: 2.1, rough: 18, ti: 280, ice: 0.1, dust: 0.2 }),
+  nearestRegion: () => ({ region: { name: 'Jezero Crater', lat: 18.44, lon: 77.45 }, distDeg: 0.02 }),
+};
+const percBench = ENGINE.generateAnalysis({
+  inputs: { ...baseInputs, presetZoneId: 'custom', lat: 18.44, lonInput: 77.45, earthDateUtc: '2021-02-18', ltstHours: 14, tau: 0.6, solarCycle: 'min', vehicleClass: 'lab_rover' },
+  cutouts: cutoutsJson, layers: mockJezeroLayers, vehiclesCfg: vehiclesJson, tacticalCfg: tacticalJson, marsTime: MARS_TIME, scoring: SCORING, storm: STORM,
+});
+check(percBench.ok && percBench.centerBase.pressurePa >= 705 && percBench.centerBase.pressurePa <= 735, `Perseverance Jezero surface pressure at -2569 m within 705-735 Pa (got ${percBench.centerBase.pressurePa} Pa)`);
+
+const fieldRes = ENGINE.generateAnalysis({
+  inputs: { ...baseInputs, presetZoneId: 'jezero_delta', lat: 18.38, lonInput: 77.58 },
+  cutouts: cutoutsJson, vehiclesCfg: vehiclesJson, tacticalCfg: tacticalJson, marsTime: MARS_TIME, scoring: SCORING, storm: STORM,
+  fieldMeasurements: [
+    { lat: 18.38, lon: 77.58, type: 'ti', value: 1200, unit: 'tiu', source: 'MEDA test', simulated: false },
+    { lat: 18.38, lon: 77.58, type: 'hazard', value: 'soft_sand', source: 'Rover track slip' },
+  ],
+  fieldRadiusM: 300,
+});
+const centerPop = ENGINE.getCellPopup(fieldRes, 820, 'en');
+check(centerPop.discrepancies.length >= 1, 'Field TI differing by >50% from orbital triggers discrepancy warning');
+check(centerPop.domains.find((d) => d.key === 'thermal').badge.startsWith('MEASURED'), 'Field-overridden cell domain badge becomes MEASURED (field)');
+check(fieldRes.grids.elevSlope[820] < blendedRes.grids.elevSlope[820], 'Soft sand hazard marker at cell lowers traversability (elevSlope) score');
+
+const utopiaCand = cutoutsJson.zones.cand_utopia_114;
+check(Object.keys(cutoutsJson.zones).length >= 9 && utopiaCand && utopiaCand.coarseBaseline && utopiaCand.slopeDeg.length === 1600, 'Candidate cutouts include MOLA-HRSC 200 m + THEMIS 100 m Day IR + 5 km baseline');
+const utopiaRes = ENGINE.generateAnalysis({
+  inputs: { ...baseInputs, presetZoneId: 'cand_utopia_114', lat: utopiaCand.lat, lonInput: utopiaCand.lon },
+  cutouts: cutoutsJson, vehiclesCfg: vehiclesJson, tacticalCfg: tacticalJson, marsTime: MARS_TIME, scoring: SCORING, storm: STORM,
+});
+check(utopiaRes.hasCoarseBaseline && !utopiaRes.isLowResGrid && utopiaRes.summary.maxScore > utopiaRes.summary.minScore, `Candidate Utopia 16 km2 grid shows real 100-200 m diversity (${utopiaRes.summary.minScore}..${utopiaRes.summary.maxScore})`);
 
 console.log(`All ${passed} Tactical EVA 16 km2 unit/model/config/VICAR assertions passed.`);

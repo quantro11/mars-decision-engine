@@ -118,18 +118,23 @@
     };
   }
 
+  function getUtcTodayIso() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
   function getDefaultInputs(vehiclesCfg, cfg) {
     const vCfg = vehiclesCfg || loadDep('MDE_VEHICLES', './vehicles_data.js');
     const tCfg = cfg || loadDep('MDE_TACTICAL_CONFIG', './tactical_config_data.js');
     const weights = {};
     for (const k in tCfg.weights) weights[k] = tCfg.weights[k].value;
     const veh = resolveVehicleConfig(vCfg, 'lab_rover', null, true);
+    const fdCfg = tCfg.domainParams && tCfg.domainParams.fieldData;
     return {
       presetZoneId: 'jezero_delta',
       lat: 18.38,
       lonInput: 77.58,
       lonConvention: '-180_180',
-      earthDateUtc: tCfg.environment.defaultDate,
+      earthDateUtc: getUtcTodayIso(),
       ltstHours: tCfg.environment.defaultLtstHours,
       tau: tCfg.environment.tauRange.default,
       solarCycle: 'mid',
@@ -141,6 +146,8 @@
       orbitalBlendWeight: tCfg.blend.defaultOrbitalWeight.value,
       scoreMode: 'weighted',
       weights,
+      fieldRadiusM: fdCfg ? fdCfg.defaultInfluenceRadiusM.value : 300,
+      useCoarseBaseline: false,
       onlineEnabled: true,
     };
   }
@@ -157,8 +164,21 @@
   }
 
   function nearestRegionName(lat, lon180, deps) {
+    const degToKm = (deps && deps.tacticalCfg && deps.tacticalCfg.planet && deps.tacticalCfg.planet.degToMeters.value / 1000) || 59.274697;
     if (deps && deps.layers && typeof deps.layers.nearestRegion === 'function') {
-      return deps.layers.nearestRegion(lat, lon180);
+      const hit = deps.layers.nearestRegion(lat, lon180);
+      if (hit && hit.region && hit.region.name) {
+        const dKm = Number.isFinite(hit.distDeg) ? +(hit.distDeg * degToKm).toFixed(0) : null;
+        return { name: hit.region.name, distKm: dKm, lat: hit.region.lat, lon: hit.region.lon };
+      }
+      if (hit && hit.name) {
+        return {
+          name: hit.name,
+          distKm: Number.isFinite(hit.distKm) ? +Number(hit.distKm).toFixed(0) : null,
+          lat: hit.lat,
+          lon: hit.lon,
+        };
+      }
     }
     const regions = (deps && deps.regions) || loadDep('REGIONS', './regions.js');
     if (Array.isArray(regions) && regions.length) {
@@ -169,12 +189,44 @@
         const d = Math.hypot(r.lat - lat, dLon * Math.cos((lat * Math.PI) / 180));
         if (d < bestD) { bestD = d; best = r; }
       }
-      if (best) {
-        const degToKm = (deps && deps.tacticalCfg && deps.tacticalCfg.planet && deps.tacticalCfg.planet.degToMeters.value / 1000) || 59.274697;
+      if (best && best.name) {
         return { name: best.name, distKm: +(bestD * degToKm).toFixed(0), lat: best.lat, lon: best.lon };
       }
     }
     return null;
+  }
+
+  function findColdestEarthDateForLat(latDeg, lon360, elevM, marsTimeMod, stormMod, baseDateStr) {
+    const MTime = marsTimeMod || loadDep('MDE_MARS_TIME', './mars_time.js');
+    const STORM = stormMod || loadDep('STORM', './storm.js');
+    const startMs = Date.parse((baseDateStr || getUtcTodayIso()) + 'T12:00:00Z');
+    const originMs = Number.isFinite(startMs) ? startMs : Date.now();
+    let bestDate = getUtcTodayIso();
+    let bestLs = 270;
+    let minTemp = Infinity;
+    for (let day = 0; day < 690; day += 15) {
+      const iso = new Date(originMs + day * 86400000).toISOString().slice(0, 10);
+      const mt = MTime.computeMarsTime(iso, lon360);
+      const t = STORM.surfaceTempC(latDeg, mt.lsDeg, 250, elevM != null ? elevM : -1500, 10.8);
+      if (t && t.mean < minTemp) {
+        minTemp = t.mean;
+        bestDate = iso;
+        bestLs = mt.lsDeg;
+      }
+    }
+    return { earthDateUtc: bestDate, lsDeg: +bestLs.toFixed(1), meanTempC: +minTemp.toFixed(1) };
+  }
+
+  function classifySourceBadge(sourceStr, defaultBadge, fieldKind, lang) {
+    const tr = lang === 'tr';
+    if (fieldKind === 'simulated') return tr ? 'SİMÜLE (saha)' : 'SIMULATED (field)';
+    if (fieldKind === 'measured') return tr ? 'MEASURED (saha)' : 'MEASURED (field)';
+    const s = String(sourceStr || '');
+    if (/placeholder|fallback|proxy|global mean|unavailable/i.test(s)) {
+      return tr ? 'TAHMİN' : 'ESTIMATE';
+    }
+    if (/day_ir|day ir/i.test(s)) return 'MODEL';
+    return defaultBadge || 'MODEL';
   }
 
   function buildGlobalFallbackGrid(lat, lon180, layers, cfg, cutouts) {
@@ -302,6 +354,7 @@
 
     // 1. Thermal (TI soil firmness + instantaneous diurnal temp)
     const thP = dp.thermal;
+    const cellTau = phys.tau != null ? phys.tau : env.tau;
     let tiScore;
     if (phys.ti <= thP.tiFineDustM.value) {
       tiScore = Math.max(0, (phys.ti / thP.tiFineDustM.value) * 35);
@@ -312,9 +365,11 @@
     } else {
       tiScore = Math.max(55, 100 - ((phys.ti - thP.tiOptHigh.value) / (thP.tiRockUpper.value - thP.tiOptHigh.value)) * 45);
     }
-    const tObj = interpSurfaceTempC(STORM, phys.lat, env.lsDeg, phys.ti, phys.elevM, env.tau, env.ltstHours);
+    const tObj = interpSurfaceTempC(STORM, phys.lat, env.lsDeg, phys.ti, phys.elevM, cellTau, env.ltstHours);
+    const effInstTempC = phys.surfTempC != null ? phys.surfTempC : tObj.instC;
+    const effMeanTempC = phys.surfTempC != null ? ((tObj.meanC + phys.surfTempC) * 0.5) : tObj.meanC;
     const tempScore = clamp(
-      100 * (tObj.instC - thP.tempColdFloorC.value) / (thP.tempWarmOptC.value - thP.tempColdFloorC.value),
+      100 * (effInstTempC - thP.tempColdFloorC.value) / (thP.tempWarmOptC.value - thP.tempColdFloorC.value),
       0, 100
     );
     const thermal = clamp(thP.tiWeight.value * tiScore + thP.tempWeight.value * tempScore, 0, 100);
@@ -322,8 +377,13 @@
     // 2a. Space Radiation Dose (scored)
     const cyc = cfg.radiation.solarCycle[env.solarCycle] || cfg.radiation.solarCycle.mid;
     const baseRad = SCORING.radDose(phys.elevM, phys.slopeDeg, env.lsDeg);
-    const gcrMSvYr = baseRad * cyc.factor;
-    const colGcm2 = SCORING.atmoColumnGcm2(phys.elevM, env.lsDeg);
+    const modelColGcm2 = SCORING.atmoColumnGcm2(phys.elevM, env.lsDeg);
+    const pressureFactor = phys.pressurePa != null
+      ? clamp(phys.pressurePa / Math.max(100, modelColGcm2 * 37.2076), 0.5, 1.5)
+      : 1.0;
+    const colGcm2 = modelColGcm2 * pressureFactor;
+    const modelGcrMSvYr = baseRad * cyc.factor / Math.pow(pressureFactor, 0.25);
+    const gcrMSvYr = phys.radMSvYr != null ? phys.radMSvYr : modelGcrMSvYr;
     const speObj = env.speActive ? SCORING.calcSPE(phys.elevM, 0) : null;
     const speMSv = speObj ? speObj.unshieldedDoseMsv : 0;
     const radSc = cfg.radiation.scoring;
@@ -332,20 +392,23 @@
       radScore = Math.max(0, radScore - (speMSv / radSc.speAcutePenaltyDivisorMSv.value) * 100);
     }
 
-    // 3. Topography (relief + MOLA roughness + vehicle speed risk on rough cells)
+    // 3. Topography (relief + MOLA roughness + rock/crater hazard + vehicle speed risk)
     const tpP = dp.topography;
-    const reliefNorm = clamp(phys.reliefM / tpP.reliefMaxM.value, 0, 1);
-    const roughBase = phys.roughGlobalM != null ? phys.roughGlobalM : phys.reliefM * 0.45;
+    const effReliefM = phys.rockPct != null ? Math.max(phys.reliefM, phys.rockPct * 0.45) : phys.reliefM;
+    const reliefNorm = clamp(effReliefM / tpP.reliefMaxM.value, 0, 1);
+    const roughBase = phys.roughGlobalM != null ? phys.roughGlobalM : effReliefM * 0.45;
     const roughNorm = clamp(roughBase / tpP.roughMaxM.value, 0, 1);
     let topoScore = 100 * (1 - (tpP.reliefShare.value * reliefNorm + (1 - tpP.reliefShare.value) * roughNorm));
     const speedRoughOnset = clamp(
-      (phys.reliefM - vehicle.effects.roughnessRiskThresholdM.value) / Math.max(1, tpP.reliefMaxM.value - vehicle.effects.roughnessRiskThresholdM.value),
+      (effReliefM - vehicle.effects.roughnessRiskThresholdM.value) / Math.max(1, tpP.reliefMaxM.value - vehicle.effects.roughnessRiskThresholdM.value),
       0, 1
     );
     const speedRiskPenalty = vehicle.effects.speedRiskMaxPenalty.value * vehicle.speedNorm * speedRoughOnset;
-    topoScore = clamp(topoScore - speedRiskPenalty, 0, 100);
+    const hazRockPenalty = phys.hazardRockWeight ? (dp.fieldData ? dp.fieldData.hazardRockPenalty.value : 35) * phys.hazardRockWeight : 0;
+    const hazRimPenalty = phys.hazardRimWeight ? (dp.fieldData ? dp.fieldData.hazardCraterRimPenalty.value : 30) * phys.hazardRimWeight : 0;
+    topoScore = clamp(topoScore - speedRiskPenalty - hazRockPenalty * 0.6 - hazRimPenalty * 0.5, 0, 100);
 
-    // 4. Optics (albedo + CTX texture + tau atmospheric haze + solar zenith cosine)
+    // 4. Optics (albedo + CTX/THEMIS texture + tau atmospheric haze + solar zenith cosine)
     const opP = dp.optics;
     let albScore;
     if (phys.albedo < opP.albedoIdealMin.value) {
@@ -355,7 +418,7 @@
     } else {
       albScore = Math.max(20, 100 - ((phys.albedo - opP.albedoIdealMax.value) / (opP.albedoHighDust.value - opP.albedoIdealMax.value)) * 80);
     }
-    const visHaze = Math.exp(-env.tau / opP.tauVisibilityScale.value);
+    const visHaze = Math.exp(-cellTau / opP.tauVisibilityScale.value);
     const sunDayFactor = lerp(1 - opP.nightSolarZenithPenalty.value, 1.0, clamp(env.cosZ, 0, 1));
     const ctxBonus = 0.85 + 0.15 * (1 - Math.abs(phys.ctxTone - 0.5) * 1.4);
     const optics = clamp(albScore * ctxBonus * visHaze * sunDayFactor, 0, 100);
@@ -367,7 +430,7 @@
     const centerGeoScore = centerUnitInfo ? centerUnitInfo.score : dp.confidence.geologyFallbackScore.value;
     const geology = clamp(lerp(centerGeoScore, localGeoScore, env.orbitalBlendWeight), 0, 100);
 
-    // 6. Elevation / Slope + Vehicle limit & Mass sinkage on low-TI loose sand
+    // 6. Elevation / Slope + Vehicle limit & Mass sinkage on low-TI loose sand / hazard
     const esP = dp.elevSlope;
     const elevScore = clamp(SCORING.F.elev(phys.elevM) * 100, 0, 100);
     const limitDeg = vehicle.slopeLimitDeg.value;
@@ -385,21 +448,75 @@
       vehicle.effects.sinkageMaxPenalty.value * looseSandFrac * massRatio,
       0, vehicle.effects.sinkageMaxPenalty.value
     );
-    slopeScore = clamp(slopeScore - sinkagePenalty, 0, 100);
+    const hazSoftSandPenalty = phys.hazardSoftSandWeight ? (dp.fieldData ? dp.fieldData.hazardSoftSandPenalty.value : 40) * phys.hazardSoftSandWeight : 0;
+    slopeScore = clamp(slopeScore - sinkagePenalty - hazSoftSandPenalty - hazRockPenalty * 0.5 - hazRimPenalty * 0.5, 0, 100);
     const elevSlope = impassableVehicle ? 0 : clamp(esP.elevShare.value * elevScore + esP.slopeShare.value * slopeScore, 0, 100);
 
     // 7. Dust (TES DCI + current optical depth tau)
     const duP = dp.dust;
     const dciScore = clamp(100 * (phys.dci - duP.dciDusty.value) / (duP.dciClean.value - duP.dciDusty.value), 0, 100);
     const tauRange = cfg.environment.tauRange;
-    const tauClearScore = clamp(100 * (1 - (env.tau - tauRange.min) / (tauRange.max - tauRange.min)), 0, 100);
+    const tauClearScore = clamp(100 * (1 - (cellTau - tauRange.min) / (tauRange.max - tauRange.min)), 0, 100);
     const dust = clamp(duP.surfaceDciShare.value * dciScore + (1 - duP.surfaceDciShare.value) * tauClearScore, 0, 100);
 
-    // 11. Confidence (data resolution & tau attenuation)
+    // 8. Power & Energy (8th domain: daily Wh balance via STORM solar attenuation + cold heater draw)
+    const pwP = dp.power;
+    const pwr = vehicle.power;
+    const eff = vehicle.effects;
+    const coldDeltaC = Math.max(0, eff.heaterBaseTempC.value - effMeanTempC);
+    const rawHeaterW = coldDeltaC * eff.nuclearHeaterWPerKgDegC.value * vehicle.totalMassKg;
+    const heaterW = vehicle.powerMode === 'nuclear'
+      ? rawHeaterW * (1 - (pwP && pwP.nuclearWasteHeatOffset ? pwP.nuclearWasteHeatOffset.value : 0.75))
+      : rawHeaterW;
+    const dutyHrs = pwP && pwP.activeDutyHoursPerSol ? pwP.activeDutyHoursPerSol.value : 10;
+    const sleepFrac = pwP && pwP.sleepHotelFraction ? pwP.sleepHotelFraction.value : 0.15;
+    let dailyGenWh = 0;
+    let dailyNeedWh = 0;
+    if (vehicle.powerMode === 'solar') {
+      const fTauCell = STORM.fTau(cellTau);
+      const cellSolarKwhM2 = env.dailySolarKwhM2 * (fTauCell / Math.max(1e-6, env.fTau));
+      dailyGenWh = cellSolarKwhM2 * 1000 * pwr.solarAreaM2.value * eff.solarPanelEfficiency.value;
+      const hotelDutyH = dutyHrs + (24 - dutyHrs) * sleepFrac;
+      const heaterDutyH = dutyHrs + (24 - dutyHrs) * 0.5;
+      const slopeSin = Math.sin((phys.slopeDeg * Math.PI) / 180);
+      const climbWhKm = (vehicle.totalMassKg * vehicle.marsGravityMps2 * slopeSin * 1000) / (3600 * eff.gradeWorkEfficiency.value);
+      const driveDistSolKm = Math.min(0.4, vehicle.speedKmh * 2.0);
+      const driveWh = (vehicle.totalMassKg * eff.massEnergyCoeffWhPerKgKm.value + climbWhKm) * driveDistSolKm;
+      dailyNeedWh = pwr.hotelPowerW.value * hotelDutyH + heaterW * heaterDutyH + driveWh;
+    } else if (vehicle.powerMode === 'nuclear') {
+      // Nuclear MMRTG/RTG: completely unaffected by optical depth tau; only cold heater load matters
+      const capW = pwr.nuclearRtgW ? pwr.nuclearRtgW.value : pwr.ratedPowerW.value;
+      dailyGenWh = capW * 24;
+      const slopeSin = Math.sin((phys.slopeDeg * Math.PI) / 180);
+      const climbWhKm = (vehicle.totalMassKg * vehicle.marsGravityMps2 * slopeSin * 1000) / (3600 * eff.gradeWorkEfficiency.value);
+      const driveWh = (vehicle.totalMassKg * eff.massEnergyCoeffWhPerKgKm.value + climbWhKm) * Math.min(0.4, vehicle.speedKmh * 2.0);
+      dailyNeedWh = (pwr.hotelPowerW.value + heaterW) * 24 + driveWh;
+    } else {
+      // Battery pack: unaffected by tau; cold increases survival heater demand
+      const capKwh = pwr.batteryCapacityKwh ? pwr.batteryCapacityKwh.value : 60;
+      dailyGenWh = capKwh * 1000;
+      const hotelDutyH = dutyHrs + (24 - dutyHrs) * sleepFrac;
+      const driveDistSolKm = Math.min(10, vehicle.speedKmh * 1.5);
+      const slopeSin = Math.sin((phys.slopeDeg * Math.PI) / 180);
+      const climbWhKm = (vehicle.totalMassKg * vehicle.marsGravityMps2 * slopeSin * 1000) / (3600 * eff.gradeWorkEfficiency.value);
+      const driveWh = (vehicle.totalMassKg * eff.massEnergyCoeffWhPerKgKm.value + climbWhKm) * driveDistSolKm;
+      dailyNeedWh = (pwr.hotelPowerW.value + heaterW) * hotelDutyH + driveWh;
+    }
+    const powerRatio = dailyGenWh / Math.max(1, dailyNeedWh);
+    const powerDeficit = dailyGenWh < dailyNeedWh;
+    const reserveTarget = pwP && pwP.comfortableReserveRatio ? pwP.comfortableReserveRatio.value : 2.0;
+    const powerScore = powerDeficit
+      ? 0
+      : clamp(50 + ((powerRatio - 1.0) / Math.max(0.2, reserveTarget - 1.0)) * 50, 0, 100);
+
+    // 11. Confidence (data resolution, field measurement uplift & tau attenuation)
     const cfP = dp.confidence;
     let conf = phys.isLowResCell ? cfP.baseGlobalFallback.value : cfP.baseFineCutout.value;
     if (!phys.isLowResCell && phys.hasHiRiseElev) conf += cfP.hiriseBoost.value;
-    const tauPenalty = cfP.tauUncertaintyPenalty.value * clamp((env.tau - tauRange.min) / (tauRange.max - tauRange.min), 0, 1);
+    if (phys.fieldMaxWeight > 0) {
+      conf += (cfP.fieldBoostMax ? cfP.fieldBoostMax.value : 18) * clamp(phys.fieldMaxWeight, 0, 1);
+    }
+    const tauPenalty = cfP.tauUncertaintyPenalty.value * clamp((cellTau - tauRange.min) / (tauRange.max - tauRange.min), 0, 1);
     const confidence = clamp(conf - tauPenalty, 10, 99);
 
     return {
@@ -412,17 +529,25 @@
       elevationScore: +elevScore.toFixed(1),
       slopeScore: +slopeScore.toFixed(1),
       dust: +dust.toFixed(1),
+      power: +powerScore.toFixed(1),
       confidence: +confidence.toFixed(1),
       // Extra telemetry retained for popup & vehicle summary
-      instTempC: tObj.instC,
+      instTempC: +effInstTempC.toFixed(1),
       dayTempC: tObj.dayC,
       nightTempC: tObj.nightC,
+      meanTempC: tObj.meanC,
       gcrMSvYr: +gcrMSvYr.toFixed(1),
       speMSv: +speMSv.toFixed(1),
       atmoColGcm2: +colGcm2.toFixed(2),
+      pressurePa: +(colGcm2 * 37.2076).toFixed(0),
       visHazePct: +(visHaze * 100).toFixed(1),
       sinkagePenalty: +sinkagePenalty.toFixed(1),
       speedRiskPenalty: +speedRiskPenalty.toFixed(1),
+      dailyGenWh: +dailyGenWh.toFixed(1),
+      dailyNeedWh: +dailyNeedWh.toFixed(1),
+      powerRatio: +powerRatio.toFixed(2),
+      heaterW: +heaterW.toFixed(1),
+      powerDeficit,
       impassableVehicle,
     };
   }
@@ -435,6 +560,10 @@
     if (phys.slopeDeg > vetoCfg.slopeMaxDeg.value) nasaVetoReasons.push(`Slope ${phys.slopeDeg.toFixed(1)}° > ${vetoCfg.slopeMaxDeg.value}° (HLS-2015)`);
     const nasaVeto = nasaVetoReasons.length > 0;
     const impassable = scores.impassableVehicle || phys.slopeDeg > vehicle.slopeLimitDeg.value;
+    const powerVeto = !!scores.powerDeficit;
+    const powerCap = (cfg.domainParams && cfg.domainParams.power && cfg.domainParams.power.vetoCapScore)
+      ? cfg.domainParams.power.vetoCapScore.value
+      : 20;
 
     let rawCombined = 0;
     if (scoreMode === 'nocomp') {
@@ -456,12 +585,14 @@
       }
       rawCombined = sum;
     }
-    const finalScore = (nasaVeto || impassable) ? 0 : +clamp(rawCombined, 0, 100).toFixed(1);
+    let finalScore = (nasaVeto || impassable) ? 0 : +clamp(rawCombined, 0, 100).toFixed(1);
+    if (powerVeto && finalScore > powerCap) finalScore = powerCap;
     return {
       finalScore,
       nasaVeto,
       nasaVetoReasons,
       impassableVehicle: impassable,
+      powerVeto,
       preVetoScore: +clamp(rawCombined, 0, 100).toFixed(1),
     };
   }
@@ -471,7 +602,8 @@
     const MTime = deps.marsTime;
     const STORM = deps.storm;
     const loc = validateLocation(inputs.lat, inputs.lonInput, inputs.lonConvention, cfg);
-    const marsTime = MTime.computeMarsTime(inputs.earthDateUtc || cfg.environment.defaultDate, loc.lon360);
+    const dateStr = inputs.earthDateUtc || (cfg.environment && cfg.environment.defaultDate) || getUtcTodayIso();
+    const marsTime = MTime.computeMarsTime(dateStr, loc.lon360);
     const ltstHours = clamp(Number(inputs.ltstHours ?? marsTime.ltstHours), 0, 24);
     const tau = clamp(Number(inputs.tau ?? cfg.environment.tauRange.default), cfg.environment.tauRange.min, cfg.environment.tauRange.max);
     const cosZ = MTime.solarZenithCos(loc.latDeg, marsTime.lsDeg, ltstHours);
@@ -564,6 +696,319 @@
     };
   }
 
+  function buildCoarseBaselineView(orbitalGrid, loc, params, tacticalCfg, cutouts) {
+    if (params.baselineGrid) return params.baselineGrid;
+    if (orbitalGrid && orbitalGrid.coarseBaseline) {
+      const cb = orbitalGrid.coarseBaseline;
+      const resM = tacticalCfg.resolution.globalBaselineDeliveredM.value;
+      const fallbackUnit = Math.abs(loc.latDeg) > 62 ? 'Ap' : 'HNt';
+      const geolUnits = new Array(cb.elevM.length).fill(fallbackUnit);
+      const albedo = cb.dci.map((d) => +clamp(0.13 + ((0.99 - d) / 0.12) * 0.18, 0.10, 0.34).toFixed(4));
+      return {
+        ...orbitalGrid,
+        id: (orbitalGrid.id || 'zone') + '_coarse5km',
+        isPresetCutout: false,
+        isLowResGrid: true,
+        hasDayIrTexture: false,
+        dataMode: 'COARSE_BASELINE_5KM',
+        elevM: cb.elevM,
+        slopeDeg: cb.slopeDeg,
+        reliefM: cb.reliefM,
+        ti: cb.ti,
+        dci: cb.dci,
+        albedo,
+        geolUnits,
+        themisDayIr: null,
+        ctxTone: cb.elevM.map(() => 0.5),
+        ctxContrast: cb.elevM.map(() => 0.15),
+        sources: {
+          elevation: { id: 'MOLA MEGDR 4096x2048 offline raster (coarse fallback)', nativeResM: resM, lowRes: true, date: '2003 / USGS 2014' },
+          slope: { id: 'MOLA 90th-pct slope (4096x2048 fallback)', nativeResM: resM, lowRes: true, date: '2003' },
+          ti: { id: 'TES_Thermal_Inertia_numeric (2048x1024 fallback)', nativeResM: tacticalCfg.resolution.globalTesDeliveredM.value, lowRes: true, date: '2001' },
+          imagery: { id: 'Unavailable in 5 km baseline (fallback)', nativeResM: resM, lowRes: true, date: 'N/A' },
+          dust: { id: 'TES_Dust_numeric (fallback proxy)', nativeResM: tacticalCfg.resolution.globalTesDeliveredM.value, lowRes: true, date: '2002' },
+          albedo: { id: 'TES albedo proxy (fallback)', nativeResM: tacticalCfg.resolution.globalTesDeliveredM.value, lowRes: true, date: '2002' },
+          geology: { id: 'Regional unit proxy (fallback)', nativeResM: 20000, lowRes: true, date: '2014' },
+          grs: { id: 'Odyssey GRS global mean placeholder (~550 km)', nativeResM: 550000, lowRes: true, date: '2007' },
+        },
+      };
+    }
+    return buildGlobalFallbackGrid(loc.latDeg, loc.lon180, params.layers, tacticalCfg, cutouts);
+  }
+
+  function applyFieldAssimilations(rawMeasurements, radiusM, loc, n, cellM, blendedPhysGrid, baseTempGrid, env, cfg) {
+    const valid = Array.isArray(rawMeasurements)
+      ? rawMeasurements.filter((m) => m && Number.isFinite(Number(m.lat)) && Number.isFinite(Number(m.lon)))
+      : [];
+    const total = n * n;
+    const perCell = new Array(total);
+    const hazardMarkers = [];
+    if (!valid.length) {
+      return { perCell, hazardMarkers, appliedCount: 0 };
+    }
+
+    const degToM = cfg.planet.degToMeters.value;
+    const cosLat = Math.max(0.05, Math.cos((loc.latDeg * Math.PI) / 180));
+    const bb = loc.bbox180;
+    const dLat = (bb[3] - bb[1]) / n;
+    const dLon = (bb[2] - bb[0]) / n;
+    const R = Math.max(50, Number(radiusM) || 300);
+    const halfCellM = (cellM || 100) * 0.55;
+    const fdCfg = (cfg.domainParams && cfg.domainParams.fieldData) || {};
+    const discThresh = fdCfg.discrepancyRelThreshold ? fdCfg.discrepancyRelThreshold.value : 0.5;
+
+    // Identify marker cell coordinates for canvas markers
+    for (const m of valid) {
+      const mLat = Number(m.lat);
+      const mLon = normalizeLon180(Number(m.lon));
+      if (mLat >= bb[1] - 0.01 && mLat <= bb[3] + 0.01 && mLon >= bb[0] - 0.01 && mLon <= bb[2] + 0.01) {
+        const r = clamp(Math.floor((bb[3] - mLat) / dLat), 0, n - 1);
+        const c = clamp(Math.floor((mLon - bb[0]) / dLon), 0, n - 1);
+        hazardMarkers.push({
+          idx: r * n + c,
+          row: r,
+          col: c,
+          lat: mLat,
+          lon: mLon,
+          type: m.type,
+          value: m.value,
+          source: m.source || 'Field',
+          isSimulated: !!m.isSimulated,
+        });
+      }
+    }
+
+    const soilToTi = (raw) => {
+      const s = String(raw || '').toLowerCase();
+      if (/kum|sand/.test(s)) return 80;
+      if (/buz|ice/.test(s)) return 950;
+      if (/kaya|rock|bedrock/.test(s)) return 640;
+      return 300; // sağlam regolit / firm regolith
+    };
+
+    const numBlend = (acc, val, w, isSim) => {
+      acc.sumW += w;
+      acc.sumVal += val * w;
+      if (w > acc.maxW) acc.maxW = w;
+      if (isSim) acc.isSim = true;
+    };
+
+    for (let r = 0; r < n; r++) {
+      const cLat = bb[3] - (r + 0.5) * dLat;
+      for (let c = 0; c < n; c++) {
+        const i = r * n + c;
+        const cLon = bb[0] + (c + 0.5) * dLon;
+        const acc = {
+          ti: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          surfTemp: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          airTemp: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          pressure: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          radDose: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          tau: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          slope: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          rockAbundance: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          iceDepth: { sumW: 0, sumVal: 0, maxW: 0, isSim: false },
+          soilType: null,
+          hazardSoftSandWeight: 0,
+          hazardRockWeight: 0,
+          hazardRimWeight: 0,
+          maxWeight: 0,
+          isSimulated: false,
+          discrepancies: [],
+          appliedTypes: [],
+        };
+
+        for (const m of valid) {
+          const dxM = normalizeLon180(Number(m.lon) - cLon) * degToM * cosLat;
+          const dyM = (Number(m.lat) - cLat) * degToM;
+          const distM = Math.hypot(dxM, dyM);
+          if (distM > R) continue;
+          const w = distM <= halfCellM ? 1.0 : Math.pow(Math.max(0, 1 - (distM / R) * (distM / R)), 2);
+          if (w <= 0) continue;
+          if (w > acc.maxWeight) acc.maxWeight = w;
+          if (m.isSimulated) acc.isSimulated = true;
+          const isSim = !!m.isSimulated;
+          const v = Number(m.value);
+          const mType = FIELD_TYPE_ALIAS[m.type] || m.type;
+
+          if (mType === 'ti' && Number.isFinite(v)) numBlend(acc.ti, clamp(v, 20, 2200), w, isSim);
+          else if (mType === 'surfTemp' && Number.isFinite(v)) numBlend(acc.surfTemp, clamp(v, -145, 35), w, isSim);
+          else if (mType === 'airTemp' && Number.isFinite(v)) numBlend(acc.airTemp, clamp(v, -145, 35), w, isSim);
+          else if (mType === 'pressure' && Number.isFinite(v)) numBlend(acc.pressure, clamp(v, 50, 2000), w, isSim);
+          else if (mType === 'radDose' && Number.isFinite(v)) numBlend(acc.radDose, clamp(v * 8.76, 10, 5000), w, isSim); // µSv/h -> mSv/yr
+          else if (mType === 'tau' && Number.isFinite(v)) numBlend(acc.tau, clamp(v, 0.05, 12), w, isSim);
+          else if (mType === 'slope' && Number.isFinite(v)) numBlend(acc.slope, clamp(v, 0, 60), w, isSim);
+          else if (mType === 'rockAbundance' && Number.isFinite(v)) numBlend(acc.rockAbundance, clamp(v, 0, 100), w, isSim);
+          else if (mType === 'iceDepth' && Number.isFinite(v)) numBlend(acc.iceDepth, clamp(v, 0, 100), w, isSim);
+          else if (mType === 'soilType') {
+            numBlend(acc.ti, soilToTi(m.value), w * 0.75, isSim);
+            acc.soilType = String(m.value);
+          } else if (mType === 'hazard') {
+            const hz = String(m.value || '').toLowerCase();
+            if (/kum|sand/.test(hz)) acc.hazardSoftSandWeight = Math.max(acc.hazardSoftSandWeight, w);
+            else if (/krater|crater|rim/.test(hz)) acc.hazardRimWeight = Math.max(acc.hazardRimWeight, w);
+            else acc.hazardRockWeight = Math.max(acc.hazardRockWeight, w);
+          }
+        }
+
+        const out = {
+          maxWeight: acc.maxWeight,
+          isSimulated: acc.isSimulated,
+          hazardSoftSandWeight: acc.hazardSoftSandWeight,
+          hazardRockWeight: acc.hazardRockWeight,
+          hazardRimWeight: acc.hazardRimWeight,
+          soilType: acc.soilType,
+          domainFieldKind: {},
+          discrepancies: [],
+        };
+
+        const checkDiff = (domainKey, fieldKey, labelEn, labelTr, fVal, oVal, unitStr, decimals) => {
+          const denom = Math.max(Math.abs(oVal), unitStr === '°C' ? 20 : 1);
+          const relDiff = Math.abs(fVal - oVal) / denom;
+          if (relDiff > discThresh) {
+            out.discrepancies.push({
+              domainKey,
+              fieldKey,
+              labelEn,
+              labelTr,
+              fieldVal: +fVal.toFixed(decimals),
+              orbitalVal: +oVal.toFixed(decimals),
+              unit: unitStr,
+            });
+          }
+        };
+
+        if (acc.ti.sumW > 0) {
+          const fTi = acc.ti.sumVal / acc.ti.sumW;
+          const oTi = blendedPhysGrid[i].ti;
+          out.ti = lerp(oTi, fTi, acc.ti.maxW);
+          if (acc.ti.maxW >= 0.35) {
+            out.domainFieldKind.thermal = acc.ti.isSim ? 'simulated' : 'measured';
+            checkDiff('thermal', 'ti', 'Thermal inertia', 'Termal atalet', fTi, oTi, 'tiu', 0);
+          }
+        }
+        if (acc.surfTemp.sumW > 0) {
+          const fT = acc.surfTemp.sumVal / acc.surfTemp.sumW;
+          const oT = baseTempGrid[i];
+          out.surfTempC = lerp(oT, fT, acc.surfTemp.maxW);
+          if (acc.surfTemp.maxW >= 0.35) {
+            out.domainFieldKind.thermal = acc.surfTemp.isSim ? 'simulated' : 'measured';
+            checkDiff('thermal', 'surfTemp', 'Surface temp', 'Yüzey sıcaklığı', fT, oT, '°C', 1);
+          }
+        }
+        if (acc.airTemp.sumW > 0) {
+          out.airTempC = acc.airTemp.sumVal / acc.airTemp.sumW;
+          if (acc.airTemp.maxW >= 0.35 && !out.domainFieldKind.thermal) {
+            out.domainFieldKind.thermal = acc.airTemp.isSim ? 'simulated' : 'measured';
+          }
+        }
+        if (acc.pressure.sumW > 0) {
+          out.pressurePa = acc.pressure.sumVal / acc.pressure.sumW;
+          if (acc.pressure.maxW >= 0.35) {
+            out.domainFieldKind.radiation = out.domainFieldKind.radiation || (acc.pressure.isSim ? 'simulated' : 'measured');
+          }
+        }
+        if (acc.radDose.sumW > 0) {
+          const fR = acc.radDose.sumVal / acc.radDose.sumW;
+          out.radMSvYr = fR;
+          if (acc.radDose.maxW >= 0.35) {
+            out.domainFieldKind.radiation = acc.radDose.isSim ? 'simulated' : 'measured';
+          }
+        }
+        if (acc.tau.sumW > 0) {
+          const fTau = acc.tau.sumVal / acc.tau.sumW;
+          out.tau = lerp(env.tau, fTau, acc.tau.maxW);
+          if (acc.tau.maxW >= 0.35) {
+            out.domainFieldKind.dust = acc.tau.isSim ? 'simulated' : 'measured';
+            out.domainFieldKind.optics = acc.tau.isSim ? 'simulated' : 'measured';
+            checkDiff('dust', 'tau', 'Optical depth τ', 'Toz τ', fTau, env.tau, 'τ', 2);
+          }
+        }
+        if (acc.slope.sumW > 0) {
+          const fSlp = acc.slope.sumVal / acc.slope.sumW;
+          const oSlp = blendedPhysGrid[i].slopeDeg;
+          out.slopeDeg = lerp(oSlp, fSlp, acc.slope.maxW);
+          if (acc.slope.maxW >= 0.35) {
+            out.domainFieldKind.elevSlope = acc.slope.isSim ? 'simulated' : 'measured';
+            checkDiff('elevSlope', 'slope', 'Slope', 'Eğim', fSlp, oSlp, '°', 1);
+          }
+        }
+        if (acc.rockAbundance.sumW > 0) {
+          out.rockPct = acc.rockAbundance.sumVal / acc.rockAbundance.sumW;
+          if (acc.rockAbundance.maxW >= 0.35) {
+            out.domainFieldKind.topography = acc.rockAbundance.isSim ? 'simulated' : 'measured';
+          }
+        }
+        if (acc.iceDepth.sumW > 0) {
+          out.iceDepthM = acc.iceDepth.sumVal / acc.iceDepth.sumW;
+          if (acc.iceDepth.maxW >= 0.35) {
+            out.domainFieldKind.geology = acc.iceDepth.isSim ? 'simulated' : 'measured';
+          }
+        }
+        if (acc.hazardSoftSandWeight >= 0.35 || acc.hazardRockWeight >= 0.35 || acc.hazardRimWeight >= 0.35) {
+          out.domainFieldKind.elevSlope = out.domainFieldKind.elevSlope || (acc.isSimulated ? 'simulated' : 'measured');
+        }
+
+        perCell[i] = out;
+      }
+    }
+
+    return { perCell, hazardMarkers, appliedCount: valid.length };
+  }
+
+  function explainCellScore(cell, lang) {
+    const tr = lang === 'tr';
+    const score = +Number(cell.finalScore).toFixed(1);
+    if (cell.powerDeficit) {
+      const gen = Math.round(cell.dailyGenWh || 0);
+      const need = Math.round(cell.dailyNeedWh || 0);
+      return tr
+        ? `Puan ${score}: araç enerji açığı (${gen} < ${need} Wh/sol), güç vetosu devrede.`
+        : `Score ${score}: vehicle power deficit (${gen} < ${need} Wh/sol), power veto active.`;
+    }
+    if (cell.nasaVeto || cell.impassable) {
+      const reason = cell.vetoReasons && cell.vetoReasons[0] ? cell.vetoReasons[0] : (tr ? 'eğim sınırı' : 'slope/veto limit');
+      return tr
+        ? `Puan ${score}: ${reason} nedeniyle iniş/sürüş vetosu uygulandı.`
+        : `Score ${score}: vetoed due to ${reason}.`;
+    }
+
+    const scoredDomains = (cell.domains || []).filter((d) => d.score !== null && d.key !== 'confidence');
+    const sortedAsc = [...scoredDomains].sort((a, b) => a.score - b.score);
+    const low1 = sortedAsc[0];
+    const low2 = sortedAsc[1];
+    if (!low1) return tr ? `Puan ${score}.` : `Score ${score}.`;
+
+    const slp = +Number(cell.slopeDeg).toFixed(1);
+    const tiInt = Math.round(cell.ti || 250);
+    const shortRaw = (d) => {
+      if (d.key === 'thermal') {
+        const tiNote = tiInt < 120 ? (tr ? 'gevşek kum, batma riski' : 'loose sand, sinkage risk') : `${Math.round(cell.ti)} tiu`;
+        return `${tiNote}`;
+      }
+      if (d.key === 'elevSlope') return `${slp}° ${tr ? (slp > 12 ? 'dik eğim' : 'eğim') : (slp > 12 ? 'steep slope' : 'slope')}`;
+      if (d.key === 'radiation') return `${Math.round(cell.gcrMSvYr || 200)} ${tr ? 'mSv/yıl' : 'mSv/yr'}`;
+      if (d.key === 'topography') return `${tr ? 'rölyef' : 'relief'} ${(+Number(cell.reliefM || 0).toFixed(1))} m`;
+      if (d.key === 'power') return `${Math.round(cell.dailyGenWh || 0)}/${Math.round(cell.dailyNeedWh || 0)} Wh`;
+      if (d.key === 'dust') return `τ=${cell.tau}`;
+      if (d.key === 'optics') return `albedo ${(+Number(cell.albedo || 0.2).toFixed(2))}`;
+      return d.raw || '';
+    };
+
+    if (score >= 75) {
+      const flatLabel = slp <= 5 ? (tr ? `düz zemin (${slp}°)` : `flat ground (${slp}°)`) : (tr ? `eğim ${slp}°` : `slope ${slp}°`);
+      const firmLabel = tiInt >= 200 ? (tr ? `sağlam toprak (${tiInt} tiu)` : `firm soil (${tiInt} tiu)`) : `${tiInt} tiu`;
+      return tr
+        ? `Puan ${score}: ${flatLabel}, ${firmLabel}; ana sınırlayıcı ${low1.labelTr || low1.label} (${shortRaw(low1)}).`
+        : `Score ${score}: ${flatLabel}, ${firmLabel}; main limiter is ${low1.label} (${shortRaw(low1)}).`;
+    }
+    const part1 = `${(tr ? (low1.labelTr || low1.label) : low1.label)} (${shortRaw(low1)})`;
+    const part2 = low2 ? (tr ? ` ve ${(low2.labelTr || low2.label)} (${shortRaw(low2)})` : ` and ${low2.label} (${shortRaw(low2)})`) : '';
+    return tr
+      ? `Puan ${score}: düşük ${(part1)}${part2}.`
+      : `Score ${score}: low ${part1}${part2}.`;
+  }
+
   function generateAnalysis(params) {
     const vehiclesCfg = unwrap(params.vehiclesCfg || loadDep('MDE_VEHICLES', './vehicles_data.js'), 'MDE_VEHICLES');
     const tacticalCfg = unwrap(params.tacticalCfg || loadDep('MDE_TACTICAL_CONFIG', './tactical_config_data.js'), 'MDE_TACTICAL_CONFIG');
@@ -591,26 +1036,60 @@
       orbitalGrid = buildGlobalFallbackGrid(loc.latDeg, loc.lon180, params.layers, tacticalCfg, cutouts);
     }
 
+    if (inputs.useCoarseBaseline) {
+      orbitalGrid = buildCoarseBaselineView(orbitalGrid, loc, params, tacticalCfg, cutouts);
+    }
+
     const n = orbitalGrid.gridN || tacticalCfg.planet.gridN.value;
     const total = n * n;
+    const cellM = orbitalGrid.cellM || tacticalCfg.planet.cellSizeM.value;
     const ci = Math.floor(n / 2) * n + Math.floor(n / 2);
+
+    // If zone uses THEMIS Day IR 100 m as relative thermal/optical texture over coarse TES TI,
+    // modulate TI smoothly around the TES mean without claiming numeric THEMIS TI as MEASURED.
+    const isDayIrTextureTi = !!(
+      orbitalGrid.themisDayIr
+      && orbitalGrid.sources
+      && orbitalGrid.sources.ti
+      && orbitalGrid.sources.ti.productType === 'day_ir_relative_texture'
+    );
+    const getCellTi = (idx) => {
+      const baseTi = orbitalGrid.ti[idx];
+      if (!isDayIrTextureTi) return baseTi;
+      const meanDn = Math.max(20, orbitalGrid.themisMeanDn || 128);
+      const dn = orbitalGrid.themisDayIr[idx] || meanDn;
+      const rel = (dn - meanDn) / meanDn;
+      return +clamp(baseTi * (1 - 0.45 * rel), 40, 1200).toFixed(0);
+    };
+    const getCellTone = (idx) => {
+      if (orbitalGrid.ctxTone) return orbitalGrid.ctxTone[idx];
+      if (orbitalGrid.themisDayIr) return +clamp(orbitalGrid.themisDayIr[idx] / 255, 0.05, 0.95).toFixed(3);
+      return 0.5;
+    };
+    const getCellContrast = (idx) => {
+      if (orbitalGrid.ctxContrast) return orbitalGrid.ctxContrast[idx];
+      if (orbitalGrid.themisContrast) return orbitalGrid.themisContrast[idx];
+      return 0.2;
+    };
+
     const centerPhys = {
       lat: loc.latDeg,
       elevM: orbitalGrid.elevM[ci],
       slopeDeg: orbitalGrid.slopeDeg[ci],
       reliefM: orbitalGrid.reliefM[ci],
       roughGlobalM: orbitalGrid.roughGlobalM ? orbitalGrid.roughGlobalM[ci] : null,
-      ti: orbitalGrid.ti[ci],
+      ti: getCellTi(ci),
       dci: orbitalGrid.dci[ci],
       albedo: orbitalGrid.albedo[ci],
-      ctxTone: orbitalGrid.ctxTone ? orbitalGrid.ctxTone[ci] : 0.5,
-      ctxContrast: orbitalGrid.ctxContrast ? orbitalGrid.ctxContrast[ci] : 0.2,
+      ctxTone: getCellTone(ci),
+      ctxContrast: getCellContrast(ci),
       grsK: orbitalGrid.grsK[ci],
       grsTh: orbitalGrid.grsTh[ci],
       geolUnit: orbitalGrid.geolUnits[ci],
       centerGeolUnit: orbitalGrid.geolUnits[ci],
       isLowResCell: !!orbitalGrid.isLowResGrid,
       hasHiRiseElev: !!(orbitalGrid.sources && orbitalGrid.sources.elevation && String(orbitalGrid.sources.elevation.id).includes('hirise')),
+      fieldMaxWeight: 0,
     };
 
     const deps = { vehiclesCfg, tacticalCfg, cutouts, marsTime, scoring, storm, layers: params.layers, regions: params.regions };
@@ -623,113 +1102,155 @@
     const normWeights = {};
     for (const k of weightKeys) normWeights[k] = rawNorm[k] || 0;
 
-    // Step 1: Center Base Value (computed from user's inputs + ML scalar baseline)
+    // Step 1: Center Base Value (computed from user's inputs + baseline)
     const centerBase = scoreCell(centerPhys, env, vehicle, tacticalCfg, deps);
     const centerFinal = evaluateFinalCompatibility(centerBase, centerPhys, vehicle, normWeights, env.scoreMode, tacticalCfg);
 
-    // Allocate compact per-cell typed/plain arrays for 11 layers + popup raw physics
-    const grids = {
-      final: new Float32Array(total),
-      thermal: new Float32Array(total),
-      radiation: new Float32Array(total),
-      topography: new Float32Array(total),
-      optics: new Float32Array(total),
-      geology: new Float32Array(total),
-      elevSlope: new Float32Array(total),
-      elevationScore: new Float32Array(total),
-      slopeScore: new Float32Array(total),
-      dust: new Float32Array(total),
-      confidence: new Float32Array(total),
-      elevM: new Float32Array(total),
-      slopeDeg: new Float32Array(total),
-      reliefM: new Float32Array(total),
-      ti: new Float32Array(total),
-      dci: new Float32Array(total),
-      albedo: new Float32Array(total),
-      grsK: new Float32Array(total),
-      grsTh: new Float32Array(total),
-      tempC: new Float32Array(total),
-      gcrMSvYr: new Float32Array(total),
-      speMSv: new Float32Array(total),
-      geolUnits: new Array(total),
-      impassable: new Uint8Array(total),
-      nasaVeto: new Uint8Array(total),
-    };
-
+    // Pre-build orbital blended physics grid so field measurements can compare against orbital baseline
     const wOrb = env.orbitalBlendWeight;
     const dLat = (loc.bbox180[3] - loc.bbox180[1]) / n;
-    let sumFinal = 0, minFinal = Infinity, maxFinal = -Infinity;
-    let impassableCount = 0, nasaVetoCount = 0;
-    let sumSlope = 0, sumSinkage = 0, sumSpeedRisk = 0;
-    const domainSums = { thermal: 0, radiation: 0, topography: 0, optics: 0, geology: 0, elevSlope: 0, dust: 0 };
-
-    // Step 2: Spatial variation across 40x40 (Step 3 biomes skipped per Section 0.2 check)
+    const blendedGrid = new Array(total);
+    const baseTempGrid = new Array(total);
     for (let r = 0; r < n; r++) {
       const cellLat = wOrb === 0 ? loc.latDeg : (loc.bbox180[3] - (r + 0.5) * dLat);
       for (let c = 0; c < n; c++) {
         const i = r * n + c;
-        const blendedPhys = {
+        const bp = {
           lat: cellLat,
           elevM: lerp(centerPhys.elevM, orbitalGrid.elevM[i], wOrb),
           slopeDeg: lerp(centerPhys.slopeDeg, orbitalGrid.slopeDeg[i], wOrb),
           reliefM: lerp(centerPhys.reliefM, orbitalGrid.reliefM[i], wOrb),
           roughGlobalM: orbitalGrid.roughGlobalM ? lerp(centerPhys.roughGlobalM, orbitalGrid.roughGlobalM[i], wOrb) : null,
-          ti: lerp(centerPhys.ti, orbitalGrid.ti[i], wOrb),
+          ti: lerp(centerPhys.ti, getCellTi(i), wOrb),
           dci: lerp(centerPhys.dci, orbitalGrid.dci[i], wOrb),
           albedo: lerp(centerPhys.albedo, orbitalGrid.albedo[i], wOrb),
-          ctxTone: lerp(centerPhys.ctxTone, orbitalGrid.ctxTone ? orbitalGrid.ctxTone[i] : 0.5, wOrb),
-          ctxContrast: lerp(centerPhys.ctxContrast, orbitalGrid.ctxContrast ? orbitalGrid.ctxContrast[i] : 0.2, wOrb),
+          ctxTone: lerp(centerPhys.ctxTone, getCellTone(i), wOrb),
+          ctxContrast: lerp(centerPhys.ctxContrast, getCellContrast(i), wOrb),
           grsK: lerp(centerPhys.grsK, orbitalGrid.grsK[i], wOrb),
           grsTh: lerp(centerPhys.grsTh, orbitalGrid.grsTh[i], wOrb),
           geolUnit: wOrb === 0 ? centerPhys.geolUnit : orbitalGrid.geolUnits[i],
           centerGeolUnit: centerPhys.geolUnit,
           isLowResCell: !!orbitalGrid.isLowResGrid,
           hasHiRiseElev: centerPhys.hasHiRiseElev,
+          fieldMaxWeight: 0,
         };
-
-        const sc = scoreCell(blendedPhys, env, vehicle, tacticalCfg, deps);
-        const fin = evaluateFinalCompatibility(sc, blendedPhys, vehicle, normWeights, env.scoreMode, tacticalCfg);
-
-        grids.final[i] = fin.finalScore;
-        grids.thermal[i] = sc.thermal;
-        grids.radiation[i] = sc.radiation;
-        grids.topography[i] = sc.topography;
-        grids.optics[i] = sc.optics;
-        grids.geology[i] = sc.geology;
-        grids.elevSlope[i] = sc.elevSlope;
-        grids.elevationScore[i] = sc.elevationScore;
-        grids.slopeScore[i] = sc.slopeScore;
-        grids.dust[i] = sc.dust;
-        grids.confidence[i] = sc.confidence;
-
-        grids.elevM[i] = +blendedPhys.elevM.toFixed(1);
-        grids.slopeDeg[i] = +blendedPhys.slopeDeg.toFixed(2);
-        grids.reliefM[i] = +blendedPhys.reliefM.toFixed(1);
-        grids.ti[i] = +blendedPhys.ti.toFixed(1);
-        grids.dci[i] = +blendedPhys.dci.toFixed(4);
-        grids.albedo[i] = +blendedPhys.albedo.toFixed(4);
-        grids.grsK[i] = +blendedPhys.grsK.toFixed(3);
-        grids.grsTh[i] = +blendedPhys.grsTh.toFixed(3);
-        grids.tempC[i] = sc.instTempC;
-        grids.gcrMSvYr[i] = sc.gcrMSvYr;
-        grids.speMSv[i] = sc.speMSv;
-        grids.geolUnits[i] = blendedPhys.geolUnit;
-        grids.impassable[i] = fin.impassableVehicle ? 1 : 0;
-        grids.nasaVeto[i] = fin.nasaVeto ? 1 : 0;
-
-        sumFinal += fin.finalScore;
-        if (fin.finalScore < minFinal) minFinal = fin.finalScore;
-        if (fin.finalScore > maxFinal) maxFinal = fin.finalScore;
-        if (fin.impassableVehicle) impassableCount++;
-        if (fin.nasaVeto) nasaVetoCount++;
-        sumSlope += blendedPhys.slopeDeg;
-        sumSinkage += sc.sinkagePenalty;
-        sumSpeedRisk += sc.speedRiskPenalty;
-        for (const dk in domainSums) domainSums[dk] += sc[dk];
+        blendedGrid[i] = bp;
+        baseTempGrid[i] = interpSurfaceTempC(storm, bp.lat, env.lsDeg, bp.ti, bp.elevM, env.tau, env.ltstHours).instC;
       }
     }
 
-    // Main limiting factor among scored domains (weighted deficit impact)
+    const fieldList = params.fieldMeasurements || inputs.fieldMeasurements || [];
+    const fieldRadiusM = Number(inputs.fieldRadiusM ?? params.fieldRadiusM ?? 300);
+    const fieldAssimilated = applyFieldAssimilations(fieldList, fieldRadiusM, loc, n, cellM, blendedGrid, baseTempGrid, env, tacticalCfg);
+
+    // Allocate compact per-cell Float64/Uint8 arrays (avoids Float32 decimal artifacts like 93.9000015)
+    const grids = {
+      final: new Float64Array(total),
+      thermal: new Float64Array(total),
+      radiation: new Float64Array(total),
+      topography: new Float64Array(total),
+      optics: new Float64Array(total),
+      geology: new Float64Array(total),
+      elevSlope: new Float64Array(total),
+      elevationScore: new Float64Array(total),
+      slopeScore: new Float64Array(total),
+      dust: new Float64Array(total),
+      power: new Float64Array(total),
+      confidence: new Float64Array(total),
+      elevM: new Float64Array(total),
+      slopeDeg: new Float64Array(total),
+      reliefM: new Float64Array(total),
+      ti: new Float64Array(total),
+      dci: new Float64Array(total),
+      albedo: new Float64Array(total),
+      grsK: new Float64Array(total),
+      grsTh: new Float64Array(total),
+      tempC: new Float64Array(total),
+      gcrMSvYr: new Float64Array(total),
+      speMSv: new Float64Array(total),
+      dailyGenWh: new Float64Array(total),
+      dailyNeedWh: new Float64Array(total),
+      powerRatio: new Float64Array(total),
+      tauCell: new Float64Array(total),
+      geolUnits: new Array(total),
+      impassable: new Uint8Array(total),
+      nasaVeto: new Uint8Array(total),
+      powerDeficit: new Uint8Array(total),
+    };
+
+    let sumFinal = 0, minFinal = Infinity, maxFinal = -Infinity;
+    let impassableCount = 0, nasaVetoCount = 0, powerVetoCount = 0;
+    let sumSlope = 0, sumSinkage = 0, sumSpeedRisk = 0;
+    const domainSums = { thermal: 0, radiation: 0, topography: 0, optics: 0, geology: 0, elevSlope: 0, dust: 0, power: 0 };
+
+    for (let i = 0; i < total; i++) {
+      const bp = blendedGrid[i];
+      const f = fieldAssimilated.perCell[i];
+      if (f) {
+        if (f.ti != null) bp.ti = f.ti;
+        if (f.surfTempC != null) bp.surfTempC = f.surfTempC;
+        if (f.airTempC != null) bp.airTempC = f.airTempC;
+        if (f.pressurePa != null) bp.pressurePa = f.pressurePa;
+        if (f.radMSvYr != null) bp.radMSvYr = f.radMSvYr;
+        if (f.tau != null) bp.tau = f.tau;
+        if (f.slopeDeg != null) bp.slopeDeg = f.slopeDeg;
+        if (f.rockPct != null) bp.rockPct = f.rockPct;
+        if (f.iceDepthM != null) bp.iceDepthM = f.iceDepthM;
+        bp.hazardSoftSandWeight = f.hazardSoftSandWeight || 0;
+        bp.hazardRockWeight = f.hazardRockWeight || 0;
+        bp.hazardRimWeight = f.hazardRimWeight || 0;
+        bp.fieldMaxWeight = f.maxWeight || 0;
+      }
+
+      const sc = scoreCell(bp, env, vehicle, tacticalCfg, deps);
+      const fin = evaluateFinalCompatibility(sc, bp, vehicle, normWeights, env.scoreMode, tacticalCfg);
+
+      grids.final[i] = fin.finalScore;
+      grids.thermal[i] = sc.thermal;
+      grids.radiation[i] = sc.radiation;
+      grids.topography[i] = sc.topography;
+      grids.optics[i] = sc.optics;
+      grids.geology[i] = sc.geology;
+      grids.elevSlope[i] = sc.elevSlope;
+      grids.elevationScore[i] = sc.elevationScore;
+      grids.slopeScore[i] = sc.slopeScore;
+      grids.dust[i] = sc.dust;
+      grids.power[i] = sc.power;
+      grids.confidence[i] = sc.confidence;
+
+      grids.elevM[i] = +bp.elevM.toFixed(1);
+      grids.slopeDeg[i] = +bp.slopeDeg.toFixed(1);
+      grids.reliefM[i] = +bp.reliefM.toFixed(1);
+      grids.ti[i] = Math.round(bp.ti);
+      grids.dci[i] = +bp.dci.toFixed(4);
+      grids.albedo[i] = +bp.albedo.toFixed(4);
+      grids.grsK[i] = +bp.grsK.toFixed(3);
+      grids.grsTh[i] = +bp.grsTh.toFixed(3);
+      grids.tempC[i] = +sc.instTempC.toFixed(1);
+      grids.gcrMSvYr[i] = Math.round(sc.gcrMSvYr);
+      grids.speMSv[i] = Math.round(sc.speMSv);
+      grids.dailyGenWh[i] = +sc.dailyGenWh.toFixed(1);
+      grids.dailyNeedWh[i] = +sc.dailyNeedWh.toFixed(1);
+      grids.powerRatio[i] = sc.powerRatio;
+      grids.tauCell[i] = +(bp.tau != null ? bp.tau : env.tau).toFixed(2);
+      grids.geolUnits[i] = bp.geolUnit;
+      grids.impassable[i] = fin.impassableVehicle ? 1 : 0;
+      grids.nasaVeto[i] = fin.nasaVeto ? 1 : 0;
+      grids.powerDeficit[i] = fin.powerVeto ? 1 : 0;
+
+      sumFinal += fin.finalScore;
+      if (fin.finalScore < minFinal) minFinal = fin.finalScore;
+      if (fin.finalScore > maxFinal) maxFinal = fin.finalScore;
+      if (fin.impassableVehicle) impassableCount++;
+      if (fin.nasaVeto) nasaVetoCount++;
+      if (fin.powerVeto) powerVetoCount++;
+      sumSlope += bp.slopeDeg;
+      sumSinkage += sc.sinkagePenalty;
+      sumSpeedRisk += sc.speedRiskPenalty;
+      for (const dk in domainSums) domainSums[dk] += sc[dk];
+    }
+
+    // Main limiting factor among all 8 scored domains (weighted deficit impact)
     const domainMeans = {};
     let limitingKey = 'elevSlope';
     let highestDeficit = -1;
@@ -743,7 +1264,9 @@
     }
     const impassablePct = +((impassableCount / total) * 100).toFixed(1);
     const nasaVetoPct = +((nasaVetoCount / total) * 100).toFixed(1);
-    if (impassablePct > 25 || nasaVetoPct > 25) limitingKey = 'elevSlope';
+    const powerVetoPct = +((powerVetoCount / total) * 100).toFixed(1);
+    if (powerVetoPct > 50) limitingKey = 'power';
+    else if (impassablePct > 25 || nasaVetoPct > 25) limitingKey = 'elevSlope';
 
     const vehTelemetry = computeVehicleTelemetry(
       vehicle,
@@ -754,21 +1277,27 @@
       sumSpeedRisk / total,
       tacticalCfg
     );
+    vehTelemetry.powerDeficit = powerVetoPct > 50 || centerBase.powerDeficit;
+    vehTelemetry.dailyNeedWh = centerBase.dailyNeedWh;
+    vehTelemetry.dailyGenWh = centerBase.dailyGenWh;
 
     const isLowRes = !!orbitalGrid.isLowResGrid;
     const elevRes = orbitalGrid.sources && orbitalGrid.sources.elevation ? orbitalGrid.sources.elevation.nativeResM : 5209;
     const tiRes = orbitalGrid.sources && orbitalGrid.sources.ti ? orbitalGrid.sources.ti.nativeResM : 10418;
+    const bestResM = Math.min(elevRes, tiRes);
+    const worstHiResM = Math.max(elevRes, tiRes);
     const fineBand = isLowRes
-      ? `${elevRes} m (global offline fallback)`
-      : `${Math.min(elevRes, tiRes)}–${Math.max(elevRes, tiRes)} m (CTX 5 m optics)`;
-    const nativeResLabel = `Native data resolution: ${fineBand} (ML layer: ${tacticalCfg.resolution.mlLayerNativeResM.label})`;
+      ? `${elevRes} m`
+      : (bestResM === worstHiResM ? `${bestResM} m` : `${bestResM}–${worstHiResM} m`);
+    // Section 2.4: Remove "ML layer: non-spatial (60 s point time-series)" -> pure data resolution only
+    const nativeResLabel = `Data resolution: ${fineBand}`;
 
     const region = nearestRegionName(loc.latDeg, loc.lon180, deps);
 
     return {
       ok: true,
       gridN: n,
-      cellM: orbitalGrid.cellM || tacticalCfg.planet.cellSizeM.value,
+      cellM,
       sizeKm: tacticalCfg.planet.boxSizeKm.value,
       areaKm2: 16,
       inputs: { ...inputs },
@@ -780,12 +1309,19 @@
       dataMode: orbitalGrid.dataMode || (orbitalGrid.isPresetCutout ? 'OFFLINE_PRECUT' : 'ONLINE_ORBITAL'),
       isPresetCutout: !!orbitalGrid.isPresetCutout,
       isLowResGrid: isLowRes,
+      isDayIrTextureTi,
+      hasCoarseBaseline: !!(orbitalGrid.coarseBaseline || findPresetCutout(cutouts, loc.latDeg, loc.lon180)),
       nativeResLabel,
+      fineBand,
       sources: orbitalGrid.sources,
       ctxImgDataUri: orbitalGrid.ctxImgDataUri || null,
+      themisDayIr: orbitalGrid.themisDayIr || null,
       centerBase,
       centerFinal,
       normWeights,
+      fieldMeasurements: fieldList,
+      fieldRadiusM,
+      fieldAssimilated,
       grids,
       summary: {
         meanScore: +(sumFinal / total).toFixed(1),
@@ -795,8 +1331,12 @@
         impassablePct,
         nasaVetoCount,
         nasaVetoPct,
+        powerVetoCount,
+        powerVetoPct,
+        powerDeficit: powerVetoPct > 50,
         limitingFactorKey: limitingKey,
         limitingFactorLabel: tacticalCfg.weights[limitingKey] ? tacticalCfg.weights[limitingKey].label : limitingKey,
+        limitingFactorLabelTr: tacticalCfg.weights[limitingKey] ? tacticalCfg.weights[limitingKey].label_tr : limitingKey,
         limitingFactorMean: domainMeans[limitingKey],
         domainMeans,
       },
@@ -804,8 +1344,9 @@
     };
   }
 
-  function getCellPopup(analysis, idx) {
+  function getCellPopup(analysis, idx, lang) {
     if (!analysis || !analysis.ok) return null;
+    const tr = lang === 'tr';
     const n = analysis.gridN;
     const i = clamp(idx | 0, 0, n * n - 1);
     const r = Math.floor(i / n);
@@ -820,17 +1361,37 @@
     const env = analysis.environment;
     const veh = analysis.vehicle;
     const s = (k, def) => (src[k] ? `${src[k].id} (${src[k].date})` : def);
+    const fc = analysis.fieldAssimilated && analysis.fieldAssimilated.perCell ? analysis.fieldAssimilated.perCell[i] : null;
+    const fk = (dk) => (fc && fc.domainFieldKind ? fc.domainFieldKind[dk] : null);
+    const tiInt = Math.round(g.ti[i]);
+    const tempVal = +g.tempC[i].toFixed(1);
+    const slopeVal = +g.slopeDeg[i].toFixed(1);
+    const elevInt = Math.round(g.elevM[i]);
+    const genWh = Math.round(g.dailyGenWh[i]);
+    const needWh = Math.round(g.dailyNeedWh[i]);
+    const cellTau = +(g.tauCell[i]).toFixed(2);
+
+    const tiSrc = s('ti', 'THEMIS 100 m');
+    const thermalBadge = classifySourceBadge(tiSrc, analysis.isDayIrTextureTi ? 'MODEL' : (src.ti && !src.ti.lowRes ? 'MEASURED' : 'MODEL'), fk('thermal'), lang);
+    const radSrc = `MSL/RAD-anchored SCORING.radDose × Solar ${env.solarCycle.toUpperCase()}`;
+    const grsSrc = s('grs', 'Odyssey GRS ~550 km (Boynton 2007)');
+    const topoSrc = s('elevation', 'MOLA-HRSC 200 m');
+    const optSrc = `${s('imagery', 'THEMIS Day IR 100 m')} + ${s('albedo', 'TES')}`;
+    const geoSrc = s('geology', 'USGS SIM 3292 (Tanaka 2014)');
+    const esSrc = `${s('elevation', 'DEM')} + ${s('slope', 'Slope')}`;
+    const dustSrc = s('dust', 'TES Dust Cover Index');
 
     const domains = [
-      { key: 'thermal', label: 'Thermal', score: g.thermal[i], raw: `${g.ti[i].toFixed(0)} tiu · ${g.tempC[i].toFixed(1)} °C`, unit: 'J m^-2 K^-1 s^-1/2, °C', source: s('ti', 'THEMIS 100m') + ' + STORM.surfaceTempC', badge: 'MODEL' },
-      { key: 'radiation', label: 'Space Radiation Dose', score: g.radiation[i], raw: `${g.gcrMSvYr[i].toFixed(0)} mSv/yr${env.speActive ? ' + SPE ' + g.speMSv[i].toFixed(0) + ' mSv' : ''}`, unit: 'mSv/yr', source: `MSL/RAD-anchored SCORING.radDose × Solar ${env.solarCycle.toUpperCase()}`, badge: 'MODEL' },
-      { key: 'groundComp', label: 'Ground Composition (orbital, coarse resolution)', score: null, raw: `K ${g.grsK[i].toFixed(3)} wt% · Th ${g.grsTh[i].toFixed(3)} ppm`, unit: 'wt% K, ppm Th', source: s('grs', 'Odyssey GRS ~550 km (Boynton 2007)') + ' — informational, NOT scored', badge: 'MEASURED' },
-      { key: 'topography', label: 'Topography', score: g.topography[i], raw: `Relief ${g.reliefM[i].toFixed(1)} m (v=${veh.speedKmh} km/h)`, unit: 'm', source: s('elevation', 'MOLA-HRSC 200m'), badge: 'MODEL' },
-      { key: 'optics', label: 'Optics', score: g.optics[i], raw: `Albedo ${g.albedo[i].toFixed(3)} · τ=${env.tau}`, unit: 'Lambert A, τ', source: `${s('imagery', 'CTX')} + ${s('albedo', 'TES/OMEGA')}`, badge: 'MODEL' },
-      { key: 'geology', label: 'Geology (SIM 3292)', score: g.geology[i], raw: `${unitCode} — ${uMeta.desc}`, unit: 'USGS Unit', source: s('geology', 'USGS SIM 3292 (Tanaka 2014)'), badge: 'MEASURED' },
-      { key: 'elevSlope', label: 'Elevation / Slope', score: g.elevSlope[i], raw: `${g.elevM[i].toFixed(0)} m · ${g.slopeDeg[i].toFixed(2)}° (limit ${veh.slopeLimitDeg.value}°)${g.impassable[i] ? ' [IMPASSABLE]' : ''}`, unit: 'm, deg', source: `${s('elevation', 'DEM')} + ${s('slope', 'Slope')}`, badge: 'MODEL' },
-      { key: 'dust', label: 'Dust', score: g.dust[i], raw: `DCI ${g.dci[i].toFixed(3)} · τ=${env.tau}`, unit: 'DCI, τ', source: s('dust', 'TES Dust Cover Index (Ruff 2002)'), badge: 'MODEL' },
-      { key: 'confidence', label: 'Data Confidence', score: g.confidence[i], raw: `${g.confidence[i].toFixed(0)}% (${analysis.isLowResGrid ? 'coarse ~5.2 km fallback' : '100–200 m cutout'})`, unit: '%', source: analysis.nativeResLabel, badge: 'MODEL' },
+      { key: 'thermal', label: 'Thermal', labelTr: 'Termal', score: +g.thermal[i].toFixed(1), raw: `${tiInt} tiu, ${tempVal} °C`, unit: 'tiu, °C', source: tiSrc + ' + STORM.surfaceTempC', badge: thermalBadge },
+      { key: 'power', label: 'Power & Energy', labelTr: 'Güç & Enerji', score: +g.power[i].toFixed(1), raw: `${genWh}/${needWh} Wh/sol${veh.powerMode === 'nuclear' ? (tr ? ' (nükleer)' : ' (nuclear)') : ` (τ=${cellTau})`}`, unit: 'Wh/sol', source: `STORM.dailySolar (${veh.powerMode})`, badge: 'MODEL' },
+      { key: 'elevSlope', label: 'Elevation / Slope', labelTr: 'Yükseklik / Eğim', score: +g.elevSlope[i].toFixed(1), raw: `${elevInt} m, ${slopeVal}°`, unit: 'm, °', source: esSrc, badge: classifySourceBadge(esSrc, src.slope && !src.slope.lowRes ? 'MEASURED' : 'MODEL', fk('elevSlope'), lang) },
+      { key: 'radiation', label: 'Space Radiation', labelTr: 'Uzay Radyasyonu', score: +g.radiation[i].toFixed(1), raw: `${Math.round(g.gcrMSvYr[i])} mSv/${tr ? 'yıl' : 'yr'}${env.speActive ? ' +' + Math.round(g.speMSv[i]) + ' SPE' : ''}`, unit: 'mSv/yr', source: radSrc, badge: classifySourceBadge(radSrc, 'MODEL', fk('radiation'), lang) },
+      { key: 'topography', label: 'Topography', labelTr: 'Topografya', score: +g.topography[i].toFixed(1), raw: `${+g.reliefM[i].toFixed(1)} m ${tr ? 'rölyef' : 'relief'}`, unit: 'm', source: topoSrc, badge: classifySourceBadge(topoSrc, src.elevation && !src.elevation.lowRes ? 'MEASURED' : 'MODEL', fk('topography'), lang) },
+      { key: 'optics', label: 'Optics', labelTr: 'Optik', score: +g.optics[i].toFixed(1), raw: `albedo ${+g.albedo[i].toFixed(2)}, τ=${cellTau}`, unit: 'A, τ', source: optSrc, badge: classifySourceBadge(optSrc, 'MODEL', fk('optics'), lang) },
+      { key: 'geology', label: 'Geology (SIM 3292)', labelTr: 'Jeoloji', score: +g.geology[i].toFixed(1), raw: `${unitCode} (${uMeta.desc})`, unit: 'USGS', source: geoSrc, badge: classifySourceBadge(geoSrc, 'MEASURED', fk('geology'), lang) },
+      { key: 'dust', label: 'Dust', labelTr: 'Toz', score: +g.dust[i].toFixed(1), raw: `DCI ${+g.dci[i].toFixed(2)}, τ=${cellTau}`, unit: 'DCI, τ', source: dustSrc, badge: classifySourceBadge(dustSrc, 'MODEL', fk('dust'), lang) },
+      { key: 'groundComp', label: 'Ground Comp (GRS)', labelTr: 'Zemin Bileşimi (GRS)', score: null, raw: `K ${+g.grsK[i].toFixed(2)}%, Th ${+g.grsTh[i].toFixed(2)} ppm`, unit: 'wt%, ppm', source: grsSrc + ' — not scored', badge: classifySourceBadge(grsSrc, 'MEASURED', null, lang) },
+      { key: 'confidence', label: 'Data Confidence', labelTr: 'Veri Güveni', score: +g.confidence[i].toFixed(1), raw: `${Math.round(g.confidence[i])}%`, unit: '%', source: analysis.nativeResLabel, badge: 'MODEL' },
     ];
 
     const vetoReasons = [];
@@ -838,9 +1399,16 @@
     if (g.elevM[i] > nv.elevMaxM.value) vetoReasons.push(`Elev > +${nv.elevMaxM.value} m`);
     if (Math.abs(cellLat) > nv.absLatMaxDeg.value) vetoReasons.push(`|Lat| > ${nv.absLatMaxDeg.value}°`);
     if (g.slopeDeg[i] > nv.slopeMaxDeg.value) vetoReasons.push(`Slope > ${nv.slopeMaxDeg.value}° (HLS-2015)`);
-    if (g.impassable[i]) vetoReasons.push(`Slope > vehicle limit ${veh.slopeLimitDeg.value}°`);
+    if (g.impassable[i]) vetoReasons.push(`${tr ? 'Eğim > araç sınırı' : 'Slope > vehicle limit'} ${veh.slopeLimitDeg.value}°`);
+    if (g.powerDeficit[i]) vetoReasons.push(tr ? 'Günlük güç üretimi < tüketim (Güç Vetosu <= 20)' : 'Daily generation < demand (Power Veto <= 20)');
 
-    return {
+    const discrepancies = (fc && fc.discrepancies) ? fc.discrepancies.map((d) => (
+      tr
+        ? `Saha ölçümü yörünge verisinden farklı: saha ${d.fieldVal} ${d.unit}, yörünge ${d.orbitalVal} ${d.unit}.`
+        : `Field differs from orbital: field ${d.fieldVal} ${d.unit}, orbital ${d.orbitalVal} ${d.unit}.`
+    )) : [];
+
+    const outCell = {
       row: r,
       col: c,
       idx: i,
@@ -848,13 +1416,26 @@
       lon180: cellLon180,
       lon360: +normalizeLon360(cellLon180).toFixed(5),
       finalScore: +g.final[i].toFixed(1),
+      slopeDeg: slopeVal,
+      ti: tiInt,
+      tempC: tempVal,
+      reliefM: +g.reliefM[i].toFixed(1),
+      albedo: +g.albedo[i].toFixed(2),
+      tau: cellTau,
+      gcrMSvYr: Math.round(g.gcrMSvYr[i]),
+      dailyGenWh: genWh,
+      dailyNeedWh: needWh,
+      powerDeficit: !!g.powerDeficit[i],
       impassable: !!g.impassable[i],
       nasaVeto: !!g.nasaVeto[i],
       vetoReasons,
+      discrepancies,
       geolUnit: unitCode,
       geolDesc: uMeta.desc,
       domains,
     };
+    outCell.explanation = explainCellScore(outCell, lang);
+    return outCell;
   }
 
   function exportAnalysisJSON(analysis) {
@@ -895,6 +1476,8 @@
       dataMode: analysis.dataMode,
       nativeResLabel: analysis.nativeResLabel,
       sources: analysis.sources,
+      fieldRadiusM: analysis.fieldRadiusM,
+      fieldMeasurements: analysis.fieldMeasurements || [],
       summary: analysis.summary,
       grid: {
         gridN: n,
@@ -907,10 +1490,11 @@
         geology: Array.from(analysis.grids.geology, (v) => +v.toFixed(1)),
         elevSlope: Array.from(analysis.grids.elevSlope, (v) => +v.toFixed(1)),
         dust: Array.from(analysis.grids.dust, (v) => +v.toFixed(1)),
+        power: Array.from(analysis.grids.power, (v) => +v.toFixed(1)),
         confidence: Array.from(analysis.grids.confidence, (v) => +v.toFixed(1)),
-        elevM: Array.from(analysis.grids.elevM, (v) => +v.toFixed(1)),
-        slopeDeg: Array.from(analysis.grids.slopeDeg, (v) => +v.toFixed(2)),
-        ti: Array.from(analysis.grids.ti, (v) => +v.toFixed(1)),
+        elevM: Array.from(analysis.grids.elevM, (v) => Math.round(v)),
+        slopeDeg: Array.from(analysis.grids.slopeDeg, (v) => +v.toFixed(1)),
+        ti: Array.from(analysis.grids.ti, (v) => Math.round(v)),
         dci: Array.from(analysis.grids.dci, (v) => +v.toFixed(4)),
         grsK: Array.from(analysis.grids.grsK, (v) => +v.toFixed(3)),
         grsTh: Array.from(analysis.grids.grsTh, (v) => +v.toFixed(3)),
@@ -937,6 +1521,7 @@
           tau: analysis.environment.tau,
           vehicleClass: analysis.vehicle.classId,
           dataMode: analysis.dataMode,
+          fieldMeasurements: analysis.fieldMeasurements || [],
           ...analysis.summary,
         },
         geometry: {
@@ -945,6 +1530,14 @@
         },
       },
     ];
+    for (const fm of (analysis.fieldMeasurements || [])) {
+      if (!Number.isFinite(Number(fm.lat)) || !Number.isFinite(Number(fm.lon))) continue;
+      features.push({
+        type: 'Feature',
+        properties: { featureType: 'field_measurement', ...fm },
+        geometry: { type: 'Point', coordinates: [+Number(fm.lon).toFixed(6), +Number(fm.lat).toFixed(6)] },
+      });
+    }
     const g = analysis.grids;
     for (let r = 0; r < n; r++) {
       const y1 = bb[3] - r * dLat;
@@ -966,15 +1559,17 @@
             geology: +g.geology[i].toFixed(1),
             elevSlope: +g.elevSlope[i].toFixed(1),
             dust: +g.dust[i].toFixed(1),
+            power: +g.power[i].toFixed(1),
             confidence: +g.confidence[i].toFixed(1),
-            elevM: +g.elevM[i].toFixed(1),
-            slopeDeg: +g.slopeDeg[i].toFixed(2),
-            ti: +g.ti[i].toFixed(1),
+            elevM: Math.round(g.elevM[i]),
+            slopeDeg: +g.slopeDeg[i].toFixed(1),
+            ti: Math.round(g.ti[i]),
             grsK_wtPct: +g.grsK[i].toFixed(3),
             grsTh_ppm: +g.grsTh[i].toFixed(3),
             geolUnit: g.geolUnits[i],
             impassable: !!g.impassable[i],
             nasaVeto: !!g.nasaVeto[i],
+            powerDeficit: !!g.powerDeficit[i],
           },
           geometry: {
             type: 'Polygon',
@@ -990,7 +1585,33 @@
     };
   }
 
+  const FIELD_TYPE_ALIAS = {
+    surfaceTempC: 'surfTemp',
+    airTempC: 'airTemp',
+    pressurePa: 'pressure',
+    radiationUSvHr: 'radDose',
+    slopeDeg: 'slope',
+    rockPct: 'rockAbundance',
+    iceDepthM: 'iceDepth',
+  };
+
+  const FIELD_MEASUREMENT_SPECS = {
+    ti:             { label: 'Thermal inertia',      labelTr: 'Termal atalet',         unit: 'tiu' },
+    surfaceTempC:   { label: 'Surface temperature',  labelTr: 'Yüzey sıcaklığı',        unit: '°C' },
+    airTempC:       { label: 'Air temperature',      labelTr: 'Hava sıcaklığı',         unit: '°C' },
+    pressurePa:     { label: 'Pressure',             labelTr: 'Basınç',                 unit: 'Pa' },
+    radiationUSvHr: { label: 'Radiation dose rate',  labelTr: 'Radyasyon doz hızı',     unit: 'µSv/hr' },
+    tau:            { label: 'Dust optical depth τ', labelTr: 'Toz optik derinliği τ',  unit: 'τ' },
+    slopeDeg:       { label: 'Slope',                labelTr: 'Eğim',                   unit: '°' },
+    rockPct:        { label: 'Rock abundance',       labelTr: 'Kaya yoğunluğu',         unit: '%' },
+    soilType:       { label: 'Soil type',            labelTr: 'Zemin türü',             unit: 'class' },
+    iceDepthM:      { label: 'Ice depth',            labelTr: 'Buz derinliği',          unit: 'm' },
+    hazard:         { label: 'Hazard marker',        labelTr: 'Tehlike işareti',        unit: 'marker' },
+  };
+
   const API = {
+    FIELD_MEASUREMENT_SPECS,
+    getUtcTodayIso,
     normalizeLon180,
     normalizeLon360,
     formatLonForConvention,
@@ -999,6 +1620,9 @@
     getDefaultInputs,
     findPresetCutout,
     nearestRegionName,
+    findColdestEarthDateForLat,
+    classifySourceBadge,
+    explainCellScore,
     buildGlobalFallbackGrid,
     computeEnvironmentState,
     scoreCell,

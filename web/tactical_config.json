@@ -29,13 +29,17 @@
       "verified": true,
       "source": "web/layers/meta.json: TES_Thermal_Inertia_numeric & TES_Dust_numeric fetched at 2048x1024 and upsampled 2x (~10.4 km/px)"
     },
-    "mlLayerNativeResM": {
-      "value": null,
-      "label": "non-spatial (60 s point time-series)",
-      "label_tr": "mekansal değil (60 sn nokta zaman serisi)",
-      "modelId": "PIML-GBDT-v3.2",
+    "localDemNativeM": {
+      "value": 200,
+      "unit": "m/px",
       "verified": true,
-      "source": "Inspected web/storm.js & data_pipeline/train_dust_ml.py: STORM.predictDustML classifies 60 s scalar telemetry windows; zero spatial ML raster exists in codebase"
+      "source": "USGS MOLA-HRSC Blended DEM Global v2 (Fergason, Hare & Laura 2018): 200 m/px native topography & slope"
+    },
+    "localThemisNativeM": {
+      "value": 100,
+      "unit": "m/px",
+      "verified": true,
+      "source": "ASU/USGS THEMIS Day IR Global Mosaic v12 (100 m/px) & 100 m THEMIS TI cutouts"
     }
   },
   "blend": {
@@ -50,7 +54,7 @@
     }
   },
   "environment": {
-    "defaultDate": "2026-07-01",
+    "defaultDatePolicy": "utc_today",
     "defaultLtstHours": 12.0,
     "tauRange": {
       "min": 0.2,
@@ -112,13 +116,14 @@
     }
   },
   "weights": {
-    "thermal": { "value": 0.15, "label": "Thermal", "label_tr": "Termal" },
-    "radiation": { "value": 0.12, "label": "Space Radiation", "label_tr": "Uzay Radyasyonu" },
-    "topography": { "value": 0.15, "label": "Topography", "label_tr": "Topografya" },
-    "optics": { "value": 0.10, "label": "Optics", "label_tr": "Optik" },
-    "geology": { "value": 0.13, "label": "Geology", "label_tr": "Jeoloji" },
-    "elevSlope": { "value": 0.25, "label": "Elevation / Slope", "label_tr": "Yükseklik / Eğim" },
-    "dust": { "value": 0.10, "label": "Dust", "label_tr": "Toz" }
+    "thermal": { "value": 0.13, "label": "Thermal", "label_tr": "Termal" },
+    "radiation": { "value": 0.10, "label": "Space Radiation", "label_tr": "Uzay Radyasyonu" },
+    "topography": { "value": 0.13, "label": "Topography", "label_tr": "Topografya" },
+    "optics": { "value": 0.08, "label": "Optics", "label_tr": "Optik" },
+    "geology": { "value": 0.12, "label": "Geology", "label_tr": "Jeoloji" },
+    "elevSlope": { "value": 0.21, "label": "Elevation / Slope", "label_tr": "Yükseklik / Eğim" },
+    "dust": { "value": 0.09, "label": "Dust", "label_tr": "Toz" },
+    "power": { "value": 0.14, "label": "Power & Energy", "label_tr": "Güç & Enerji" }
   },
   "domainParams": {
     "thermal": {
@@ -152,12 +157,28 @@
       "dciDusty": { "value": 0.90, "unit": "DCI", "verified": true, "source": "Ruff & Christensen (2002): TES DCI <= 0.90 indicates optically thick surface dust cover" },
       "surfaceDciShare": { "value": 0.50, "unit": "dim", "verified": false, "source": "Assumption: equal split between archival surface dust cover index (DCI) and active atmospheric optical depth tau" }
     },
-    "confidence": {
-      "baseFineCutout": { "value": 88, "unit": "score", "verified": false, "source": "Assumption: base confidence for 100 m THEMIS TI + 200 m MOLA-HRSC + 5 m CTX local cutout" },
+      "confidence": {
+      "baseFineCutout": { "value": 88, "unit": "score", "verified": false, "source": "Assumption: base confidence for 100 m THEMIS + 200 m MOLA-HRSC local cutout" },
       "hiriseBoost": { "value": 8, "unit": "score", "verified": false, "source": "Assumption: additional confidence boost where 1 m USGS HiRISE DTM coverage is present" },
       "baseGlobalFallback": { "value": 36, "unit": "score", "verified": false, "source": "Assumption: reduced confidence when offline custom coordinates rely on ~5.2 km/px global rasters" },
       "tauUncertaintyPenalty": { "value": 12, "unit": "score", "verified": false, "source": "Assumption: maximum optical/thermal retrieval uncertainty penalty under tau -> 10.8 storm dust load" },
-      "geologyFallbackScore": { "value": 65, "unit": "score", "verified": false, "source": "Assumption: neutral prior suitability when a custom polygon unit is outside known lookup keys" }
+      "geologyFallbackScore": { "value": 65, "unit": "score", "verified": false, "source": "Assumption: neutral prior suitability when a custom polygon unit is outside known lookup keys" },
+      "fieldBoostMax": { "value": 18, "unit": "score", "verified": false, "source": "Assumption: confidence uplift when in-situ field measurements cover a cell" }
+    },
+    "power": {
+      "vetoCapScore": { "value": 20, "unit": "score", "verified": false, "source": "Prompt spec 3.1: when daily generated energy < daily demand (deficit), power score = 0 and final score is vetoed <= 20" },
+      "comfortableReserveRatio": { "value": 2.0, "unit": "ratio", "verified": false, "source": "Assumption: generation/demand >= 2.0x maps to Power & Energy score 100; 1.0x break-even maps to score 50" },
+      "solarDustFloorScore": { "value": 5, "unit": "score", "verified": false, "source": "Assumption: minimum power score before total deficit veto when solar survival reserve margin is near 1.0x" },
+      "activeDutyHoursPerSol": { "value": 10, "unit": "h/sol", "verified": false, "source": "Assumption: nominal daily active EVA/drive operations + 0.15x sleep standby hotel duty over 24.66 h sol (solar arrays sleep overnight)" },
+      "sleepHotelFraction": { "value": 0.15, "unit": "dim", "verified": false, "source": "Assumption: low-power avionics sleep standby fraction outside active drive window (radiisotope/nuclear runs continuous 24h thermal/bus bus)" },
+      "nuclearWasteHeatOffset": { "value": 0.75, "unit": "dim", "verified": false, "source": "Assumption: MMRTG ~1900 W thermal waste heat covers 75% of cold trace-heating demand, leaving 25% electrical heater overhead in extreme cold" }
+    },
+    "fieldData": {
+      "defaultInfluenceRadiusM": { "value": 300, "min": 100, "max": 2000, "step": 50, "unit": "m", "verified": false, "source": "Prompt spec 4.4: default in-situ point influence radius = 300 m, adjustable in Advanced" },
+      "discrepancyRelThreshold": { "value": 0.50, "unit": "fraction", "verified": false, "source": "Prompt spec 4.4: >50% relative difference between field measurement and orbital value triggers popup discrepancy warning" },
+      "hazardSoftSandPenalty": { "value": 40, "unit": "score_pts", "verified": false, "source": "Prompt spec 4.4: soft sand hazard marker reduces cell traversability (elevSlope & thermal sinkage)" },
+      "hazardRockPenalty": { "value": 35, "unit": "score_pts", "verified": false, "source": "Prompt spec 4.4: rock hazard marker reduces cell traversability (topography & elevSlope)" },
+      "hazardCraterRimPenalty": { "value": 30, "unit": "score_pts", "verified": false, "source": "Prompt spec 4.4: crater rim hazard marker reduces cell traversability" }
     }
   },
   "nasaVeto": {

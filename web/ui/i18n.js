@@ -7,11 +7,11 @@
       brandName: 'Mars EVA & Base Decision Engine',
       brandSub: 'Landing-site, Marswalk (EVA) route & science planning on real orbital data',
       'mode.score': 'Site selection',
-      'mode.eva': 'Tactical EVA · 1m/px',
+      'mode.eva': 'Tactical EVA · 16 km²',
       'mode.route': 'Rover route',
       'mode.crisis': 'Dust-storm power',
       'mode.habitability': 'Habitability & APIs',
-      zoomLocalEva: 'Zoom to Local EVA Zone (1 m/px) & HUD',
+      zoomLocalEva: 'Open 16 km² analysis',
       'view.2d': 'Map',
       'view.3d': 'Globe',
       flytoDefault: 'Go to a region…',
@@ -87,11 +87,11 @@
       brandName: 'Mars EVA & Üs Karar Motoru',
       brandSub: 'Gerçek yörünge verileriyle iniş sahası, Marswalk (EVA) rotası ve bilim planlaması',
       'mode.score': 'Saha seçimi',
-      'mode.eva': 'Taktik EVA · 1m/px',
+      'mode.eva': 'Taktik EVA · 16 km²',
       'mode.route': 'Rover rotası',
       'mode.crisis': 'Toz fırtınası gücü',
       'mode.habitability': 'Yaşanabilirlik & API',
-      zoomLocalEva: 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD',
+      zoomLocalEva: '16 km² analizini aç',
       'view.2d': 'Harita',
       'view.3d': '3B Küre',
       flytoDefault: 'Bir bölgeye git…',
@@ -170,7 +170,7 @@
     ['.brand-name', 'Mars EVA & Üs Karar Motoru'],
     ['.brand-sub', 'Gerçek yörünge verileriyle iniş sahası, Marswalk (EVA) rotası ve bilim planlaması'],
     ['.mode-btn[data-mode="score"] .mode-label', 'Saha seçimi'],
-    ['.mode-btn[data-mode="eva"] .mode-label', 'Taktik EVA · 1m/px'],
+    ['.mode-btn[data-mode="eva"] .mode-label', 'Taktik EVA · 16 km²'],
     ['.mode-btn[data-mode="route"] .mode-label', 'Rover rotası'],
     ['.mode-btn[data-mode="crisis"] .mode-label', 'Toz fırtınası gücü'],
     ['.mode-btn[data-mode="habitability"] .mode-label', 'Yaşanabilirlik & API'],
@@ -191,9 +191,36 @@
     [['#panel-score .sec-head h2', 3], 'Ağırlık duyarlılığı'],
     ['#panel-score p.help', 'Üst sıralardaki adayların ağırlık belirsizliğine dayanıp dayanmadığını görmek için her ağırlığı 100 kez sarsarak yeniden sıralayın (%95 Wilson güven aralığıyla).'],
     ['#sens-run', 'Sağlamlık testini çalıştır'],
-    ['#panel-eva .sec-head h2', 'xGDS · TRN+AutoNav+MGL Harita Oluşturucu'],
-    ['#panel-eva .sec-head .hint', '1 km × 1 km · 10 m/hücre (1 m AutoNav)'],
-    ['#eva-intro', 'İniş sonrası 5-alanlı yüzey veri sindirimi (Topografi, Jeomorfoloji, Termal, Radyasyon, Optik): zamanla değişen ham uydu öncüllerini Perseverance TRN + AutoNav + MGL yerelleştirmesi ve canlı xGDS puanlamasıyla yeniler.'],
+    ['#panel-eva .sec-head h2', 'Taktik EVA · 16 km² Analizörü'],
+    ['#panel-eva .sec-head .hint', '4 km × 4 km · 100 m/hücre'],
+    ['#tac-sec-a > summary', 'Bölüm A · Konum'],
+    ['#tac-desc-a', 'Konum: Analiz edilecek 4 km × 4 km alanın merkezi.'],
+    ['#tac-sec-b > summary', 'Bölüm B · Zaman & Çevre'],
+    ['#tac-desc-b', 'Zaman & Çevre: Görev tarihi, yerel güneş saati, toz ve radyasyon koşulları.'],
+    ['#tac-worst-day-btn', '⚡ En kötü gün senaryosu'],
+    ['#tac-normal-day-btn', '↺ Normal koşullar'],
+    ['#tac-sec-c > summary', 'Bölüm C · Araç'],
+    ['#tac-desc-c', 'Araç: Keşif aracı sınıfı, hız, yük ve güç mimarisi.'],
+    ['#tac-sec-field > summary', 'Bölüm D · Saha Verisi (opsiyonel — gerçek görev ölçümleri)'],
+    ['#tac-desc-d', 'Saha Verisi: Rover veya astronot ölçümleriyle yerel hücreleri güncelleyin.'],
+    ['#tac-fd-tip', 'Formu otomatik doldurmak için 16 km² yerel haritada bir hücreye tıklayın.'],
+    ['#tac-fd-add-btn', '+ Ölçüm Ekle'],
+    ['#tac-fd-cancel-btn', 'İptal'],
+    ['#tac-fd-sample-btn', 'Örnek saha verisi yükle (Jezero, SİMÜLE)'],
+    ['#tac-fd-template-btn', 'Örnek CSV şablonu'],
+    ['#tac-fd-export-btn', 'JSON Dışa Aktar'],
+    ['#tac-fd-clear-btn', 'Temizle'],
+    ['#tac-sec-weights > summary', 'Alan Ağırlıkları, Veto & Yörünge Karışımı (Gelişmiş)'],
+    ['#tac-desc-w', 'Alan ağırlıkları, saha etki yarıçapı, çevrimiçi sorgu ve veto ayarları.'],
+    ['#tac-generate-btn', 'Analizi Oluştur'],
+    ['#tac-export-json', '16 km² JSON İndir'],
+    ['#tac-export-geojson', '16 km² GeoJSON İndir'],
+    ['#eva-legacy-details > summary', 'Legacy demo (analize dahil değil)'],
+    ['#tac-ws-heading', '4 km × 4 km (16 km²) Yerel Taktik Harita'],
+    ['#tac-layers-det > summary', 'Harita Katmanları & Lejant'],
+    ['#tac-layers-sub', 'Görünürlük (saydamlık)'],
+    ['#tac-coarse-note', '⚠ Gri taralı katmanlar kaba çözünürlüklü'],
+    ['#eva-intro', 'Eski demo: iniş sonrası 5-alanlı yüzey simülasyonu.'],
     ['#eva-zone-select option[value="jezero_delta"]', 'Jezero Krateri · Cheyava Şelalesi & Batı Delta (TRN+AutoNav)'],
     ['#eva-zone-select option[value="gale_boxwork"]', 'Gale Krateri · Mount Sharp Boxwork (2025–2026)'],
     ['#eva-zone-select option[value="nili_fossae"]', 'Nili Fossae · Karbonat & Kil Vadisi (Keşfedilmemiş Komşu)'],
@@ -342,7 +369,14 @@
     <ul class="spec-list">
       <li><b>Yörünge doğrulaması (9 iniş aracı + 39 HLS-2015):</b> Tarihsel 9 Mars iniş aracı <b>90. yüzdelikte</b> (<code>p &lt; 0.005</code>), 39 HLS-2015 bölgesi <b>71. yüzdelikte</b> yer alır. Yörünge uygunluğu yaya yürüyüşü güvenliğini tek başına kanıtlamaz.</li>
       <li><b>Bağımsız EVA Testi (Test 3):</b> EVA yürüyüş algoritması 4 farklı biyomda (Jezero, Gale Boxwork, Nili Fossae, Arcadia Planitia) engel sakınma, dinamik tehlike, eğim ve ≥%25 dönüş rezervi açısından bağımsız doğrulanır.</li>
-    </ul>`;
+    </ul>
+    <h3>9 · Taktik EVA 16 km² Karışım, Güç Alanı, Saha Sindirimi &amp; Doğrulama</h3>
+    <ul class="spec-list">
+      <li><b>Yerel Karışım &amp; Saha Yayılım Formülü:</b> Her 4 km × 4 km (40×40, 100 m/hücre) ızgara, merkez çevre durumuyla yörünge verisini <code>V_hücre = (1 − w) · V_merkez + w · V_yerel</code> bağıntısıyla birleştirir. Bölüm D saha ölçümleri hedef hücreyi doğrudan günceller ve komşu hücrelere <code>k(d) = (1 − (d / R)²)²</code> (varsayılan etki yarıçapı <code>R = 300 m</code>) ağırlığıyla yayılır; yörüngeyle fark &gt;%50 ise uyuşmazlık uyarısı üretilir.</li>
+      <li><b>8 Puanlanan Alan (Güç &amp; Enerji dahil):</b> Termal, Radyasyon, Topografya, Optik, Jeoloji, Yükseklik &amp; Eğim, Toz ve Güç &amp; Enerji alanları STORM güneş/MMRTG + ısıtıcı modeliyle hesaplanır. Günlük enerji açığı durumunda Güç = 0, Son Uyum ≤ 20 (VETO) uygulanır.</li>
+      <li><b>Yüksek Çözünürlüklü Veriler:</b> Önceden kesilmiş bölgeler (4 temel saha + 5 aday bölge) MOLA-HRSC 200 m DEM eğimi ve 100 m THEMIS Day IR göreli parlaklık modülasyonu (<code>MODEL</code> rozeti) içerir.</li>
+    </ul>
+    <div id="tac-benchmark-box" class="tac-benchmark-box"></div>`;
 
   const DOMAIN_TR = {
     NO_DATA: 'VERİ YOK',

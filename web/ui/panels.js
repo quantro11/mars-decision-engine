@@ -166,10 +166,16 @@
         const iceDisplay = ice.status === 'NO_DATA'
           ? (tr ? 'veri yok (±60° dışı)' : 'no data (outside ±60°)')
           : trDom(ice.status).toLowerCase().replace(/_/g, ' ');
-        li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${escHtml(name)}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">NASA EZ</span>' : ''}</div><span class="score">${c.score.toFixed(2)}</span></div>
+        const cutEng = global.MDE_TACTICAL_EVA_ENGINE;
+        const cutDb = global.MDE_EVA_CUTOUTS;
+        const hitCutout = (cutEng && cutDb && cutEng.findPresetCutout) ? cutEng.findPresetCutout(cutDb, v.lat, v.lon) : null;
+        const resBadge = hitCutout
+          ? `<span class="flag">${tr ? 'Yüksek çözünürlük (100–200 m)' : 'High-res (100–200 m)'}</span>`
+          : `<span class="flag">${tr ? 'Kaba veri (5 km)' : 'Coarse (5 km)'}</span>`;
+        li.innerHTML = `<div class="head"><div class="head-left"><span class="rank">0${i + 1}</span><span class="name">${escHtml(name)}</span>${nr.region.ez && nr.distDeg < 6 ? '<span class="flag ez">NASA EZ</span>' : ''}${resBadge}</div><span class="score">${c.score.toFixed(2)}</span></div>
           <div class="coord">${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))} · ${tr ? 'buz tutarlılığı' : 'ice consistency'}: <b>${escHtml(iceDisplay)}</b> · ${(flat * 100).toFixed(0)}% ${tr ? 'düz zemin' : 'flat ground'}${robustTag}</div>${critRowsHTML(v, S.weights, { SCORING, escHtml })}
           <div class="card-links">
-            <button type="button" class="eva-card-btn">${tr ? 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD →' : 'Zoom to Local EVA Zone (1 m/px) & HUD →'}</button>
+            <button type="button" class="eva-card-btn">${tr ? '16 km² analizini aç →' : 'Open 16 km² analysis →'}</button>
             <a class="trek" href="${escHtml(trekUrl(v.lat, v.lon))}" target="_blank" rel="noopener">${tr ? 'NASA Mars Trek (HiRISE / CTX) →' : 'NASA Mars Trek (HiRISE / CTX) →'}</a>
           </div>`;
         const trekLink = li.querySelector('.trek');
@@ -291,7 +297,7 @@
         </div>
         <div class="row">
           <button id="plan-marswalk-btn" class="btn-spec btn-full">${escHtml(tr ? 'Bu Sahada Marswalk Rotası Planla (A* + Bilim POI)' : 'Plan Marswalk at this Site (A* + Science POIs)')}</button>
-          <button id="use-eva" class="btn-spec btn-full">${escHtml(t('zoomLocalEva', tr ? 'Yerel EVA Bölgesine Yakınlaş (1 m/px) & HUD' : 'Zoom to Local EVA Zone (1 m/px) & HUD'))}</button>
+          <button id="use-eva" class="btn-spec btn-full">${escHtml(t('zoomLocalEva', tr ? '16 km² analizini aç' : 'Open 16 km² analysis'))}</button>
           <button id="use-route" class="ghost">${escHtml(t('startRouteHere', 'Start a route here'))}</button>
           <button id="use-crisis" class="ghost">${escHtml(t('useStormModel', 'Use in storm model'))}</button>
         </div>`;
