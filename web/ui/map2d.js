@@ -401,7 +401,7 @@
       if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
       if (S.route.safe && S.route.safe.stats && S.route.safe.stats.scienceWaypoints) {
         S.route.safe.stats.scienceWaypoints.forEach((wp) => {
-          drawWaypoint(wp.x, wp.y, '#e27f91', `${wp.id} ${wp.code}`);
+          drawWaypoint(wp.x, wp.y, '#ea9662', `${wp.id} ${wp.code}`);
         });
       }
       if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', t('startPin', 'Start'));

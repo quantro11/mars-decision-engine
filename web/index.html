@@ -391,7 +391,7 @@
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
-      <div class="sec-head"><h2>Rover &amp; Marswalk Route</h2><span class="hint">A* + Science POIs</span></div>
+      <div class="sec-head"><h2>Rover &amp; Marswalk Route</h2><span class="hint">A* + science stops</span></div>
       <div class="seg" id="route-mode-seg" role="group" aria-label="Traverse mode">
         <button type="button" data-rmode="rover" class="active" aria-pressed="true">Rover Traverse</button>
         <button type="button" data-rmode="marswalk" aria-pressed="false">EVA / Marswalk</button>
@@ -461,7 +461,7 @@
 
     <section id="panel-habitability" class="mode-panel hidden">
       <div class="sec-head"><h2>Planetary &amp; Habitability APIs</h2></div>
-      <p class="help">Live Mars weather and space weather from NASA rovers and DONKI.</p>
+      <p class="help">Mars weather (InSight archive, typical rover-site values) and space weather from NASA DONKI.</p>
 
       <div class="api-key-box">
         <label for="nasa-api-key">NASA Open API Key <span class="hint">optional</span></label>
@@ -672,17 +672,17 @@
       <div>
         <h3>4 · Route planner &amp; Mode Separation</h3>
         <p>Multi-hazard A* over an 8-connected, longitude-wrapping grid. Each step costs <code>distance × (1 + k · (slope + rough_pen + dust_pen))</code>, penalising steep grades, rough sub-cell relief (&gt;50 m) and low-TI fine dust traps (&lt;100 tiu). Pressurized Rover mode (~20 km/sol) places terrain rest stops ≥200 km apart; Foot EVA / Marswalk mode (2.4 km/h nominal) disables 200 km rover stops and models 1.5 km micro-rests, CO₂ RCA scrubber saturation, and a protected 25% return reserve. EVA uses the Lunar xEMU reference architecture extrapolated to Mars 0.38g / 6–10 mbar CO₂ (not flight-certified Mars hardware).</p>
-        <h3>5 · Dust-storm power &amp; live telemetry models</h3>
-        <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code> calibrated so τ ≈ 10.8 reproduces Opportunity's 2018 loss. REMS/MEDA/InSight weather cards state station coordinates, Sol, UTC date, and hydrostatic elevation extrapolation. NASA DONKI alerts model 1.524 AU propagation &amp; transit delay separately from instantaneous surface radiation.</p>
+        <h3>5 · Dust-storm power &amp; weather models</h3>
+        <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code> calibrated so τ ≈ 10.8 reproduces Opportunity's 2018 loss. REMS/MEDA rows are typical values for each rover site (not a single archived sol); InSight data come from its archive. Both can be extrapolated to another site by elevation (hydrostatic) and latitude. NASA DONKI alerts model 1.524 AU propagation &amp; transit delay separately from instantaneous surface radiation.</p>
       </div>
     </div>
 
     <h3>6 · Season, radiation &amp; Monte Carlo weight sensitivity</h3>
     <p>Seasonal insolation <code>S(φ, Lₛ)</code> uses Mars's 25.19° obliquity and orbital eccentricity (e = 0.0934, perihelion at Lₛ = 251°). Atmospheric column mass follows from MOLA elevation (16.4 g/cm² at datum, 11.1 km scale height) for chronic GCR dose (Gale Crater Curiosity RAD 0.64 mSv/day ± 18.8% uncertainty band) and a design-basis August-1972-class SPE assumption (λ = 15 g/cm²). The Monte Carlo test perturbs every weight <b>100 times</b> and reports <b>95% Wilson binomial confidence intervals</b> on Top-5 stability.</p>
 
-    <h3>7 · Global (~5 km/px) vs. Local HiRISE (1.0–2.0 m/post) &amp; Data Traceability</h3>
+    <h3>7 · Scale and data traceability</h3>
     <ul class="spec-list">
-      <li><b>Scale &amp; HiRISE DTM Provenance.</b> Phase 1 global layers (~5 km/px MOLA, ~10 km/px TES, SWIM 2.0) cannot resolve sub-hectometer boulders or craters. Foot EVA routing requires HiRISE stereo DTMs (e.g., <code>DTEEC_068393_1985_068973_1985_A01</code>, SOCET SET processing, 1.0–2.0 m/post spacing, &lt;3% global Mars coverage); outside archival footprints, Module III models synthetic 1 m/px roughness seeded by orbital priors.</li>
+      <li><b>Scale.</b> Global layers (~5 km/px MOLA, ~10 km/px TES, SWIM 2.0) cannot resolve sub-hectometer boulders or craters. Walking routes need HiRISE stereo terrain models (1.0–2.0 m/post, &lt;3% of Mars). The app does not model terrain finer than its 100 m Tactical EVA cells.</li>
       <li><b>Tactical EVA (16 km²).</b> For 9 sites the app ships 4 km × 4 km boxes at 100 m/cell cut from the MOLA-HRSC 200 m DEM and THEMIS 100 m day-IR mosaic. Hazards smaller than ~100 m (boulders, small craters) remain invisible; certifying a traverse needs HiRISE stereo terrain models.</li>
       <li><b>Caves &amp; Ice Boundaries.</b> MGC³ cave entries are unconfirmed orbital thermal/optical anomalies (Cushing et al. 2015), not verified shelter tunnels. SWIM maps ±60° consistency only; outside ±60° is labeled <code>NO_DATA</code> (distinct from ice-free).</li>
     </ul>

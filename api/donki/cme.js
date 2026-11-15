@@ -1,35 +1,19 @@
 // Vercel Serverless Function: Same-origin proxy for NASA DONKI Coronal Mass Ejection (CME) API (/api/donki/cme)
-// Caches upstream DONKI responses for 15 minutes and falls back to verified archive events on HTTP 400/429.
+// Caches upstream DONKI responses for 15 minutes and falls back to one documented reference event on HTTP 400/429.
 'use strict';
 
 let cachedEvents = null;
 let cachedAt = 0;
 const TTL_MS = 15 * 60 * 1000; // 15 minutes
 
+// Offline fallback: a single well-documented reference event (no invented catalogue entries).
+// May 20, 2024 X12 flare + CME from AR3664/AR3697 reached Mars; Curiosity RAD measured ~8,100 µGy (NASA/JPL, June 2024).
 const ARCHIVE_CME_EVENTS = [
   {
-    activityID: '2025-10-18T14:24:00-CME-001',
-    startTime: '2025-10-18T14:24Z',
-    cmeAnalyses: [{ speed: 1940 }],
-    note: 'Solar Cycle 25 maximum X4.2 halo CME; Mars-directed Parker spiral impact recorded by MAVEN SEP & Curiosity RAD (Boxwork campaign).'
-  },
-  {
-    activityID: '2025-06-03T09:12:00-CME-001',
-    startTime: '2025-06-03T09:12Z',
-    cmeAnalyses: [{ speed: 1680 }],
-    note: 'X2.9 fast halo CME; global Martian diffuse proton aurora observed by MAVEN IUVS and Perseverance MEDA.'
-  },
-  {
-    activityID: '2025-02-24T19:36:00-CME-001',
-    startTime: '2025-02-24T19:36Z',
-    cmeAnalyses: [{ speed: 1510 }],
-    note: 'X2.0 western-limb CME; elevated surface GCR/SEP dose rate measured at Gale (-4.1 km) and Jezero (-2.5 km).'
-  },
-  {
-    activityID: '2024-05-14T16:48:00-CME-001',
-    startTime: '2024-05-14T16:48Z',
-    cmeAnalyses: [{ speed: 2140 }],
-    note: 'Benchmark X8.7 halo CME from AR3664; direct Mars impact recorded by MAVEN & Curiosity RAD (~8.1 mGy surface peak, largest since 2003).'
+    activityID: '2024-05-20-X12-REFERENCE',
+    startTime: '2024-05-20',
+    cmeAnalyses: [],
+    note: 'Reference event: estimated X12 flare + CME from AR3664/AR3697 reached Mars; Curiosity RAD measured ~8,100 µGy (NASA, June 2024).'
   }
 ];
 

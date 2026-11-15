@@ -6,9 +6,9 @@
   "planet": {
     "radiusM": { "value": 3396190.0, "unit": "m", "verified": true, "source": "IAU/IAG Mars 2000 Sphere (USGS SIM 3292 & MOLA standard)" },
     "degToMeters": { "value": 59274.697, "unit": "m/deg", "verified": true, "source": "pi * 3396190 / 180" },
-    "boxSizeKm": { "value": 4, "unit": "km", "verified": true, "source": "Prompt spec: 4 km x 4 km (16 km^2) local EVA grid" },
-    "gridN": { "value": 40, "unit": "cells", "verified": true, "source": "Prompt spec: 40 x 40 grid at 100 m/cell" },
-    "cellSizeM": { "value": 100, "unit": "m", "verified": true, "source": "Prompt spec: 4000 m / 40 = 100 m per cell" }
+    "boxSizeKm": { "value": 4, "unit": "km", "verified": true, "source": "Design choice: 4 km x 4 km (16 km^2) local EVA grid" },
+    "gridN": { "value": 40, "unit": "cells", "verified": true, "source": "Design choice: 40 x 40 grid at 100 m/cell" },
+    "cellSizeM": { "value": 100, "unit": "m", "verified": true, "source": "Design choice: 4000 m / 40 = 100 m per cell" }
   },
   "resolution": {
     "globalBaselineDeliveredM": {
@@ -166,7 +166,7 @@
       "fieldBoostMax": { "value": 18, "unit": "score", "verified": false, "source": "Assumption: confidence uplift when in-situ field measurements cover a cell" }
     },
     "power": {
-      "vetoCapScore": { "value": 20, "unit": "score", "verified": false, "source": "Prompt spec 3.1: when daily generated energy < daily demand (deficit), power score = 0 and final score is vetoed <= 20" },
+      "vetoCapScore": { "value": 20, "unit": "score", "verified": false, "source": "Design choice: when daily generated energy < daily demand (deficit), power score = 0 and final score is vetoed <= 20" },
       "comfortableReserveRatio": { "value": 2.0, "unit": "ratio", "verified": false, "source": "Assumption: generation/demand >= 2.0x maps to Power & Energy score 100; 1.0x break-even maps to score 50" },
       "solarDustFloorScore": { "value": 5, "unit": "score", "verified": false, "source": "Assumption: minimum power score before total deficit veto when solar survival reserve margin is near 1.0x" },
       "activeDutyHoursPerSol": { "value": 10, "unit": "h/sol", "verified": false, "source": "Assumption: nominal daily active EVA/drive operations + 0.15x sleep standby hotel duty over 24.66 h sol (solar arrays sleep overnight)" },
@@ -174,11 +174,11 @@
       "nuclearWasteHeatOffset": { "value": 0.75, "unit": "dim", "verified": false, "source": "Assumption: MMRTG ~1900 W thermal waste heat covers 75% of cold trace-heating demand, leaving 25% electrical heater overhead in extreme cold" }
     },
     "fieldData": {
-      "defaultInfluenceRadiusM": { "value": 300, "min": 100, "max": 2000, "step": 50, "unit": "m", "verified": false, "source": "Prompt spec 4.4: default in-situ point influence radius = 300 m, adjustable in Advanced" },
-      "discrepancyRelThreshold": { "value": 0.50, "unit": "fraction", "verified": false, "source": "Prompt spec 4.4: >50% relative difference between field measurement and orbital value triggers popup discrepancy warning" },
-      "hazardSoftSandPenalty": { "value": 40, "unit": "score_pts", "verified": false, "source": "Prompt spec 4.4: soft sand hazard marker reduces cell traversability (elevSlope & thermal sinkage)" },
-      "hazardRockPenalty": { "value": 35, "unit": "score_pts", "verified": false, "source": "Prompt spec 4.4: rock hazard marker reduces cell traversability (topography & elevSlope)" },
-      "hazardCraterRimPenalty": { "value": 30, "unit": "score_pts", "verified": false, "source": "Prompt spec 4.4: crater rim hazard marker reduces cell traversability" }
+      "defaultInfluenceRadiusM": { "value": 300, "min": 100, "max": 2000, "step": 50, "unit": "m", "verified": false, "source": "Design choice: default in-situ point influence radius = 300 m, adjustable in Advanced" },
+      "discrepancyRelThreshold": { "value": 0.50, "unit": "fraction", "verified": false, "source": "Design choice: >50% relative difference between field measurement and orbital value triggers popup discrepancy warning" },
+      "hazardSoftSandPenalty": { "value": 40, "unit": "score_pts", "verified": false, "source": "Design choice: soft sand hazard marker reduces cell traversability (elevSlope & thermal sinkage)" },
+      "hazardRockPenalty": { "value": 35, "unit": "score_pts", "verified": false, "source": "Design choice: rock hazard marker reduces cell traversability (topography & elevSlope)" },
+      "hazardCraterRimPenalty": { "value": 30, "unit": "score_pts", "verified": false, "source": "Design choice: crater rim hazard marker reduces cell traversability" }
     }
   },
   "nasaVeto": {

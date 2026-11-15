@@ -15,7 +15,9 @@
     gravity_g: 1.0,
   };
 
-  // Current 2025–2026 active surface meteorology from MSL Curiosity (REMS) and Mars 2020 Perseverance (MEDA)
+  // Representative weather at the active rover sites (Curiosity REMS, Perseverance MEDA) — see note below
+  // Representative (typical) weather at the two active rover sites. These are rounded, season-typical values,
+  // NOT a specific archived sol, and are labelled that way in the UI.
   const ACTIVE_ROVER_WEATHER_2026 = [
     {
       id: 'msl_rems',
@@ -25,15 +27,12 @@
       lat: -4.59,
       lon: 137.44,
       elev_m: -4120,
-      sol: 4485,
-      earthDate: '2025-03-18 UTC',
-      dataType: 'ARCHIVE_TELEMETRY (PDS Atmospheres Node)',
-      period: '2025–2026 Campaign',
+      dataType: 'REPRESENTATIVE',
+      period: 'Typical southern-autumn values (REMS climatology)',
       air_temp_c: { min: -74, mean: -41, max: -7 },
       pressure_pa: 752,
       wind_mps: 4.6,
-      tau: 0.54,
-      rad_ugy_sol: 640
+      tau: 0.54
     },
     {
       id: 'm2020_meda',
@@ -43,15 +42,12 @@
       lat: 18.38,
       lon: 77.58,
       elev_m: -2540,
-      sol: 1468,
-      earthDate: '2025-04-02 UTC',
-      dataType: 'ARCHIVE_TELEMETRY (PDS Atmospheres Node)',
-      period: '2025–2026 Campaign',
+      dataType: 'REPRESENTATIVE',
+      period: 'Typical northern-spring values (MEDA climatology)',
       air_temp_c: { min: -81, mean: -50, max: -13 },
       pressure_pa: 734,
       wind_mps: 5.8,
-      tau: 0.48,
-      rad_ugy_sol: 685
+      tau: 0.48
     }
   ];
 
@@ -75,8 +71,6 @@
     return {
       stationMission: st.mission,
       stationCoords: `${st.lat.toFixed(2)}°N, ${st.lon.toFixed(2)}°E (${st.elev_m} m)`,
-      sol: st.sol,
-      earthDate: st.earthDate,
       dataType: st.dataType,
       targetCoords: `${tLat.toFixed(2)}°N, ${tLon.toFixed(2)}°E (${Math.round(tElev)} m)`,
       distKm,
@@ -84,8 +78,8 @@
       deltaLatDeg,
       projectedPressurePa,
       projectedMeanTempC,
-      disclaimer: `Point measurement from ${st.instrument} at (${st.lat}°N, ${st.lon}°E, Sol ${st.sol}, ${st.earthDate}). Extrapolated ${distKm} km (Δh=${deltaElevM >= 0 ? '+' : ''}${deltaElevM} m) via hydrostatic scale height (H=11.1 km) & latitudinal gradient.`,
-      disclaimerTr: `${st.instrument} nokta ölçümü (${st.lat}°K, ${st.lon}°D, Sol ${st.sol}, ${st.earthDate}). Seçilen rotaya ${distKm} km (Δh=${deltaElevM >= 0 ? '+' : ''}${deltaElevM} m) hidrostatik ölçek yüksekliği (H=11.1 km) ve enlem gradyanı ile aktarılmıştır.`
+      disclaimer: `Typical ${st.instrument} values at (${st.lat}°N, ${st.lon}°E), extrapolated ${distKm} km (Δh=${deltaElevM >= 0 ? '+' : ''}${deltaElevM} m) via hydrostatic scale height (H=11.1 km) & latitudinal gradient.`,
+      disclaimerTr: `${st.instrument} için tipik değerler (${st.lat}°K, ${st.lon}°D); seçilen rotaya ${distKm} km (Δh=${deltaElevM >= 0 ? '+' : ''}${deltaElevM} m) hidrostatik ölçek yüksekliği (H=11.1 km) ve enlem gradyanı ile aktarılmıştır.`
     };
   }
 
@@ -94,7 +88,7 @@
   // Models DBM transit time to 1.524 AU, 1/r² flux dilution (0.431×), and Mars CO₂ column attenuation.
   function estimateMarsSpaceWeatherImpact(events, flareRes, siteElevM) {
     const latestCme = Array.isArray(events) && events.length ? events[0] : null;
-    const speedKms = (latestCme && Number.isFinite(latestCme.speed_kms) && latestCme.speed_kms > 0) ? latestCme.speed_kms : 1510;
+    const speedKms = (latestCme && Number.isFinite(latestCme.speed_kms) && latestCme.speed_kms > 0) ? latestCme.speed_kms : 1500; // assumed typical fast CME when no speed is known
     const elevM = Number.isFinite(siteElevM) ? siteElevM : -2540;
     const marsDistKm = 1.524 * 149597870.7; // 2.2799e8 km
     // Drag-based effective propagation speed to 1.524 AU (Vrsnak et al. 2013 DBM approximation)
@@ -225,32 +219,15 @@
   const ARCHIVE_SOURCE =
     `NASA InSight weather feed (frozen at sol ${INSIGHT_FROZEN.sol}, ${INSIGHT_FROZEN.date}) - NOT live`;
 
-  // Verified NASA DONKI CME Archive: Solar Cycle 25 (2025–2026) Mars-directed CMEs & May 2024 AR3664 superstorm
-  // (measured at Mars by MAVEN SEP/IUVS, Curiosity MSL/RAD, and Perseverance MEDA).
+  // Offline fallback: one well-documented reference event only (no invented catalogue entries).
+  // May 20, 2024: estimated X12 flare from AR3664 (renamed AR3697) and the following CME reached Mars; Curiosity RAD
+  // measured ~8,100 µGy, its largest surge since landing (NASA/JPL release, June 10 2024). CME speed not given there.
   const DONKI_ARCHIVE_FALLBACK = [
     {
-      id: '2025-10-18T14:24:00-CME-001',
-      startTime: '2025-10-18T14:24Z',
-      speed_kms: 1940,
-      note: 'Solar Cycle 25 maximum X4.2 halo CME; Mars-directed Parker spiral impact recorded by MAVEN SEP & Curiosity RAD (Boxwork campaign).'
-    },
-    {
-      id: '2025-06-03T09:12:00-CME-001',
-      startTime: '2025-06-03T09:12Z',
-      speed_kms: 1680,
-      note: 'X2.9 fast halo CME; global Martian diffuse proton aurora observed by MAVEN IUVS and Perseverance MEDA.'
-    },
-    {
-      id: '2025-02-24T19:36:00-CME-001',
-      startTime: '2025-02-24T19:36Z',
-      speed_kms: 1510,
-      note: 'X2.0 western-limb CME; elevated surface GCR/SEP dose rate measured at Gale (-4.1 km) and Jezero (-2.5 km).'
-    },
-    {
-      id: '2024-05-14T16:48:00-CME-001',
-      startTime: '2024-05-14T16:48Z',
-      speed_kms: 2140,
-      note: 'Benchmark X8.7 halo CME from AR3664; direct Mars impact recorded by MAVEN & Curiosity RAD (~8.1 mGy surface peak, largest since 2003).'
+      id: '2024-05-20-X12-REFERENCE',
+      startTime: '2024-05-20',
+      speed_kms: null,
+      note: 'Reference event: estimated X12 flare + CME from AR3664/AR3697 reached Mars; Curiosity RAD measured ~8,100 µGy (NASA, June 2024).'
     }
   ];
 
@@ -323,7 +300,7 @@
       } catch (err) {
         return {
           mode: 'live_archive',
-          source: 'NASA DONKI CME Archive (2025–2026 Solar Cycle 25 & AR3664 Mars superstorm sequence · verified fallback)',
+          source: 'Offline fallback: May 2024 reference event (NASA/JPL), not a live catalogue',
           events: DONKI_ARCHIVE_FALLBACK.slice(),
         };
       }
@@ -336,7 +313,7 @@
     if (!events.length) {
       return {
         mode: 'live_archive',
-        source: 'NASA DONKI CME Archive (2025–2026 Solar Cycle 25 & AR3664 Mars superstorm sequence · verified fallback)',
+        source: 'Offline fallback: May 2024 reference event (NASA/JPL), not a live catalogue',
         events: DONKI_ARCHIVE_FALLBACK.slice(),
       };
     }

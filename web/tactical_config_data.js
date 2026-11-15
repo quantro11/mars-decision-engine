@@ -23,19 +23,19 @@
       "value": 4,
       "unit": "km",
       "verified": true,
-      "source": "Prompt spec: 4 km x 4 km (16 km^2) local EVA grid"
+      "source": "Design choice: 4 km x 4 km (16 km^2) local EVA grid"
     },
     "gridN": {
       "value": 40,
       "unit": "cells",
       "verified": true,
-      "source": "Prompt spec: 40 x 40 grid at 100 m/cell"
+      "source": "Design choice: 40 x 40 grid at 100 m/cell"
     },
     "cellSizeM": {
       "value": 100,
       "unit": "m",
       "verified": true,
-      "source": "Prompt spec: 4000 m / 40 = 100 m per cell"
+      "source": "Design choice: 4000 m / 40 = 100 m per cell"
     }
   },
   "resolution": {
@@ -423,7 +423,7 @@
         "value": 20,
         "unit": "score",
         "verified": false,
-        "source": "Prompt spec 3.1: when daily generated energy < daily demand (deficit), power score = 0 and final score is vetoed <= 20"
+        "source": "Design choice: when daily generated energy < daily demand (deficit), power score = 0 and final score is vetoed <= 20"
       },
       "comfortableReserveRatio": {
         "value": 2,
@@ -464,31 +464,31 @@
         "step": 50,
         "unit": "m",
         "verified": false,
-        "source": "Prompt spec 4.4: default in-situ point influence radius = 300 m, adjustable in Advanced"
+        "source": "Design choice: default in-situ point influence radius = 300 m, adjustable in Advanced"
       },
       "discrepancyRelThreshold": {
         "value": 0.5,
         "unit": "fraction",
         "verified": false,
-        "source": "Prompt spec 4.4: >50% relative difference between field measurement and orbital value triggers popup discrepancy warning"
+        "source": "Design choice: >50% relative difference between field measurement and orbital value triggers popup discrepancy warning"
       },
       "hazardSoftSandPenalty": {
         "value": 40,
         "unit": "score_pts",
         "verified": false,
-        "source": "Prompt spec 4.4: soft sand hazard marker reduces cell traversability (elevSlope & thermal sinkage)"
+        "source": "Design choice: soft sand hazard marker reduces cell traversability (elevSlope & thermal sinkage)"
       },
       "hazardRockPenalty": {
         "value": 35,
         "unit": "score_pts",
         "verified": false,
-        "source": "Prompt spec 4.4: rock hazard marker reduces cell traversability (topography & elevSlope)"
+        "source": "Design choice: rock hazard marker reduces cell traversability (topography & elevSlope)"
       },
       "hazardCraterRimPenalty": {
         "value": 30,
         "unit": "score_pts",
         "verified": false,
-        "source": "Prompt spec 4.4: crater rim hazard marker reduces cell traversability"
+        "source": "Design choice: crater rim hazard marker reduces cell traversability"
       }
     }
   },
