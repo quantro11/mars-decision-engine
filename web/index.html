@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Martiap — Mars EVA &amp; Base Decision Engine</title>
-<meta name="description" content="Where should humans land, live, and walk on Mars? Phase 1 orbital base selection and Phase 2 hyper-local 1m/px EVA &amp; suit HUD planner built on real NASA data.">
+<meta name="description" content="Where should humans land and live on Mars? Landing-site selection, 16 km² tactical EVA analysis, rover routes and dust-storm survival on real NASA data.">
 <link rel="canonical" href="https://mars-decision-engine.vercel.app/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="32x32">
@@ -16,7 +16,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="preload" href="fonts/GlacialIndifference-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -389,77 +388,6 @@
         </div>
       </div>
 
-      <details id="eva-legacy-details" class="tac-legacy">
-        <summary>Legacy demo (not part of analysis)</summary>
-        <div class="tac-legacy-body">
-          <p class="help" id="eva-intro">Legacy demo of a post-landing surface survey.</p>
-          <div class="control-group">
-            <label for="eva-zone-select">Target Landing Zone / Biome
-              <select id="eva-zone-select">
-                <option value="jezero_delta" selected>Jezero Crater · Cheyava Falls &amp; Western Delta (TRN+AutoNav)</option>
-                <option value="gale_boxwork">Gale Crater · Mount Sharp Boxwork (2025–2026)</option>
-                <option value="nili_fossae">Nili Fossae · Carbonate &amp; Clay Trough (Unexplored Adjacent)</option>
-                <option value="arcadia_ice">Arcadia Planitia · Polygon Ice Sheet</option>
-              </select>
-            </label>
-            <label for="eva-domain-layer">5-Domain Assimilation Layer (xGDS)
-              <select id="eva-domain-layer">
-                <option value="composite">5-Domain Composite Relief &amp; Route</option>
-                <option value="topography">Domain 1 · Topography (Stereo DEM Slope &amp; Scarp)</option>
-                <option value="geomorphology">Domain 2 · Geomorphology (Boulders, Fractures &amp; Dunes)</option>
-                <option value="thermal">Domain 3 · Thermal (In-Situ TI &amp; Dust Drift)</option>
-                <option value="radiation">Domain 4 · Radiation (RAD &amp; Horizon Sky-View)</option>
-                <option value="optical">Domain 5 · Optical (SuperCam VNIR &amp; Albedo)</option>
-              </select>
-            </label>
-            <label for="eva-score-mode">xGDS Live Scoring Objective
-              <select id="eva-score-mode">
-                <option value="balanced">Balanced Mission (Hab Safety + Science)</option>
-                <option value="hab_safety">Habitat &amp; Traverse Engineering Safety</option>
-                <option value="science_bio">Astrobiology &amp; Geochemistry Discovery</option>
-                <option value="isru_water">ISRU Water &amp; Thermal Stability</option>
-                <option value="custom">Custom 5-Domain Weights (Manual Sliders)</option>
-              </select>
-            </label>
-            <div id="eva-custom-weights" class="eva-custom-weights hidden">
-              <label>Topography weight <span id="eva-w-topo-v">24%</span>
-                <input type="range" id="eva-w-topo" min="0" max="100" step="1" value="24"></label>
-              <label>Geomorphology weight <span id="eva-w-geo-v">24%</span>
-                <input type="range" id="eva-w-geo" min="0" max="100" step="1" value="24"></label>
-              <label>Thermal inertia weight <span id="eva-w-therm-v">16%</span>
-                <input type="range" id="eva-w-therm" min="0" max="100" step="1" value="16"></label>
-              <label>Radiation shield weight <span id="eva-w-rad-v">18%</span>
-                <input type="range" id="eva-w-rad" min="0" max="100" step="1" value="18"></label>
-              <label>Optical spectral weight <span id="eva-w-opt-v">18%</span>
-                <input type="range" id="eva-w-opt" min="0" max="100" step="1" value="18"></label>
-            </div>
-            <label>AutoNav Surface Assimilation Progress <span id="eva-scan-step-v">Step 4/8 · 56%</span>
-              <input type="range" id="eva-scan-step" min="0" max="8" step="1" value="4"></label>
-            <div class="eva-sim-btns">
-              <button type="button" id="btn-eva-reset" class="ghost">Orbital Prior (0%)</button>
-              <button type="button" id="btn-eva-step" class="ghost">+1 Scan</button>
-              <button type="button" id="btn-eva-play" class="btn-spec">Auto-Scan</button>
-              <button type="button" id="btn-eva-scan" class="ghost">100% Verified</button>
-              <button type="button" id="btn-eva-mgl" class="ghost">MGL Pose Lock: ON</button>
-              <button type="button" id="btn-eva-spe" class="ghost">SPE 30m Escape Sim</button>
-              <button type="button" id="btn-eva-hazard" class="ghost">+ Inject Hazard</button>
-            </div>
-            <label for="eva-buddy-mode">EVA Crew &amp; Mobility Architecture
-              <select id="eva-buddy-mode">
-                <option value="buddy">2-Crew Buddy System (EV-1 + EV-2 Foot Pair)</option>
-                <option value="rover_eva">Pressurized Rover + Foot EVA Combination</option>
-              </select>
-            </label>
-            <label>Science equipment / sample load <span id="eva-load-v">15 kg</span>
-              <input type="range" id="eva-load" min="0" max="35" step="1" value="15"></label>
-            <label>Astronaut walking speed <span id="eva-speed-v">2.4 km/h</span>
-              <input type="range" id="eva-speed" min="10" max="45" step="1" value="24"></label>
-            <label>Model EVA max slope (soil-adjusted) <span id="eva-maxslope-v">15°</span>
-              <input type="range" id="eva-maxslope" min="8" max="24" step="1" value="15"></label>
-          </div>
-          <div id="eva-results"></div>
-        </div>
-      </details>
     </section>
 
     <section id="panel-route" class="mode-panel hidden">
@@ -755,14 +683,15 @@
     <h3>7 · Global (~5 km/px) vs. Local HiRISE (1.0–2.0 m/post) &amp; Data Traceability</h3>
     <ul class="spec-list">
       <li><b>Scale &amp; HiRISE DTM Provenance.</b> Phase 1 global layers (~5 km/px MOLA, ~10 km/px TES, SWIM 2.0) cannot resolve sub-hectometer boulders or craters. Foot EVA routing requires HiRISE stereo DTMs (e.g., <code>DTEEC_068393_1985_068973_1985_A01</code>, SOCET SET processing, 1.0–2.0 m/post spacing, &lt;3% global Mars coverage); outside archival footprints, Module III models synthetic 1 m/px roughness seeded by orbital priors.</li>
-      <li><b>Live Map Building (Phase 2).</b> Upon landing, the xGDS + Perseverance (TRN + AutoNav + MGL) engine assimilates local surface telemetry across 5 domains to detect orbital-vs-in-situ hazards (including dynamic rockfall anomalies), trigger automatic A* rerouting with explicit rationale, and track PLSS O₂, cooling H₂O, CO₂ RCA capacity, and return reserve.</li>
+      <li><b>Tactical EVA (16 km²).</b> For 9 sites the app ships 4 km × 4 km boxes at 100 m/cell cut from the MOLA-HRSC 200 m DEM and THEMIS 100 m day-IR mosaic. Hazards smaller than ~100 m (boulders, small craters) remain invisible; certifying a traverse needs HiRISE stereo terrain models.</li>
       <li><b>Caves &amp; Ice Boundaries.</b> MGC³ cave entries are unconfirmed orbital thermal/optical anomalies (Cushing et al. 2015), not verified shelter tunnels. SWIM maps ±60° consistency only; outside ±60° is labeled <code>NO_DATA</code> (distinct from ice-free).</li>
     </ul>
 
-    <h3>8 · Independent Orbital &amp; EVA Validation + Terrestrial Portability</h3>
+    <h3>8 · Validation</h3>
     <ul>
       <li><b>Orbital benchmark (9 landers + 39 HLS-2015 zones).</b> Against 200 random-longitude draws per ±5° latitude band, historical Mars landers rank at the <b>90th percentile</b> (<code>p &lt; 0.005</code>, weighted sum; <b>89th</b> geometric mean) and all 39 NASA HLS-2015 Exploration Zones rank at the <b>71st percentile</b> (<code>p &lt; 0.005</code>).</li>
-      <li><b>Independent EVA Scenario Validation (Test 3).</b> Because orbital landing suitability does not prove footpath safety, EVA routing and PLSS math are tested separately across 4 terrain biomes (Jezero Delta, Gale Boxwork, Nili Fossae, Arcadia Planitia) for obstacle detouring, dynamic hazard rerouting, slope bounds, and ≥25% return reserve protection.</li>
+      <li><b>Suit energy model vs Apollo (Test 3).</b> At lunar gravity the suit metabolic model gives ~271 W, inside the Apollo 14–17 per-EVA range (≈228–352 W, mean 272 W; NASA TN D-7883). Its one free constant is calibrated to that mean, so this is a consistency check; Mars values are extrapolations.</li>
+      <li><b>Dust-devil risk index.</b> A hand-tuned heuristic on physical features with modelled (not live) inputs. Shown as a 0–100 index; no accuracy is claimed.</li>
     </ul>
 
     <h3>9 · Tactical EVA 16 km² Blend, Power Domain, Field Assimilation &amp; Provenance</h3>
@@ -803,19 +732,6 @@
   </div>
 </div>
 
-<div id="hud-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="hud-modal-title">
-  <div class="modal-box hud-modal-box">
-    <div class="modal-header">
-      <div>
-        <div class="hint">Phase 2 · Ground POV &amp; xEMU Visor Display</div>
-        <h1 id="hud-modal-title">xEMU Helmet Visor HUD</h1>
-        <div class="help note-sm" id="hud-modal-sub">Curiosity Mastcam / Perseverance Navcam Surface Perspective</div>
-      </div>
-      <button class="modal-close" id="hud-close" aria-label="Close">Close</button>
-    </div>
-    <div id="hud-modal-body"></div>
-  </div>
-</div>
 
 <script src="layers/meta.js"></script>
 <script src="caves.js"></script>
@@ -838,10 +754,6 @@
 <script src="eva_cutouts_data.js"></script>
 <script src="tactical_eva_engine.js"></script>
 <script src="ui/tactical_eva_ui.js"></script>
-<script src="ui/eva_zones.js"></script>
-<script src="ui/eva_sim.js"></script>
-<script src="ui/eva_render.js"></script>
-<script src="ui/eva.js"></script>
 <script src="ui/panels.js"></script>
 <script src="ui/landing_site.js"></script>
 <script src="ui/map2d.js"></script>

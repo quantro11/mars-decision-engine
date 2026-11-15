@@ -43,6 +43,15 @@ for (const apiFile of ['api/insight.js', 'api/rover.js', 'api/donki/cme.js', 'ap
 assert.ok(fs.readFileSync(path.join(ROOT, 'api/rover.js'), 'utf8').includes('qObj.camera'), 'api/rover.js accepts ?camera= query parameter from live_api.js');
 assert.ok(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').includes("serviceWorker.register('./sw.js')"), 'web/app.js registers offline service worker sw.js');
 assert.ok(fs.readFileSync(path.join(WEB, 'sw.js'), 'utf8').includes('./layers/elev.png'), 'web/sw.js caches planetary raster layers');
+{
+  // Every service-worker core asset must exist (one 404 makes cache.addAll fail and breaks offline mode),
+  // and every <script> the page loads must be cached.
+  const swSrc = fs.readFileSync(path.join(WEB, 'sw.js'), 'utf8');
+  const core = [...swSrc.matchAll(/'\.\/([^']*)'/g)].map((m) => m[1]).filter(Boolean);
+  for (const rel of core) assert.ok(fs.existsSync(path.join(WEB, rel)), `sw.js CORE_ASSETS entry exists on disk: ${rel}`);
+  const pageHtml = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
+  for (const m of pageHtml.matchAll(/<script src="([^"]+)"/g)) assert.ok(core.includes(m[1]), `sw.js caches page script ${m[1]}`);
+}
 
 // 4. layers/meta.js must stay synchronized with layers/meta.json
 const metaJson = JSON.parse(fs.readFileSync(path.join(WEB, 'layers/meta.json'), 'utf8'));
@@ -75,7 +84,7 @@ assert.ok(html.includes('class="skip-link"') && html.includes('id="sr-status"') 
 assert.ok((html.match(/aria-modal=["']true["']/g) || []).length >= 2, 'modals must declare aria-modal="true"');
 assert.ok(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').split(/\r?\n/).length <= 480, 'web/app.js coordinator stays compact (<= 480 lines)');
 assert.ok(fs.existsSync(path.join(ROOT, 'CONTRIBUTING.md')) && fs.existsSync(path.join(ROOT, 'docs/yarisma_raporu_tr.md')), 'CONTRIBUTING.md and competition guide exist');
-for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/eva_zones.js', 'ui/eva_sim.js', 'ui/eva_render.js', 'ui/eva.js', 'ui/landing_site.js', 'ui/panels.js', 'ui/overlays.js', 'ui/charts.js', 'ui/format.js', 'ui/map2d.js', 'ui/layers.js', 'live_api.js', 'app.js']) {
+for (const f of ['index.html', 'ui/habitability.js', 'ui/brief.js', 'ui/i18n.js', 'ui/landing_site.js', 'ui/panels.js', 'ui/overlays.js', 'ui/charts.js', 'ui/format.js', 'ui/map2d.js', 'ui/layers.js', 'live_api.js', 'app.js']) {
   const src = fs.readFileSync(path.join(WEB, f), 'utf8');
   assert.ok(!/style=/.test(src), `Inline HTML style= attribute found in web/${f} (strict style-src 'self' violation)`);
   for (const hex of ['#38bdf8', '#a3e635', '#f97316']) {
@@ -93,7 +102,7 @@ for (const rel of ['index.html', 'style.css', 'live_api.js', 'ui/i18n.js']) {
   assert.ok(!/(?:45\+|≥\s*45)\s*L\/sol/.test(txt), `Invented L/sol extraction claim in web/${rel}`);
   assert.ok(!/empty-reticle/.test(txt), `Orphan empty-reticle selector in web/${rel}`);
 }
-for (const rel of ['app.js', 'globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/eva_zones.js', 'ui/eva_sim.js', 'ui/eva_render.js', 'ui/eva.js', 'ui/landing_site.js', 'ui/map2d.js', 'ui/charts.js', 'ui/panels.js', 'ui/overlays.js', 'ui/brief.js', 'ui/i18n.js']) {
+for (const rel of ['app.js', 'globe3d.js', 'style.css', 'live_api.js', 'scoring.js', 'ui/landing_site.js', 'ui/map2d.js', 'ui/charts.js', 'ui/panels.js', 'ui/overlays.js', 'ui/brief.js', 'ui/i18n.js']) {
   const txt = fs.readFileSync(path.join(WEB, rel), 'utf8');
   assert.ok(!/[ \t]+$/m.test(txt), `Trailing whitespace found in web/${rel}`);
 }
@@ -123,7 +132,7 @@ assert.ok(hdrKeys.has('Cache-Control'), 'vercel.json sets asset Cache-Control');
 // 8. dist/ build synchronization check (when dist/ exists, core web scripts must match web/)
 const DIST = path.join(ROOT, 'dist');
 if (fs.existsSync(DIST)) {
-  for (const rel of ['index.html', 'style.css', 'app.js', 'planet_profiles.js', 'scoring.js', 'astar.js', 'storm.js', 'globe3d.js', 'sw.js', 'ui/eva_zones.js', 'ui/eva_sim.js', 'ui/eva_render.js', 'ui/eva.js', 'ui/landing_site.js', 'ui/panels.js', 'ui/brief.js']) {
+  for (const rel of ['index.html', 'style.css', 'app.js', 'planet_profiles.js', 'scoring.js', 'astar.js', 'storm.js', 'globe3d.js', 'sw.js', 'ui/landing_site.js', 'ui/panels.js', 'ui/brief.js']) {
     assert.ok(fs.existsSync(path.join(DIST, rel)), `dist/${rel} exists in production bundle`);
     assert.strictEqual(
       fs.readFileSync(path.join(DIST, rel), 'utf8'),

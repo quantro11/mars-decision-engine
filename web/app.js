@@ -17,7 +17,7 @@
   const W = META.width, H = META.height;
   const globeCanvas = $('#globe');
   const globe = (window.GLOBE3D && globeCanvas) ? window.GLOBE3D.createGlobe(globeCanvas) : null;
-  let viewport = null, panels = null, eva = null, landingTool = null;
+  let viewport = null, panels = null, landingTool = null;
 
   // ------------------------------------------------------------ theme & language
   function applyTheme(theme) {
@@ -38,7 +38,7 @@
     if ($('#btn-relief') && globe) $('#btn-relief').textContent = `${t('relief')} ${globe.state.exaggeration}×`;
     if ($('#ls-v')) $('#ls-v').textContent = `${S.crisis.ls}° · ${(I18N.trDomain ? I18N.trDomain(STORM.seasonName(S.crisis.ls)) : STORM.seasonName(S.crisis.ls)).split(' /')[0]}`;
     if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
-    if (eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onLangChange(); if (landingTool) landingTool.onLangChange();
+    if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onLangChange(); if (landingTool) landingTool.onLangChange();
     if (globalThis.MDE_LIVE_STATE && renderHabitability) renderHabitability(false, { useCache: true });
     if (viewport) viewport.draw();
   }
@@ -212,9 +212,8 @@
       if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 5.5); S.view.tx = viewport.canvas.width / 2 - (x + 6) * S.view.scale; S.view.ty = viewport.canvas.height / 2 - (y - 4) * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); }
       computeRoute();
     },
-    onOpenHud: (idx) => { if (eva) eva.openHudModal(idx); },
     onUseEva: (x, y, v, regionName) => {
-      if (eva) eva.zoomToZone({ lat: L.latOfRow(y), lon: L.lonOfCol(x), v, regionName }); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onGlobalSelect(L.latOfRow(y), L.lonOfCol(x));
+      if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onGlobalSelect(L.latOfRow(y), L.lonOfCol(x));
       setMode('eva');
       if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 6.0); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
@@ -222,17 +221,6 @@
   };
   panels = window.MDE_PANELS.createPanels({ doc: document, S, layers, SCORING, STORM, FMT, CHARTS, ...panelCbs });
 
-  if (window.MDE_EVA) {
-    eva = window.MDE_EVA.createEvaController({
-      doc: document, S, layers,
-      onSelectCoord: (x, y, lat, lon) => {
-        if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon, 1.75); if (viewport) viewport.schedule3D(); }
-        if (L.elev) select(x, y, null);
-      },
-      onRedraw: () => { if (viewport && L.elev) viewport.draw(); },
-    });
-    eva.bindControls();
-  }
   if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.createController({ doc: document, S, layers, onToast: (msg) => setHudHint(msg, true) });
   if (window.MDE_LANDING_SITE) landingTool = window.MDE_LANDING_SITE.createController({ doc: document, S, layers, SCORING, STORM, VEHICLES: window.MDE_VEHICLES, PLANET: window.PLANET_PROFILES ? window.PLANET_PROFILES.get() : null, FMT, onDraw: () => viewport && viewport.draw(), onUseEva: panelCbs.onUseEva, onPlanMarswalk: panelCbs.onPlanMarswalk, onUseCrisis: setCrisisSite });
 
@@ -291,7 +279,7 @@
     if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'score' || m === 'landing') S.overlay = 'score';
     document.querySelectorAll('#overlay button').forEach(b => { const isActive = b.dataset.ov === S.overlay; b.classList.toggle('active', isActive); b.setAttribute('aria-pressed', String(isActive)); });
     updateHudLayer(); viewport.markOverlayDirty(); renderLegend();
-    if (m === 'eva' && eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);
+    if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
     if (m === 'habitability') renderHabitability();
@@ -400,7 +388,7 @@
   on('#btn-dl-mavlink', 'onclick', () => downloadBriefMAVLink(getBriefPayload()));
   on('#btn-print-brief', 'onclick', () => window.print());
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeModal($('#about')); closeModal($('#brief-modal')); if (eva) eva.closeHudModal(); return; }
+    if (e.key === 'Escape') { closeModal($('#about')); closeModal($('#brief-modal')); return; }
     if (e.key === 'Tab' && activeModal && !activeModal.classList.contains('hidden')) {
       const f = [...activeModal.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
       if (f.length && e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }

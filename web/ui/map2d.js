@@ -223,7 +223,7 @@
       const fh = Math.round(9.5 * dpr);
       ctx.strokeStyle = 'rgba(148, 163, 184, 0.13)';
       ctx.lineWidth = 1;
-      ctx.font = `500 ${fh}px "Glacial Indifference", system-ui, sans-serif`;
+      ctx.font = `500 ${fh}px "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
       ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
       ctx.textBaseline = 'middle';
       for (let lon = -180; lon <= 180; lon += 30) {
@@ -355,7 +355,7 @@
 
       const effScale = S.viewMode === '3d' && globe ? (2.8 / Math.max(0.4, globe.state.camDist - 1.0)) : S.view.scale;
       const fontPx = Math.max(9.5, Math.min(12, 8.5 + effScale * 0.8)) * dpr;
-      ctx.font = `500 ${fontPx}px "Glacial Indifference", system-ui, sans-serif`;
+      ctx.font = `500 ${fontPx}px "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       if (S.showRegions || S.showEZ) for (const r of REGIONS) {
@@ -413,14 +413,6 @@
       if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
       if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
       drawCustomLandingOverlay(dpr);
-      // Legacy on-foot walkback ring ("EVA WALKBACK 0.80 km"): only meaningful for the legacy
-      // astronaut demo, so draw it only while that collapsed section is open. The new 16 km²
-      // rover analysis has no on-foot mode and the label was being misread as map resolution.
-      const legacyEl = typeof document !== 'undefined' ? document.getElementById('eva-legacy-details') : null;
-      const legacyOpen = !!(legacyEl && legacyEl.open);
-      if (legacyOpen && global.MDE_EVA && global.MDE_EVA.drawGlobalWalkbackOverlay && (S.mode === 'eva' || S.mode === 'route' || S.selected)) {
-        global.MDE_EVA.drawGlobalWalkbackOverlay(ctx, projectGrid, L, S, dpr);
-      }
     }
 
     function drawCustomLandingOverlay(dpr) {
@@ -491,7 +483,7 @@
       // Rover-range label goes BELOW the pin: the legacy "EVA WALKBACK" label (when that demo
       // is open) sits above the same point, and at low zoom the two boxes used to overlap.
       const lbl = rangeKm > 0 ? `${rangeKm.toFixed(1)} km` : '0 km';
-      ctx.font = `600 ${Math.round(10 * dpr)}px "Glacial Indifference", system-ui, sans-serif`;
+      ctx.font = `600 ${Math.round(10 * dpr)}px "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
       const tw = ctx.measureText(lbl).width;
       ctx.fillStyle = 'rgba(12, 14, 18, 0.88)';
       ctx.fillRect(px - tw / 2 - 4 * dpr, py + r + 16 * dpr, tw + 8 * dpr, 13 * dpr);

@@ -177,21 +177,18 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Physics-Informed Machine Learning (PIML) Multi-Horizon Dust & Vortex Engine
+  // Dust-lifting risk index (hand-tuned heuristic, NOT a trained or validated model)
   // ---------------------------------------------------------------------------
-  // Updated on a 1-minute (60 s) telemetry cadence across four forecast horizons:
-  //   1. +1 min  (Micro-Vortex & Gust Strike Nowcast — InSight TWINS / Perseverance MEDA 1 Hz)
-  //   2. +6 min  (Short-Range Convective Dust Lifting & Vortex Approach)
-  //   3. +15 min (Tactical EVA Walkback Safety Window)
-  //   4. +1-3 Sol (Regional Dust Storm Onset & Advection — MDAD 22,865 storms + Montabone MY24-MY36 CDOD)
-  //
-  // Combines 7 first-principles boundary-layer & orbital features with a calibrated
-  // Gradient Boosted Decision Tree (GBDT) ensemble and Platt probability scaling.
+  // Four look-ahead horizons (+1 min, +6 min, +15 min, +1-3 sol) built from physically motivated
+  // features (Bagnold saltation ratio, bulk Richardson number, convective phase, dust supply, storm-season
+  // corridors). The rule thresholds and weights below were set by hand; they were never fitted to data and
+  // have no measured accuracy. There is no live sensor feed: pressure/wind inputs are modelled from the site,
+  // season and time of day unless the caller supplies them. Read the outputs as a relative 0-100 risk index.
   const MARS_G_ACCEL = PLANET.gravityMs2.value;
   const R_CO2 = 188.9;
 
-  // Historical storm track & baroclinic genesis corridors from MDAD (Battalio & Wang 2021)
-  // and Montabone et al. (2015, 2020) MY24-MY36 gridded optical depth climatology.
+  // Approximate storm-genesis regions, hand-placed as ellipses after the storm-track maps in MDAD
+  // (Battalio & Wang 2021) and Montabone et al. (2015, 2020). Positions, sizes and weights are rough.
   const MDAD_CORRIDORS = [
     { id: 'acidalia_chryse', name: 'Acidalia-Chryse Baroclinic Channel', nameTr: 'Acidalia-Chryse Baroklinik Koridoru', lat: 32.0, lon: -35.0, rx: 32.0, ry: 22.0, weight: 0.96, lsPeak: 215 },
     { id: 'hellas_katabatic', name: 'Hellas Rim Katabatic Outflow', nameTr: 'Hellas Havzası Katabatik Çıkışı', lat: -38.0, lon: 70.0, rx: 35.0, ry: 22.0, weight: 0.98, lsPeak: 251 },
@@ -236,7 +233,7 @@
   }
 
   /**
-   * Extract 7 physics-informed features for multi-horizon dust/vortex ML inference.
+   * Compute the physically motivated input features for the dust-lifting risk index.
    * @param {Object} opts
    */
   function extractDustMLFeatures(opts = {}) {
@@ -358,8 +355,8 @@
     };
   }
 
-  // GBDT Tree nodes + Platt calibration for each of the 4 forecast horizons
-  function scoreGBDT1Min(f) {
+  // Hand-written rules for each of the 4 look-ahead horizons (thresholds set by hand, not fitted)
+  function scoreRules1Min(f) {
     // Tree 1: Immediate Rankine barometric pressure well + turbulence
     const t1 = f.vortexBaroIndex >= 0.48
       ? (f.deltaP1mPa <= -0.85 ? 2.65 : 1.55)
@@ -376,7 +373,7 @@
     return sigmoid(0.75 * (t1 + t2 + t3) + contLogit);
   }
 
-  function scoreGBDT6Min(f) {
+  function scoreRules6Min(f) {
     // Tree 1: Precursor 5-min pressure variance & approaching pressure trough
     const t1 = f.sigmaP5mPa >= 0.34
       ? (f.superAdiabaticGradK >= 19.0 ? 2.15 : 1.15)
@@ -393,7 +390,7 @@
     return sigmoid(0.72 * (t1 + t2 + t3) + contLogit);
   }
 
-  function scoreGBDT15Min(f) {
+  function scoreRules15Min(f) {
     // Tree 1: Planetary boundary layer instability buildup (15-min convective cell gestation)
     const t1 = (f.superAdiabaticGradK >= 18.5 && f.lmstConvective >= 0.42)
       ? (f.bulkRichardson <= -0.13 ? 1.95 : 0.90)
@@ -410,7 +407,7 @@
     return sigmoid(0.70 * (t1 + t2 + t3) + contLogit);
   }
 
-  function scoreGBDT1Sol(f) {
+  function scoreRules1Sol(f) {
     // Tree 1: Historical MDAD + Montabone storm corridor & seasonal perihelion/baroclinic forcing
     const t1 = f.stormCorridorIndex >= 0.52
       ? (f.seasonForcing >= 0.55 ? 2.25 : 1.20)
@@ -434,22 +431,22 @@
   }
 
   /**
-   * Run 1-minute cadence Physics-Informed ML forecast across all 4 horizons (+1m, +6m, +15m, +1-3 Sol).
+   * Evaluate the heuristic dust-lifting risk index for all 4 horizons (+1m, +6m, +15m, +1-3 sol).
    * @param {Object} opts Site & sensor parameters
    */
   function predictDustML(opts = {}) {
     const f = extractDustMLFeatures(opts);
-    const p1m = scoreGBDT1Min(f);
-    const p6m = scoreGBDT6Min(f);
-    const p15m = scoreGBDT15Min(f);
-    const p1sol = scoreGBDT1Sol(f);
+    const p1m = scoreRules1Min(f);
+    const p6m = scoreRules6Min(f);
+    const p15m = scoreRules15Min(f);
+    const p1sol = scoreRules1Sol(f);
 
     const r1m = classifyRisk(p1m);
     const r6m = classifyRisk(p6m);
     const r15m = classifyRisk(p15m);
     const r1sol = classifyRisk(p1sol);
 
-    // Expected physical impact magnitudes conditioned on ML probabilities
+    // Indicative magnitudes scaled by the risk index (illustrative, not forecasts)
     const expDeltaP1m = +(f.deltaP1mPa * (0.7 + 0.9 * p1m)).toFixed(2);
     const expGustMps = +(f.windSpeedMps * f.gustFactor * (0.85 + 0.45 * Math.max(p1m, p6m))).toFixed(1);
     const expTau6m = +(f.tauCurrent + p6m * (0.45 + 0.85 * f.dustSourceIndex)).toFixed(2);
@@ -472,9 +469,7 @@
         phenomenonTr: 'Konvektif Toz Vorteksi / Ani Rüzgâr Darbesi',
         keyMetric: `ΔP ${expDeltaP1m} Pa · Gust ${expGustMps} m/s`,
         actionEn: p1m >= 0.5 ? 'Lock solar arrays, brace posture & shield optics immediately' : 'Nominal 1-Hz barometric baseline; continue surface ops',
-        actionTr: p1m >= 0.5 ? 'Güneş panellerini kilitle, optikleri koru ve sabit duruşa geç' : '1-Hz barometrik sensör normal; yüzey operasyonuna devam',
-        validationAccuracyPct: 99.2,
-        validationRocAuc: 0.998
+        actionTr: p1m >= 0.5 ? 'Güneş panellerini kilitle, optikleri koru ve sabit duruşa geç' : '1-Hz barometrik sensör normal; yüzey operasyonuna devam'
       },
       {
         id: 'h6m',
@@ -491,9 +486,7 @@
         phenomenonTr: 'Yerel Toz Kalkışı & Vorteks Koridoru',
         keyMetric: `u*/u*t ${f.bagnoldRatio.toFixed(2)} · τ→${expTau6m}`,
         actionEn: p6m >= 0.5 ? 'Halt drill/sample collection; begin tactical return toward rover/hab' : 'Saltation ratio below threshold; safe for sample collection',
-        actionTr: p6m >= 0.5 ? 'Numune sondajını durdur; rover/üs yönüne geri dönüşe başla' : 'Tuzlanma (saltation) eşik altında; numune alımı güvenli',
-        validationAccuracyPct: 97.5,
-        validationRocAuc: 0.989
+        actionTr: p6m >= 0.5 ? 'Numune sondajını durdur; rover/üs yönüne geri dönüşe başla' : 'Tuzlanma (saltation) eşik altında; numune alımı güvenli'
       },
       {
         id: 'h15m',
@@ -510,9 +503,7 @@
         phenomenonTr: 'Sınır Tabakası Termal Kararsızlık Plumu',
         keyMetric: `Ri_b ${f.bulkRichardson.toFixed(2)} · ΔT +${f.superAdiabaticGradK.toFixed(1)} K`,
         actionEn: p15m >= 0.5 ? 'Enforce 15-min EVA walkback envelope & switch HUD to thermal IR' : 'Boundary layer stable; full walkback radius authorized',
-        actionTr: p15m >= 0.5 ? '15 dk EVA güvenli dönüş çemberini uygula & HUD termal moduna geç' : 'Sınır tabakası kararlı; tam Walkback yarıçapı aktif',
-        validationAccuracyPct: 95.8,
-        validationRocAuc: 0.979
+        actionTr: p15m >= 0.5 ? '15 dk EVA güvenli dönüş çemberini uygula & HUD termal moduna geç' : 'Sınır tabakası kararlı; tam Walkback yarıçapı aktif'
       },
       {
         id: 'h1sol',
@@ -529,9 +520,7 @@
         phenomenonTr: `Bölgesel Fırtına Başlangıcı (${f.corridorNameTr})`,
         keyMetric: `τ→${expTau1Sol} (−${expSolarDropPct}% solar)`,
         actionEn: p1sol >= 0.5 ? 'Pre-charge habitat battery to 100% & engage Kilopower baseload' : 'Low regional storm genesis probability in current Ls window',
-        actionTr: p1sol >= 0.5 ? 'Üs bataryasını %100 şarj et & Kilopower nükleer baz yükü devreye al' : 'Mevcut Ls penceresinde bölgesel fırtına başlangıç riski düşük',
-        validationAccuracyPct: 96.7,
-        validationRocAuc: 0.985
+        actionTr: p1sol >= 0.5 ? 'Üs bataryasını %100 şarj et & Kilopower nükleer baz yükü devreye al' : 'Mevcut Ls penceresinde bölgesel fırtına başlangıç riski düşük'
       }
     ];
 
@@ -544,11 +533,10 @@
     return {
       cadenceSec: 60,
       cadenceSeconds: 60,
-      modelVersion: 'PIML-GBDT-v3.2',
-      modelArch: 'Physics-Informed GBDT Ensemble + Platt Scaling (PIML-v3.2)',
-      trainingDatasets: 'MDAD (22,865 storms, MY24-MY31) + Montabone CDOD (MY24-MY36) + InSight TWINS / Perseverance MEDA 1-Hz',
-      overallAccuracyPct: 97.3,
-      overallRocAuc: 0.988,
+      modelVersion: 'heuristic-dust-risk-v1',
+      modelArch: 'Hand-tuned rule index on physically motivated features (not trained, not validated)',
+      validated: false,
+      inputsNote: 'Pressure, wind and gust inputs are modelled from site, season and local time (no live sensor feed).',
       alertLevel: peakHorizon.risk,
       features: f,
       horizons,
@@ -559,181 +547,29 @@
     };
   }
 
-  // Exact Mann-Whitney U / Wilcoxon concordance ROC-AUC + classification metrics
-  function computeBinaryMetrics(samples) {
-    let tp = 0, tn = 0, fp = 0, fn = 0, brierSum = 0;
-    const pos = [], neg = [];
-    for (const s of samples) {
-      const pred = s.prob >= 0.5 ? 1 : 0;
-      if (s.label === 1) {
-        pos.push(s.prob);
-        if (pred === 1) tp++; else fn++;
-      } else {
-        neg.push(s.prob);
-        if (pred === 0) tn++; else fp++;
-      }
-      brierSum += Math.pow(s.prob - s.label, 2);
-    }
-    let concordant = 0, pairs = pos.length * neg.length;
-    for (const p of pos) {
-      for (const n of neg) {
-        if (p > n) concordant += 1;
-        else if (p === n) concordant += 0.5;
-      }
-    }
-    const total = samples.length || 1;
-    const acc = (tp + tn) / total;
-    const prec = (tp + fp) > 0 ? tp / (tp + fp) : 1;
-    const rec = (tp + fn) > 0 ? tp / (tp + fn) : 1;
-    const f1 = (prec + rec) > 0 ? (2 * prec * rec) / (prec + rec) : 0;
-    return {
-      n: samples.length,
-      tp, tn, fp, fn,
-      accuracyPct: +(acc * 100).toFixed(1),
-      rocAuc: +(pairs > 0 ? concordant / pairs : 1).toFixed(3),
-      precisionPct: +(prec * 100).toFixed(1),
-      recallPct: +(rec * 100).toFixed(1),
-      f1: +f1.toFixed(3),
-      brierScore: +(brierSum / total).toFixed(4)
-    };
-  }
-
   /**
-   * Out-of-sample holdout validation across 240 historical benchmark instances:
-   * - 120 Micro-scale 1-Hz windows (InSight Sol 401-675 & Perseverance MEDA vortex/dust-lifting holdout)
-   * - 120 Macro-scale regional cells (MDAD + Montabone MY33-MY35 temporal split holdout incl. 2018 MY34 onset)
+   * Behaviour checks for the heuristic risk index. These are NOT accuracy tests (there is no labelled
+   * data behind the index); they only confirm that the index responds in the physically expected direction.
    */
-  function validateDustMLBenchmarks(L = null) {
-    const h1mSamples = [], h6mSamples = [], h15mSamples = [], h1solSamples = [];
-
-    // 120 Micro-scale holdout windows (60 positive vortex/gust-lifting events, 60 negative controls)
-    for (let i = 0; i < 120; i++) {
-      const isEvent = i < 60;
-      const frac = (i % 60) / 60;
-      const lat = -14.5 + (i % 12) * 5.2;
-      const lon = -135.0 + (i % 15) * 18.5;
-      const elev = -2600 + (i % 7) * 450;
-      const ls = 195 + (i % 10) * 14;
-
-      let baseOpts;
-      if (isEvent) {
-        baseOpts = {
-          lat, lon, elev, slope: 3.5 + (i % 5) * 1.4, ls,
-          ti: 85 + (i % 6) * 16,
-          dust: 0.58 + (frac * 0.32),
-          lmstHour: 11.5 + (i % 8) * 0.45,
-          superAdiabaticGradK: 20.5 + (i % 9) * 1.1,
-          windSpeedMps: 13.2 + (i % 7) * 1.3,
-          gustFactor: 1.38 + (i % 5) * 0.06,
-          deltaP1mPa: -(1.15 + (i % 10) * 0.36),
-          sigmaP5mPa: 0.46 + (i % 8) * 0.11,
-          tauCurrent: 0.75 + (i % 5) * 0.22,
-          tauAdvectionSol: 0.26 + (i % 4) * 0.08
-        };
-      } else {
-        baseOpts = {
-          lat, lon, elev, slope: 2.0 + (i % 4) * 1.1, ls: 40 + (i % 12) * 10,
-          ti: 235 + (i % 7) * 24,
-          dust: 0.14 + (i % 5) * 0.05,
-          lmstHour: 7.5 + (i % 10) * 1.1,
-          superAdiabaticGradK: 7.5 + (i % 6) * 1.6,
-          windSpeedMps: 5.2 + (i % 6) * 1.1,
-          gustFactor: 1.12 + (i % 4) * 0.04,
-          deltaP1mPa: -(0.04 + (i % 5) * 0.03),
-          sigmaP5mPa: 0.06 + (i % 5) * 0.025,
-          tauCurrent: 0.42 + (i % 4) * 0.08,
-          tauAdvectionSol: 0.04 + (i % 4) * 0.02
-        };
-      }
-      const label = isEvent ? 1 : 0;
-      const opts1m = isEvent && i === 59
-        ? { ...baseOpts, windSpeedMps: 9.2, gustFactor: 1.24, deltaP1mPa: -0.42, sigmaP5mPa: 0.24 }
-        : baseOpts;
-      const opts6m = isEvent && i >= 58
-        ? { ...baseOpts, windSpeedMps: 7.4, gustFactor: 1.15, superAdiabaticGradK: 16.0, deltaP1mPa: -0.25, sigmaP5mPa: 0.22 }
-        : (!isEvent && i === 60
-          ? { ...baseOpts, lmstHour: 13.1, superAdiabaticGradK: 22.5, dust: 0.56, windSpeedMps: 13.5, gustFactor: 1.18, deltaP1mPa: -0.24, sigmaP5mPa: 0.42 }
-          : baseOpts);
-      const opts15m = isEvent && i >= 57
-        ? { ...baseOpts, lmstHour: 16.9, superAdiabaticGradK: 14.2, windSpeedMps: 7.2, gustFactor: 1.15, deltaP1mPa: -0.22, sigmaP5mPa: 0.30, tauAdvectionSol: 0.14 }
-        : (!isEvent && (i === 60 || i === 61)
-          ? { ...baseOpts, lmstHour: 13.1, superAdiabaticGradK: 22.5, dust: 0.78, windSpeedMps: 10.5, gustFactor: 1.22, deltaP1mPa: -0.25, sigmaP5mPa: 0.29 }
-          : baseOpts);
-
-      h1mSamples.push({ prob: predictDustML(opts1m).horizons[0].prob, label });
-      h6mSamples.push({ prob: predictDustML(opts6m).horizons[1].prob, label });
-      h15mSamples.push({ prob: predictDustML(opts15m).horizons[2].prob, label });
-    }
-
-    // 120 Macro-scale regional storm onset holdout records (MY33-MY35 Temporal Split)
-    const stormSites = [
-      { lat: 31.5, lon: -34.0, elev: -4100, ti: 115, dust: 0.74, ls: 218 },
-      { lat: -36.0, lon: 68.0, elev: -5200, ti: 105, dust: 0.78, ls: 252 },
-      { lat: 21.0, lon: 90.0, elev: -3700, ti: 125, dust: 0.68, ls: 238 },
-      { lat: -30.0, lon: -45.0, elev: 1200, ti: 110, dust: 0.76, ls: 266 },
-      { lat: 43.0, lon: -152.0, elev: -3900, ti: 120, dust: 0.71, ls: 198 }
-    ];
-    const calmSites = [
-      { lat: 4.5, lon: 135.6, elev: -2600, ti: 255, dust: 0.22, ls: 65 },
-      { lat: 18.4, lon: 77.5, elev: -2550, ti: 295, dust: 0.18, ls: 85 },
-      { lat: -4.6, lon: 137.4, elev: -4450, ti: 310, dust: 0.16, ls: 110 },
-      { lat: -14.6, lon: 175.5, elev: -1940, ti: 280, dust: 0.20, ls: 52 },
-      { lat: 22.5, lon: -48.0, elev: -3620, ti: 275, dust: 0.24, ls: 95 }
-    ];
-
-    for (let i = 0; i < 120; i++) {
-      const isStorm = i < 60;
-      const base = isStorm ? stormSites[i % stormSites.length] : calmSites[i % calmSites.length];
-      const lat = clamp(base.lat + ((i % 7) - 3) * 1.8, -60, 60);
-      const lon = ((base.lon + ((i % 9) - 4) * 2.5 + 180) % 360 + 360) % 360 - 180;
-      let ti = base.ti + ((i % 5) - 2) * 8;
-      let elev = base.elev;
-      if (L && L.elev && L.ti && L.width && L.height && L.meta) {
-        const x = Math.min(L.width - 1, Math.max(0, Math.floor((lon + 180) / 360 * L.width)));
-        const y = Math.min(L.height - 1, Math.max(0, Math.floor((90 - lat) / 180 * L.height)));
-        const idx = y * L.width + x;
-        elev = L.meta.elev.offset + L.elev[idx] * L.meta.elev.scale;
-      }
-      const borderlineStorm = isStorm && i >= 58;
-      const borderlineCalm = !isStorm && (i === 60 || i === 61);
-      const pred = predictDustML({
-        lat, lon, elev, slope: 3.5,
-        ti: borderlineStorm ? 235 : (borderlineCalm ? 115 : ti),
-        dust: borderlineStorm ? 0.28 : (borderlineCalm ? 0.72 : base.dust),
-        ls: borderlineStorm ? 95 : (borderlineCalm ? 251 : (base.ls + (i % 6) * 3)),
-        windSpeedMps: isStorm && !borderlineStorm ? 14.5 + (i % 5) * 1.1 : (borderlineCalm ? 15.0 : 6.2 + (i % 4) * 0.8),
-        tauCurrent: isStorm && !borderlineStorm ? 1.15 + (i % 5) * 0.18 : 0.48,
-        tauAdvectionSol: isStorm && !borderlineStorm ? 0.30 + (i % 5) * 0.05 : (borderlineCalm ? 0.32 : 0.05)
-      });
-      h1solSamples.push({ prob: pred.horizons[3].prob, label: isStorm ? 1 : 0 });
-    }
-
-    const m1 = computeBinaryMetrics(h1mSamples);
-    const m6 = computeBinaryMetrics(h6mSamples);
-    const m15 = computeBinaryMetrics(h15mSamples);
-    const mSol = computeBinaryMetrics(h1solSamples);
-
+  function dustRiskSanityChecks() {
+    const base = { lat: 18.4, lon: 77.5, elev: -2200, ls: 251, ti: 210, lmstHour: 13.25 };
+    const calm = predictDustML({ ...base, telemetryRegime: 'clear_calm' });
+    const auto = predictDustML(base);
+    const vortex = predictDustML({ ...base, telemetryRegime: 'vortex_imminent' });
+    const night = predictDustML({ ...base, lmstHour: 2 });
+    const aphelion = predictDustML({ ...base, ls: 71 });
     const checks = [
-      { id: 'ml_h1m_vortex_nowcast', horizon: '+1 min Vortex & Gust Nowcast', label: '+1 min Nowcast (Vortex & Gust)', dataset: 'InSight TWINS / Perseverance MEDA 1-Hz Holdout (N=120)', reference: 'Jackson et al. (2021) / Spiga et al. (2021) InSight & MEDA 1-Hz Vortex Catalog', ...m1, pass: m1.accuracyPct >= 97.5 && m1.rocAuc >= 0.985 },
-      { id: 'ml_h6m_convective_lifting', horizon: '+6 min Convective Dust Lifting', label: '+6 min Short-Range (Saltation)', dataset: 'MEDA RDS + Barometric Precursor Holdout (N=120)', reference: 'Newman et al. (2022) Science Advances 8 — MEDA Saltation & Dust Lifting', ...m6, pass: m6.accuracyPct >= 95.5 && m6.rocAuc >= 0.975 },
-      { id: 'ml_h15m_eva_walkback', horizon: '+15 min EVA Walkback Warning', label: '+15 min Walkback Window (PBL)', dataset: 'PBL Super-Adiabatic Instability Holdout (N=120)', reference: 'Banfield et al. (2020) Nature Geosci. 13 — PBL Convective Plume Instability', ...m15, pass: m15.accuracyPct >= 95.0 && m15.rocAuc >= 0.965 },
-      { id: 'ml_h1sol_regional_storm', horizon: '+1–3 Sol Regional Storm Onset', label: '+1–3 Sol Regional Storm (MDAD)', dataset: 'MDAD + Montabone MY33–MY35 Temporal Split (N=120)', reference: 'Battalio & Wang (2021) MDAD MY33–35 + Montabone et al. (2020) CDOD Holdout', ...mSol, pass: mSol.accuracyPct >= 95.5 && mSol.rocAuc >= 0.975 }
+      { id: 'calm_low', label: 'Calm air gives a low +1 min index', pass: calm.horizons.h1m.prob < 0.42 },
+      { id: 'vortex_high', label: 'A deep pressure drop raises the +1 min index above calm', pass: vortex.horizons.h1m.prob > calm.horizons.h1m.prob + 0.3 },
+      { id: 'night_lower', label: 'Night (stable air) gives a lower +15 min index than early afternoon', pass: night.horizons.h15m.prob < auto.horizons.h15m.prob },
+      { id: 'season', label: 'Regional index is higher in the perihelion dust season than at aphelion', pass: auto.horizons.h1sol.prob > aphelion.horizons.h1sol.prob },
     ];
-    return {
-      allPass: checks.every(c => c.pass),
-      splitProtocol: 'Temporal Split: Train MY 24–32 / Holdout MY 33–35 + InSight/MEDA 1-Hz Microbarometer Catalog',
-      totalBenchmarks: 240,
-      meanAccuracyPct: +((m1.accuracyPct + m6.accuracyPct + m15.accuracyPct + mSol.accuracyPct) / 4).toFixed(1),
-      meanRocAuc: +((m1.rocAuc + m6.rocAuc + m15.rocAuc + mSol.rocAuc) / 4).toFixed(3),
-      meanBrierScore: +((m1.brierScore + m6.brierScore + m15.brierScore + mSol.brierScore) / 4).toFixed(4),
-      horizons: checks,
-      checks
-    };
+    return { allPass: checks.every((c) => c.pass), checks };
   }
 
   global.STORM = {
     fTau, insolationTOA, seasonalFactor, seasonName, dailySolar, tauAt, simulate,
     surfaceTempC, thermalDemandKw, SOL_H, KILOPOWER_KW, LS_PER_SOL,
-    MDAD_CORRIDORS, extractDustMLFeatures, predictDustML, validateDustMLBenchmarks
+    MDAD_CORRIDORS, extractDustMLFeatures, predictDustML, dustRiskSanityChecks
   };
 })(typeof window !== 'undefined' ? window : module.exports);

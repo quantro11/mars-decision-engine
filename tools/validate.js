@@ -15,7 +15,6 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const S = require(path.join(ROOT, 'web/scoring.js')).SCORING;
-const EVA = require(path.join(ROOT, 'web/ui/eva.js')).MDE_EVA;
 const STORM = require(path.join(ROOT, 'web/storm.js')).STORM;
 
 // ---- minimal PNG decoder: 8-bit greyscale, non-interlaced (what preprocess.py writes)
@@ -95,19 +94,22 @@ const scoreBalGeo = S.scoreMap(L, S.PRESETS.balanced.w, true, new Float32Array(W
 const t1geo = mean(LANDERS.map(([, la, lo]) => bandPercentile(scoreLandGeo, la, lo, 5)));
 const t2geo = mean(EZ.map((r) => bandPercentile(scoreBalGeo, r.lat, r.lon, 5)));
 
-// Test 3: Phase 2 Tactical Surface Traverse (Perseverance Sol 0-420 & Curiosity Gale Boxwork)
-// and Partial-Gravity (Lunar 1/6g vs Martian 0.38g) Pandolf Bioenergetics Validation
-const t3 = EVA.validatePhase2Benchmarks(L, S);
-if (!t3.allPass) {
-  throw new Error('Phase 2 benchmark validation failed: ' + JSON.stringify(t3.checks));
-}
-const t3Trav = t3.checks.filter((c) => c.detourRatio !== undefined);
-const t3Bio = t3.checks.find((c) => c.id === 'apollo_xemu_bioenergetics_benchmark');
+// Test 3: spacesuit metabolic model vs Apollo lunar EVA measurements (the only real walking-EVA data in
+// partial gravity). Mars values are extrapolations and are only checked for physically sensible ordering.
+const bioLunar = S.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 2.0, terrainEta: 1.25, gravityMps2: 1.62 });
+const bioMars = S.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 3.8, terrainEta: 1.35, durationH: 2.0 });
+const bioMarsSand = S.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 9.0, sandFrac: 1.0, durationH: 2.0 });
+const t3 = {
+  lunarW: bioLunar.metabolicW, marsW: bioMars.metabolicW, marsSandW: bioMarsSand.metabolicW,
+  passLunar: bioLunar.metabolicW >= 228 && bioLunar.metabolicW <= 352,
+  passOrder: bioLunar.metabolicW < bioMars.metabolicW && bioMars.metabolicW < bioMarsSand.metabolicW,
+};
+if (!t3.passLunar || !t3.passOrder) throw new Error('Test 3 suit metabolic check failed: ' + JSON.stringify(t3));
 
-// Test 4: Physics-Informed ML (PIML) Multi-Horizon Dust & Vortex Forecasting (1-min Cadence)
-const t4 = STORM.validateDustMLBenchmarks(L);
+// Dust-lifting risk index: behaviour checks only (it is a hand-tuned heuristic with no labelled data)
+const t4 = STORM.dustRiskSanityChecks();
 if (!t4.allPass) {
-  throw new Error('Test 4 PIML Dust ML validation failed: ' + JSON.stringify(t4));
+  throw new Error('Dust risk index behaviour checks failed: ' + JSON.stringify(t4));
 }
 
 const fmtP = (p) => (p === 0 ? '< 0.005' : p.toFixed(3));
@@ -140,27 +142,30 @@ ${t2.map((t) => `| ${t.n} | ${t.p.toFixed(0)} |`).join('\n')}
 | 1 — landers | ${mean(t1.map((t) => t.p)).toFixed(0)} | ${t1geo.toFixed(0)} |
 | 2 — HLS-2015 sites | ${mean(t2.map((t) => t.p)).toFixed(0)} | ${t2geo.toFixed(0)} |
 
-## Test 3 — Independent Phase 2 EVA Multi-Biome & Partial-Gravity Bioenergetics Validation
+## Test 3 — Spacesuit metabolic model vs Apollo lunar EVA data
 
-Note: Tests 1 & 2 evaluate orbital landing suitability (~5 km/px) and **do not** prove astronaut EVA path safety. Test 3 validates local EVA routing, hazard avoidance, slope constraints, and Lunar-adapted xEMU PLSS (CO₂ scrubber + ≥25% return reserve) independently across all **4 biomes** (\`Jezero Delta\`, \`Gale Boxwork\`, \`Nili Fossae\`, \`Arcadia Planitia\`) plus Pandolf-Santee bioenergetics:
+Tests 1 and 2 check orbital landing suitability (~5 km/px); they say nothing about walking safety. The only measured
+partial-gravity walking-EVA energy data are from Apollo: per-EVA crew averages of 822–1267 kJ/h (≈228–352 W) and an overall
+mean of 234 kcal/h (≈272 W) (Waligora et al. 1975, NASA TN D-7883). The model's one free constant (suit overhead) is
+calibrated to that mean, so this is a consistency check, not an independent test. Mars numbers cannot be
+validated (no one has walked on Mars), so for Mars we only check that more gravity, slope and sand cost more energy.
 
-| Surface Traverse Benchmark | Published Reference | Direct Chord | AutoNav Safe Route | Detour Ratio | Safe Hits vs Naive Orbital Hits | MGL Pose Error (vs VO Drift) | Status |
-|---|---|---|---|---|---|---|---|
-${t3Trav.map((c) => `| ${c.mission} | ${c.reference} | ${c.directDistM} m | ${c.safeDistM} m | ${c.detourRatio.toFixed(2)}× | ${c.safeHazardHits} vs ${c.orbitalHazardHits} hits | ±${c.mglPoseErrorM} m (VO ${c.voDriftPct}%) | ${c.pass ? 'PASS' : 'FAIL'} |`).join('\n')}
+| Case | Model metabolic rate | Check |
+|---|---|---|
+| Moon, 1.62 m/s², 2.4 km/h, gentle grade | ${t3.lunarW} W | ${t3.passLunar ? 'PASS' : 'FAIL'} (Apollo per-EVA range 228–352 W) |
+| Mars, 3.71 m/s², 2.4 km/h, 3.8 % grade | ${t3.marsW} W | extrapolation, not validated |
+| Mars, 9 % grade in loose sand | ${t3.marsSandW} W | ${t3.passOrder ? 'PASS' : 'FAIL'} (Moon < Mars < Mars + sand) |
 
-| Bioenergetics & PLSS Benchmark (${t3Bio.reference}) | Lunar 1/6g (1.62 m/s²) | Martian 0.38g Nominal (3.71 m/s², η=1.15) | Martian 0.38g +10% Sand Grade (η=1.65) | CO₂ Scrubber & ≥25% Return Reserve | Status |
-|---|---|---|---|---|---|
-| ${t3Bio.mission} | ${t3Bio.lunar16gW} W (ref 195–290 W) | ${t3Bio.mars038gNomW} W (ref 290–390 W) | ${t3Bio.mars038gSandUpW} W (ref 430–650 W) | ${t3Bio.co2ScrubberRemainPct}% rem · ${t3Bio.returnReserveProtected ? 'PROTECTED' : 'FAIL'} | ${t3Bio.pass ? 'PASS' : 'FAIL'} |
+## Dust-lifting risk index — behaviour checks (not an accuracy test)
 
-## Test 4 — Physics-Informed ML (PIML) Multi-Horizon Dust & Vortex Forecasting (1-min Cadence)
+The dust-devil / dust-lifting index is a **hand-tuned heuristic**. Its thresholds were set by hand and it has never been
+fitted to or scored against labelled Mars data, so **no accuracy, ROC-AUC or Brier score is claimed**. Its pressure and wind
+inputs are modelled from site, season and time of day (there is no live sensor feed). We only check that it moves in the
+physically expected direction:
 
-Out-of-sample Temporal Split validation (${t4.splitProtocol}) across ${t4.totalBenchmarks} benchmark windows combining Perseverance MEDA / InSight TWINS 1-Hz microbarometer & wind telemetry with the Mars Dust Activity Database (MDAD, 22,865 storms, MY 24–31) and Montabone et al. (MY 24–36 CDOD $\\tau$):
-
-| Forecast Horizon | Reference Dataset | Holdout N | TP / TN / FP / FN | Accuracy (%) | ROC-AUC | F1 Score | Brier Score | Status |
-|---|---|---|---|---|---|---|---|---|
-${t4.horizons.map((h) => `| ${h.label} | ${h.reference} | ${h.n} | ${h.tp}/${h.tn}/${h.fp}/${h.fn} | **${h.accuracyPct.toFixed(1)}%** | **${h.rocAuc.toFixed(3)}** | ${h.f1.toFixed(3)} | ${h.brierScore.toFixed(4)} | ${h.pass ? 'PASS' : 'FAIL'} |`).join('\n')}
-
-**Multi-Horizon Holdout Mean: Accuracy ${t4.meanAccuracyPct.toFixed(1)}% · ROC-AUC ${t4.meanRocAuc.toFixed(3)} · Brier Score ${t4.meanBrierScore.toFixed(4)} (${t4.allPass ? 'ALL PASS' : 'FAIL'})**
+| Check | Result |
+|---|---|
+${t4.checks.map((c) => `| ${c.label} | ${c.pass ? 'PASS' : 'FAIL'} |`).join('\n')}
 
 ## How to read this
 
