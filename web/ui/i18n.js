@@ -151,7 +151,7 @@
       'pn.localHiriseMarswalkMicroPlanning': 'Walking EVA summary',
       'pn.estMarswalkDurationLimit': 'Planned EVA length (assumed) & limit',
       'pn.plssO2CoolingCo2Rca': 'PLSS O₂ / Cooling / CO₂ RCA / Reserve',
-      'pn.planMarswalkAtThisSite': 'Plan Marswalk at this Site (A* + Science POIs)',
+      'pn.planMarswalkAtThisSite': 'Plan a walking EVA here (A* + science stops)',
       'pn.open16Km2Analysis2': 'Open 16 km² analysis',
       'pn.increaseSlopeThresholdOrRelocate': 'Increase slope threshold or relocate target.',
       'pn.noSlopeSafeRoverRoute': 'No slope-safe rover route found.',
@@ -172,8 +172,8 @@
       'pn.noneDetected': 'None detected',
       'pn.activeModeAstronautFootEva': 'ACTIVE MODE: Astronaut Foot EVA / Marswalk ({0} km/h · Rover 200km Stops Off)',
       'pn.activeModePressurizedRoverKm': 'ACTIVE MODE: Pressurized Rover ({0} km/sol) + ≤8h EVA Sorties',
-      'pn.scienceGain100': 'SCIENCE GAIN: {0}/100',
-      'pn.globalARunsOnThe': '⚠ Global A* runs on the ~5 km/px MOLA grid; meter-scale boulder/crater avoidance requires Module III HiRISE 1.0–2.0 m/post local routing.',
+      'pn.scienceGain100': '{0} SCIENCE STOPS',
+      'pn.globalARunsOnThe': '⚠ This route runs on the ~5 km/px MOLA grid. Boulders and small craters are not visible at this scale; a real traverse needs HiRISE stereo terrain models.',
       'pn.metric': 'Metric',
       'pn.direct': 'Direct',
       'pn.aSafe': 'A* Safe',
@@ -187,10 +187,10 @@
       'pn.metabolicLoadWalkback': 'Metabolic Load & Walkback',
       'pn.returnRouteSafetyCorridor': 'Return Route (Safety Corridor)',
       'pn.radiationDoseMslRad18': 'Radiation Dose (MSL-RAD ±18.8%)',
-      'pn.routeScienceGainScore': 'Route Science Gain Score',
+      'pn.routeScienceGainScore': 'Science stops on route',
       'pn.directPathCrossesTerrainModel': 'Direct path crosses {0}° terrain (model limit {1}°, soil-adjusted). Safe route adds {2} km.',
       'pn.directPathSatisfiesModelMaximum': 'Direct path satisfies model maximum slope limit.',
-      'pn.scienceWaypointsAlongRouteCoord': 'Science Waypoints Along Route (Coord + Dataset + Visor HUD)',
+      'pn.scienceWaypointsAlongRouteCoord': 'Science stops along the route',
       'pn.footEvaRestTurnaroundPlan': 'FOOT EVA REST & TURNAROUND PLAN',
       'pn.rover200KmRestStops': 'ROVER 200 KM REST STOPS (PRESSURIZED ROVER ONLY)',
       'pn.elevationProfileAlongTheSafe': 'Elevation profile along the safe route',
@@ -227,6 +227,7 @@
       'pn.cvPrompt': 'Pick a site on the map to run the survival test.',
       'pn.cvSurvives': 'Base survives this storm',
       'pn.cvFails': 'Base does NOT survive this storm',
+      'pn.cvFailsBefore': 'Base runs out of power even before the storm',
       'pn.cvPower': 'Power',
       'pn.cvPowerOk': 'holds · lowest reserve {0} kWh ({1}%)',
       'pn.cvPowerFail': 'blackout on sol {0}',
@@ -483,8 +484,8 @@
       'pn.noneDetected': 'Tespit edilmedi',
       'pn.activeModeAstronautFootEva': 'AKTİF MOD: Astronot Yaya EVA / Marswalk ({0} km/sa · 200km Rover Molaları Kapalı)',
       'pn.activeModePressurizedRoverKm': 'AKTİF MOD: Basınçlı Rover ({0} km/sol) + ≤8sa EVA Sortileri',
-      'pn.scienceGain100': 'BİLİM KAZANIMI: {0}/100',
-      'pn.globalARunsOnThe': '⚠ Küresel A* ~5 km/px MOLA gridinde çalışır; metre-ölçekli kaya/krater tespiti için Modül III (HiRISE 1.0–2.0 m/post) yerel rotalamasını kullanın.',
+      'pn.scienceGain100': '{0} BİLİM DURAĞI',
+      'pn.globalARunsOnThe': '⚠ Bu rota ~5 km/px MOLA ızgarasında hesaplanır. Kayalar ve küçük kraterler bu ölçekte görünmez; gerçek sürüş için HiRISE stereo arazi modeli gerekir.',
       'pn.metric': 'Metrik',
       'pn.direct': 'Doğrudan',
       'pn.aSafe': 'A* Güvenli',
@@ -498,10 +499,10 @@
       'pn.metabolicLoadWalkback': 'Metabolik Yük & Dönüş Yarıçapı',
       'pn.returnRouteSafetyCorridor': 'Dönüş Rotası (Emniyet Koridoru)',
       'pn.radiationDoseMslRad18': 'Radyasyon Dozu (MSL-RAD ±%18.8)',
-      'pn.routeScienceGainScore': 'Rota Bilimsel Kazanım Skoru',
+      'pn.routeScienceGainScore': 'Rotadaki bilim durakları',
       'pn.directPathCrossesTerrainModel': 'Doğrudan hat {0}° eğimi aşıyor (model sınırı {1}°, zemin sürtünmesine göre uyarlanır). Güvenli rota +{2} km ekler.',
       'pn.directPathSatisfiesModelMaximum': 'Doğrudan hat modelin azami eğim sınırını sağlıyor.',
-      'pn.scienceWaypointsAlongRouteCoord': 'Rota Üzerindeki Bilimsel Hedef Noktaları (Koordinat + Veri Kaynağı)',
+      'pn.scienceWaypointsAlongRouteCoord': 'Rota üzerindeki bilim durakları',
       'pn.footEvaRestTurnaroundPlan': 'YAYA EVA MOLA & DÖNÜŞ PLANI',
       'pn.rover200KmRestStops': 'ROVER 200 KM MOLA NOKTALARI (YALNIZCA BASINÇLI ROVER)',
       'pn.elevationProfileAlongTheSafe': 'Güvenli rota boyunca yükselti profili',
@@ -538,6 +539,7 @@
       'pn.cvPrompt': 'Hayatta kalma testi için haritadan bir saha seçin.',
       'pn.cvSurvives': 'Üs bu fırtınada ayakta kalır',
       'pn.cvFails': 'Üs bu fırtınada AYAKTA KALAMAZ',
+      'pn.cvFailsBefore': 'Üsün gücü fırtınadan önce bile biter',
       'pn.cvPower': 'Güç',
       'pn.cvPowerOk': 'yeter · en düşük rezerv {0} kWh (%{1})',
       'pn.cvPowerFail': 'sol {0} kesintisi',
@@ -656,6 +658,8 @@
     ['#sens-run', 'Sağlamlık testini çalıştır'],
     ['#panel-eva .sec-head h2', 'Taktik EVA · 16 km² Analizörü'],
     ['#panel-eva .sec-head .hint', '4 km × 4 km · 100 m/hücre'],
+    ['#panel-route .sec-head .hint', 'A* + bilim durakları'],
+    ['#route-sci-poi + span > b', 'Rota üzerindeki bilim durakları'],
     ['#tac-sec-a > summary', 'Bölüm A · Konum'],
     ['#tac-desc-a', '4 × 4 km alanın merkezi.'],
     ['#tac-sec-b > summary', 'Bölüm B · Zaman & Çevre'],
@@ -696,7 +700,7 @@
     ['#panel-crisis p.help', 'Bir saha seçin, ardından güç sistemini küresel toz fırtınasına göre boyutlandırın.'],
     ['#panel-crisis .station-lbl', 'Saha'],
     ['#panel-habitability .sec-head h2', 'Gezegen & Yaşanabilirlik API'],
-    ['#panel-habitability p.help', 'NASA gezginlerinden ve DONKI’den canlı Mars ve uzay havası.'],
+    ['#panel-habitability p.help', 'Mars havası (InSight arşivi, gezgin sahalarında tipik değerler) ve NASA DONKI uzay havası.'],
     ['#panel-habitability .api-key-box label', 'NASA Open API Anahtarı (isteğe bağlı)'],
     ['#btn-save-key', 'Kaydet'],
     ['#panel-habitability .api-key-box .note-sm', 'Sunucu proxy için boş bırakın veya tek başına kullanım için kişisel NASA anahtarı girin (DEMO_KEY saatlik/günlük sınırla çalışır).'],
@@ -795,15 +799,15 @@
       <div>
         <h3>4 · Çoklu tehlike rota planlayıcı ve Mod Ayrımı</h3>
         <p>Boylam sarmalı 8-komşuluklu adaptif A* algoritması. Basınçlı Rover modu (~20 km/sol) ≥200 km aralıklı arazi mola noktaları üretir; Yaya EVA / Marswalk modu (2.4 km/sa) 200 km rover molalarını devre dışı bırakıp 1.5 km kısa molalar, CO₂ RCA filtre kapasitesi ve %25 dönüş rezervi hesaplar. EVA giysi parametreleri Ay referansı xEMU’nun Mars 0.38g / 6–10 mbar CO₂ koşullarına uyarlamasıdır; uçuşa hazır Mars giysisi değildir.</p>
-        <h3>5 · Toz fırtınası enerji &amp; canlı telemetri modelleri</h3>
-        <p>Günlük güneş enerjisi <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35(τ−0.5)</sup></code> bağıntısıyla τ ≈ 10.8’de Opportunity 2018 kaybını doğrular. REMS/MEDA/InSight verileri istasyon koordinatı, Sol, UTC tarihi ve hidrostatik aktarım deltasını gösterir. NASA DONKI olayları anlık doz değil 1.524 AU güneş rüzgarı yayılım modeli olarak ayrı hesaplanır.</p>
+        <h3>5 · Toz fırtınası enerji &amp; hava modelleri</h3>
+        <p>Günlük güneş enerjisi <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35(τ−0.5)</sup></code> bağıntısıyla τ ≈ 10.8’de Opportunity 2018 kaybını doğrular. REMS/MEDA satırları her gezgin sahası için tipik değerlerdir (tek bir arşiv solü değil); InSight verisi arşivinden gelir. İkisi de rakım (hidrostatik) ve enleme göre başka sahaya aktarılabilir. NASA DONKI olayları anlık doz değil 1.524 AU güneş rüzgarı yayılım modeli olarak ayrı hesaplanır.</p>
       </div>
     </div>
     <h3>6 · Mevsim, radyasyon ve Monte Carlo (N=100) ağırlık duyarlılığı</h3>
     <p>Mevsimsel insolasyon Mars’ın 25.19° eksen eğikliğini ve yörünge dışmerkezliğini (e = 0.0934, günberi Lₛ = 251°) içerir. Atmosfer sütun kütlesi (16.4 g/cm², 11.1 km ölçek yüksekliği) Gale Krateri GCR dozunu (±%18.8 küresel belirsizlik aralığıyla) ve Ağustos-1972 tasarım SPE olayını hesaplar. Monte Carlo testi tüm ağırlıkları <b>100 kez</b> sarsarak <b>%95 Wilson güven aralığıyla</b> İlk-5 kararlılığını ölçer.</p>
-    <h3>7 · Küresel (~5 km/px) vs Yerel HiRISE (1.0–2.0 m/post) &amp; Veri İzlenebilirliği</h3>
+    <h3>7 · Ölçek ve veri izlenebilirliği</h3>
     <ul class="spec-list">
-      <li><b>Ölçek Ayrımı ve HiRISE DTM Kimliği:</b> Faz 1 küresel haritalar (~5 km/px MOLA) küçük kaya ve kraterleri göremez. Yaya EVA rotası HiRISE stereo DTM ürünlerini (örn. <code>DTEEC_068393_1985_068973_1985_A01</code>, SOCET SET işleme, 1.0–2.0 m/post, &lt;%3 küresel kapsama) kullanır.</li>
+      <li><b>Ölçek:</b> Küresel haritalar (~5 km/px MOLA) küçük kaya ve kraterleri göremez. Yürüyüş rotası için HiRISE stereo arazi modelleri (1.0–2.0 m/post, Mars’ın &lt;%3’ü) gerekir; uygulama 100 m Taktik EVA hücrelerinden daha ince arazi modellemez.</li>
       <li><b>Taktik EVA (16 km²):</b> 9 saha için MOLA-HRSC 200 m arazi modeli ve THEMIS 100 m gündüz kızılötesi mozaiğinden kesilmiş 4 km × 4 km, 100 m/hücre kutular. ~100 m’den küçük tehlikeler (kaya, küçük krater) görünmez; rota onayı için HiRISE stereo arazi modeli gerekir.</li>
       <li><b>Mağaralar ve Buz Sınırları:</b> MGC³ mağara adayları doğrulanmamış termal/optik anomalilerdir. SWIM yalnızca ±60° arası tutarlılık ölçer; dışı <code>VERİ YOK</code> olarak etiketlenir.</li>
     </ul>

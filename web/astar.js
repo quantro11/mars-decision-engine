@@ -226,10 +226,9 @@
       }
     }
 
-    // Science Waypoints (POI) along the route with full NASA dataset provenance, coordinates & non-core SWIM naming:
-    // 1. SWIM 2.0 Subsurface Ice-Consistency Anomaly (Unconfirmed — Requires Drill Verification)
-    // 2. Boxwork Fracture Network & Diagenetic Ridge Candidate
-    // 3. MGS TES High-Thermal-Inertia Bedrock Exposure
+    // Science stops along the route, picked only from the layers we actually have (no invented targets):
+    // 1. highest SWIM 2.0 ice-consistency cell, 2. highest TES thermal inertia (rock / duricrust proxy),
+    // 3. lowest TES thermal inertia (fine dust / sand). Each is searched in its own third of the route.
     const nPts = profile.length;
     const pickIdx = (fracStart, fracEnd, scoreFn) => {
       const i0 = Math.max(0, Math.floor(nPts * fracStart));
@@ -241,66 +240,35 @@
       }
       return profile[bestI] || profile[0];
     };
-    const pIce = pickIdx(0.15, 0.42, (q) => (q.ice !== null ? q.ice * 100 : 0) - q.elev * 0.005 - q.slope);
-    const pBox = pickIdx(0.43, 0.72, (q) => (12 - Math.abs(q.slope - 5.5)) * 4 + (q.ti || 200) * 0.08);
-    const pTes = pickIdx(0.73, 0.94, (q) => (q.ti || 200) * 0.25 - q.slope * 2);
+    const pIce = pickIdx(0.10, 0.36, (q) => (q.ice !== null ? q.ice : -9) - q.slope * 0.01);
+    const pRock = pickIdx(0.37, 0.66, (q) => (q.ti !== null ? q.ti : -9e3) - q.slope * 2);
+    const pFine = pickIdx(0.67, 0.92, (q) => (q.ti !== null ? -q.ti : -9e3) - q.slope * 2);
     const coordOf = (p) => ({
       lat: +(L.latOfRow ? L.latOfRow(p.y) : (90 - (p.y + 0.5) * 180 / H)).toFixed(2),
       lon: +(L.lonOfCol ? L.lonOfCol(p.x) : (-180 + (p.x + 0.5) * 360 / W)).toFixed(2),
     });
-    const cIce = coordOf(pIce), cBox = coordOf(pBox), cTes = coordOf(pTes);
-
+    const mkStop = (id, code, p, name, nameTr, dataset, target, targetTr) => {
+      const c = coordOf(p);
+      return {
+        id, code, name, nameTr, dataset, target, targetTr,
+        lat: c.lat, lon: c.lon, x: p.x, y: p.y, km: +p.km.toFixed(1), elev: Math.round(p.elev),
+        slope: +p.slope.toFixed(1), ti: p.ti !== null ? Math.round(p.ti) : null,
+        ice: p.ice !== null ? +p.ice.toFixed(2) : null,
+      };
+    };
     const scienceWaypoints = [
-      {
-        id: 'POI-1',
-        code: 'SWIM-ANOM',
-        name: 'SWIM 2.0 Subsurface Ice-Consistency Anomaly (Unconfirmed)',
-        nameTr: 'SWIM 2.0 Yeraltı Buz Tutarlılık Anomalisi (Doğrulanmamış Aday)',
-        dataset: 'PSI SWIM 2.0 Composite (SHARAD + MONS + THEMIS + TES)',
-        obsDate: '2021 Release (Morgan et al., Nat. Astron. 5)',
-        lat: cIce.lat, lon: cIce.lon,
-        target: 'Multi-sensor dielectric/thermal consistency candidate — requires GPR & auger drill verification (not a confirmed ice core)',
-        targetTr: 'Çoklu-sensör dielektrik/termal tutarlılık adayı — kesin buz yatağı değildir, GPR ve burgu sondaj doğrulaması gerekir',
-        x: pIce.x, y: pIce.y, km: +pIce.km.toFixed(1), elev: Math.round(pIce.elev),
-        slope: +pIce.slope.toFixed(1), ti: Math.round(pIce.ti || 215),
-        ice: pIce.ice !== null ? +pIce.ice.toFixed(2) : 0.35,
-        sciGain: 34,
-      },
-      {
-        id: 'POI-2',
-        code: 'BOXWORK',
-        name: 'Boxwork Fracture Network & Diagenetic Ridge Candidate',
-        nameTr: 'Boxwork Kırık Ağı & Diyajenetik Sırt İnceleme Noktası',
-        dataset: 'MGS MOLA 16-bit MEGDR + MRO CTX / HiRISE Structural Analog',
-        obsDate: 'PDS3/PDS4 Orbital Mosaic (2024–2026 MSL Analog)',
-        lat: cBox.lat, lon: cBox.lon,
-        target: 'Intermediate-TI indurated fracture ridges preserving late Hesperian groundwater circulation history',
-        targetTr: 'Geç Hesperian yeraltı suyu dolaşım izlerini koruyan orta-TI çimentolu kırık sırtları',
-        x: pBox.x, y: pBox.y, km: +pBox.km.toFixed(1), elev: Math.round(pBox.elev),
-        slope: +pBox.slope.toFixed(1), ti: Math.round(pBox.ti || 240),
-        ice: pBox.ice !== null ? +pBox.ice.toFixed(2) : 0.18,
-        sciGain: 35,
-      },
-      {
-        id: 'POI-3',
-        code: 'TES-THERM',
-        name: 'MGS TES High-Thermal-Inertia Bedrock Exposure',
-        nameTr: 'MGS TES Yüksek Termal Ataletli Ana Kaya Mostrası',
-        dataset: 'MGS TES Thermal Inertia (ASU JMARS Putzig/Mellon 8 ppd)',
-        obsDate: 'PDS TES Bolometric Archive (Putzig et al. 2005)',
-        lat: cTes.lat, lon: cTes.lon,
-        target: 'Coarse/indurated high-TI surface exposure (thermophysical proxy for bedrock/duricrust; LIBS/VNIR spectroscopy target)',
-        targetTr: 'Yüksek-TI iri taneli/sertleşmiş yüzey mostrası (ana kaya/durikrast termofiziksel göstergesi; LIBS/VNIR hedefi)',
-        x: pTes.x, y: pTes.y, km: +pTes.km.toFixed(1), elev: Math.round(pTes.elev),
-        slope: +pTes.slope.toFixed(1), ti: Math.round(pTes.ti || 275),
-        ice: pTes.ice !== null ? +pTes.ice.toFixed(2) : 0.22,
-        sciGain: 25,
-      }
+      mkStop('POI-1', 'ICE', pIce, 'Highest ice-consistency point on the route', 'Rotadaki en yüksek buz tutarlılığı noktası',
+        'PSI SWIM 2.0 (Morgan et al. 2021)',
+        pIce.ice !== null ? 'Candidate for ground-penetrating radar / drilling; SWIM is a consistency index, not proof of ice' : 'Outside SWIM coverage (±60°): no ice information here',
+        pIce.ice !== null ? 'Radar / sondaj adayı; SWIM bir tutarlılık indeksidir, buzun kanıtı değildir' : 'SWIM kapsamı dışında (±60°): burada buz bilgisi yok'),
+      mkStop('POI-2', 'ROCK', pRock, 'Highest thermal-inertia point (rock / crust proxy)', 'En yüksek termal atalet noktası (kaya / kabuk göstergesi)',
+        'MGS TES thermal inertia (Putzig & Mellon 2007)',
+        'Coarse or cemented surface: likely firm ground and a rock-sampling target', 'İri taneli veya çimentolu yüzey: muhtemelen sağlam zemin ve kaya örneği hedefi'),
+      mkStop('POI-3', 'FINE', pFine, 'Lowest thermal-inertia point (fine dust / sand)', 'En düşük termal atalet noktası (ince toz / kum)',
+        'MGS TES thermal inertia (Putzig & Mellon 2007)',
+        'Fine-grained deposit: soil sample target, but a possible soft-ground hazard for wheels', 'İnce taneli birikinti: toprak örneği hedefi, ama tekerlekler için yumuşak zemin riski'),
     ];
     const meanS = sumS / path.length;
-    const scienceScore = Math.min(99, Math.max(72, Math.round(
-      82 + (pIce.ice !== null ? pIce.ice * 8 : 3) + Math.min(8, (pTes.ti || 215) / 45) - Math.max(0, meanS - 8)
-    )));
 
     // Spacesuit (Mars-adapted xEMU reference) Bioenergetics & Strict Separation of Rover (20 km/sol) vs. Foot EVA (2.4 km/h)
     const meanR = sumR / path.length;
@@ -392,7 +360,7 @@
       meanCrossSlope: +(sumCrossS / Math.max(1, path.length - 1)).toFixed(1),
       meanRough: meanR, profile, safeHavens,
       hazardZones, returnRoute,
-      scienceWaypoints, scienceScore, evaStats,
+      scienceWaypoints, evaStats,
     };
   }
 

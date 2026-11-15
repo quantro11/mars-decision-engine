@@ -314,7 +314,7 @@
       isConcept: !!rover.concept,
       powerMode,
       driveHoursPerSol: driveH,
-      kmPerSol: +kmPerSol.toFixed(3),
+      kmPerSol: +(kmPerSol >= 1 ? kmPerSol.toFixed(1) : kmPerSol.toFixed(3)),
       sols,
       limitedBy,
       totalKwh: +totalKwh.toFixed(1),

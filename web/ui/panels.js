@@ -281,7 +281,7 @@
         <div class="marswalk-micro-card">
           <div class="marswalk-micro-head">
             <b>${L(tr, 'pn.localHiriseMarswalkMicroPlanning')}</b>
-            <span class="badge-mode badge-model">≤ 8 h EVA</span>
+            <span class="badge-mode badge-archive">≤ 8 h EVA</span>
           </div>
           <div class="help note-sm">${L(tr, 'pn.footAstronautWalkCard', [escHtml(nr.region.name), v.ice === null ? L(tr, 'pn.noDataIceAnomaly') : v.ice.toFixed(2), v.ti === null ? '—' : v.ti.toFixed(0)])}</div>
           <div class="kv"><span>${L(tr, 'pn.estMarswalkDurationLimit')}</span><b class="${locWalkH <= 8.0 ? 'ok' : 'warn'}">${locWalkH} h / 8.0 h max EVA ${locWalkH <= 8.0 ? '✓' : '⚠'}</b></div>
@@ -352,7 +352,6 @@
       const ev = b.evaStats;
       const evDir = a.evaStats;
       const sciWps = b.scienceWaypoints || [];
-      const sciScore = b.scienceScore || 92;
       const isMarswalk = r.travelMode === 'marswalk';
       const evaSpeedKmh = +(ev.effWalkSpeedKmh || 2.4);
       const havenStr = !isMarswalk && havens.length
@@ -367,10 +366,10 @@
         <div class="eva-wp-card route-poi-card" data-poi-idx="${idx}">
           <div class="eva-wp-head">
             <b>${escHtml(wp.id)} · ${escHtml(tr ? wp.nameTr : wp.name)}</b>
-            <span class="badge-mode badge-live">+${wp.sciGain} SCI · km ${wp.km}</span>
+            <span class="badge-mode badge-archive">km ${wp.km}</span>
           </div>
           <div class="help note-sm">${escHtml(tr ? wp.targetTr : wp.target)}</div>
-          <div class="help note-sm">${wp.lat != null && wp.lon != null ? `Coord ${wp.lat.toFixed(2)}°, ${wp.lon.toFixed(2)}° · ` : ''}Elev ${wp.elev} m · Slope ${wp.slope}° · TI ${wp.ti} tiu · SWIM ${wp.ice === null ? 'NO_DATA' : wp.ice}</div>
+          <div class="help note-sm">${wp.lat != null && wp.lon != null ? `Coord ${wp.lat.toFixed(2)}°, ${wp.lon.toFixed(2)}° · ` : ''}Elev ${wp.elev} m · Slope ${wp.slope}° · TI ${wp.ti === null ? '—' : wp.ti + ' tiu'} · SWIM ${wp.ice === null ? 'NO_DATA' : wp.ice}</div>
           ${wp.dataset ? `<div class="help note-sm"><b>${escHtml(wp.dataset)}</b>${wp.obsDate ? ` · ${escHtml(wp.obsDate)}` : ''}</div>` : ''}
         </div>`).join('');
 
@@ -384,7 +383,7 @@
       el.innerHTML = `
         <div class="marswalk-mode-banner ${isMarswalk ? 'active' : ''}">
           <b>${isMarswalk ? (L(tr, 'pn.activeModeAstronautFootEva', [evaSpeedKmh.toFixed(1)])) : (est ? L(tr, 'pn.rvBanner', [est.roverName, est.kmPerSol, est.driveHoursPerSol, L(tr, est.limitedBy === 'power' ? 'pn.rvLimPower' : est.limitedBy === 'drive' ? 'pn.rvLimDrive' : 'pn.rvLimBattery')]) : (L(tr, 'pn.activeModePressurizedRoverKm', [r.speed])))}</b>
-          <span class="badge-mode badge-live">${L(tr, 'pn.scienceGain100', [sciScore])}</span>
+          <span class="badge-mode badge-archive">${L(tr, 'pn.scienceGain100', [sciWps.length])}</span>
         </div>
         <div class="help note-sm">${L(tr, 'pn.globalARunsOnThe')}</div>
         <table class="stat-table"><tr><th>${L(tr, 'pn.metric')}</th><th class="straight">${L(tr, 'pn.direct')}</th><th class="safe">${L(tr, 'pn.aSafe')}</th></tr>
@@ -398,7 +397,7 @@
         <tr><td>${L(tr, 'pn.rvSlopeCheck')}</td><td>—</td><td class="${est.exceedsSlopeLimit ? 'bad' : 'ok'}"><b>${est.exceedsSlopeLimit ? L(tr, 'pn.rvSlopeBad', [b.maxSlope.toFixed(1), est.slopeLimitDeg]) : L(tr, 'pn.rvSlopeOk', [b.maxSlope.toFixed(1), est.slopeLimitDeg])}</b>${est.isConcept ? ` · <small>${L(tr, 'pn.rvConcept')}</small>` : ''}</td></tr>` : ''}
         ${crewRows}
         <tr><td>${L(tr, 'pn.returnRouteSafetyCorridor')}</td><td>—</td><td class="ok"><b>${retInfo.returnKm.toFixed(0)} km</b> (+${retInfo.returnAscentM} / -${retInfo.returnDescentM} m${hideCrew ? '' : ' · ≥25% RSV'})</td></tr>
-        <tr><td>${L(tr, 'pn.routeScienceGainScore')}</td><td>—</td><td class="ok"><b>${sciScore} / 100 pts</b> (${sciWps.length} POI)</td></tr></table>
+        <tr><td>${L(tr, 'pn.routeScienceGainScore')}</td><td>—</td><td><b>${sciWps.length}</b></td></tr></table>
         <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (L(tr, 'pn.directPathCrossesTerrainModel', [a.maxSlope.toFixed(1), r.maxSlope, (b.km - a.km).toFixed(0)])) : (L(tr, 'pn.directPathSatisfiesModelMaximum'))}</div>
         ${sciWps.length ? `<div class="sec-head mt-sm"><h2>${L(tr, 'pn.scienceWaypointsAlongRouteCoord')}</h2></div><div class="eva-wp-list">${sciRowsHtml}</div>` : ''}
         ${hideCrew ? '' : `<div class="help haven-note"><b>${isMarswalk ? (L(tr, 'pn.footEvaRestTurnaroundPlan')) : (L(tr, 'pn.rover200KmRestStops'))}: </b>${escHtml(havenStr)}</div>`}
@@ -460,7 +459,7 @@
       ].map(([lbl, a, b]) => `<div class="kv"><span>${escHtml(lbl)}</span><b>${escHtml(bo(a))} → ${escHtml(bo(b))}</b></div>`).join('');
       const driverHtml = `
         <div class="marswalk-micro-card">
-          <div class="marswalk-micro-head"><b>${L(tr, 'pn.whatDrivesResult')}</b><span class="badge-mode badge-model">MODEL</span></div>
+          <div class="marswalk-micro-head"><b>${L(tr, 'pn.whatDrivesResult')}</b><span class="badge-mode badge-archive">MODEL</span></div>
           <div class="help note-sm">${driverTxt}</div>
           <div class="help note-sm mt-sm"><b>${L(tr, 'pn.sensSliderRange')}</b></div>
           ${sensRows}
@@ -492,7 +491,7 @@
         <div class="marswalk-micro-card">
           <div class="marswalk-micro-head">
             <b>${L(tr, 'pn.pimlMultiHorizonDustVortex')}</b>
-            <span class="badge-mode badge-model">${escHtml(tr ? 'Fizik-Temelli İndeks' : 'Physics Risk Index')}</span>
+            <span class="badge-mode badge-archive">${escHtml(tr ? 'Fizik-Temelli İndeks' : 'Physics Risk Index')}</span>
           </div>
           <div class="help note-sm">${tr
             ? `Elle ayarlanmış kurallar, doğrulanmamış; girdiler saha, mevsim ve saatten modellenir (canlı sensör yok). Koridor: <b>${escHtml(mlPred.features.corridorNameTr)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/dk</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`
@@ -534,11 +533,11 @@
         }
         cvEl.className = `crisis-verdict ${baseOk ? 'ok' : 'bad'}`;
         cvEl.innerHTML = `
-          <div class="cv-head">${mark(baseOk)} ${L(tr, baseOk ? 'pn.cvSurvives' : 'pn.cvFails')}</div>
+          <div class="cv-head">${mark(baseOk)} ${L(tr, baseOk ? 'pn.cvSurvives' : (res.blackoutSol !== null && res.blackoutSol < stormCfg.startSol ? 'pn.cvFailsBefore' : 'pn.cvFails'))}</div>
           <div class="cv-row">
             <span class="cv-chip ${powerOk ? 'ok' : 'bad'}"><b>${mark(powerOk)} ${L(tr, 'pn.cvPower')}</b> ${powerOk ? L(tr, 'pn.cvPowerOk', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0)]) : L(tr, 'pn.cvPowerFail', [res.blackoutSol])}</span>
             <span class="cv-chip ${heatOk ? 'ok' : 'bad'}"><b>${mark(heatOk)} ${L(tr, 'pn.cvHeat')}</b> ${heatOk ? L(tr, 'pn.cvHeatOk') : L(tr, 'pn.cvHeatFail', [res.freezeSol])}</span>
-            <span class="cv-chip ${doseCls}"><b>${mark(doseCls !== 'bad')} ${L(tr, 'pn.cvShelter')}</b> ${L(tr, 'pn.cvShelterTxt', [spe.shieldedDoseMsv, (c.regolith ?? 1.5).toFixed(1)])}</span>
+            <span class="cv-chip ${doseCls}"><b>${mark(doseCls !== 'bad')} ${L(tr, 'pn.cvShelter')}</b> ${L(tr, 'pn.cvShelterTxt', [spe.shieldedDoseMsv < 1 ? '<1' : spe.shieldedDoseMsv, (c.regolith ?? 1.5).toFixed(1)])}</span>
           </div>
           ${roverHtml ? `<div class="cv-row"><span class="cv-lbl">${L(tr, 'pn.cvVehicles')}</span>${roverHtml}</div><div class="help note-sm cv-note">${L(tr, 'pn.cvModelNote')}</div>` : ''}`;
       }
@@ -555,7 +554,7 @@
         <div class="kv"><span>${L(tr, 'pn.panelDustAfterSols', [res.rows.length])}</span><b>−${res.postStormSolarLossPct}% (${L(tr, 'pn.noCleaningEventsAssumed')})</b></div>
         <div class="kv"><span>${L(tr, 'pn.kilopowerBaseload')}</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
         <div class="kv kv-top"><span>${L(tr, 'pn.designBasisSpeOnSurface')}</span><b>${spe.unshieldedDoseMsv} mSv</b></div>
-        <div class="kv"><span>${L(tr, 'pn.shieldedMRegolith', [(c.regolith ?? 1.5).toFixed(1)])}</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv} mSv (${escHtml(trDom(spe.survivalStatus))})</b></div>
+        <div class="kv"><span>${L(tr, 'pn.shieldedMRegolith', [(c.regolith ?? 1.5).toFixed(1)])}</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv < 1 ? '<1' : spe.shieldedDoseMsv} mSv (${escHtml(trDom(spe.survivalStatus))})</b></div>
         <div class="kv"><span>${L(tr, 'pn.regolithFor100Msv2')}</span><b>${spe.requiredRegolithM} m</b></div>
         <div class="help note-sm">${L(tr, 'pn.speFiguresUseAnAssumed')}</div>
         ${liveCmeRow}

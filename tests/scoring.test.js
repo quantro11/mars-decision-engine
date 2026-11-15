@@ -243,7 +243,7 @@ assert.ok(T.dustRiskSanityChecks().allPass, 'dust risk index responds in the phy
   const w = await Live.fetchNASAWeather('DEMO_KEY', fail);
   assert.strictEqual(w.mode, 'reference'); assert.strictEqual(w.data, null, 'no invented sol / pressure');
   const sw = await Live.fetchSpaceWeather('DEMO_KEY', fail);
-  assert.strictEqual(sw.mode, 'live_archive'); assert.strictEqual(sw.events.length, 4, 'verified May 2024 AR3664 DONKI archive fallback');
+  assert.strictEqual(sw.mode, 'live_archive'); assert.strictEqual(sw.events.length, 1, 'offline fallback is the single documented May 2024 event'); assert.ok(/2024-05-20/.test(sw.events[0].startTime));
   const ok = (body) => async () => ({ ok: true, json: async () => body });
   const arch = await Live.fetchNASAWeather('k', ok({ sol_keys: ['675'], '675': { AT: { mn: -90, mx: -20, av: -60 }, PRE: { av: 750 }, First_UTC: '2020-10-19T18:32:20Z' } }));
   assert.strictEqual(arch.mode, 'archive'); assert.strictEqual(arch.data.sol, 675); assert.strictEqual(arch.data.pressure_pa, 750);

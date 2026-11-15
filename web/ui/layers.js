@@ -175,9 +175,10 @@
     function nearestRegion(lat, lon) {
       let best = REGIONS[0], bestD = 1e9;
       for (const r of REGIONS) {
-        let dl = Math.abs(r.lon - lon);
-        if (dl > 180) dl = 360 - dl;
-        const d = Math.hypot(r.lat - lat, dl * Math.cos(lat * Math.PI / 180));
+        // great-circle central angle in degrees (haversine), so distances stay right far from the region too
+        const R = Math.PI / 180, p1 = lat * R, p2 = r.lat * R;
+        const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(((r.lon - lon) * R) / 2) ** 2;
+        const d = (2 * Math.asin(Math.min(1, Math.sqrt(h)))) / R;
         if (d < bestD) { bestD = d; best = r; }
       }
       return { region: best, distDeg: bestD };

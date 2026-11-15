@@ -35,9 +35,9 @@
       <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
       <path d="${areaB}" fill="rgba(127,155,179,.14)"/>
       <path d="${dt}" fill="none" stroke="#c8743c" stroke-width="1.2" stroke-dasharray="3 3"/>
-      <path d="${db}" fill="none" stroke="#d4ad5c" stroke-width="1.8"/>
-      <text x="${pad}" y="10" fill="#d4ad5c" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">${tr ? 'batarya' : 'battery'}</text>
-      <text x="${w - 8}" y="10" fill="#cc5a70" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" text-anchor="end">τ, 0–12</text>
+      <path d="${db}" fill="none" stroke="#7f9bb3" stroke-width="1.8"/>
+      <text x="${pad}" y="10" fill="#7f9bb3" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">${tr ? 'batarya' : 'battery'}</text>
+      <text x="${w - 8}" y="10" fill="#d47a3e" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" text-anchor="end">τ, 0–12</text>
       <text x="${pad}" y="${h - 5}" fill="#7f8998" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">sol 0</text>
       <text x="${w - 8}" y="${h - 5}" fill="#9ca3af" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" text-anchor="end">sol ${n}</text>
     </svg>`;

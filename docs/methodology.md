@@ -162,21 +162,22 @@ See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.
 2. MGC³ caves are **unconfirmed** orbital thermal/optical anomalies (Cushing et al. 2015) rather than verified shelter caverns.
 3. SWIM coverage ends at ±60°; outside ±60° is strictly reported as `NO_DATA` rather than `UNLIKELY`.
 4. NASA DONKI solar flare / CME events reflect 1 AU heliospheric observations and are propagated through a separate `1.524 AU` transit delay & attenuation model (`estimateMarsSpaceWeatherImpact`) rather than presented as instantaneous Martian surface radiation.
-5. REMS / MEDA / InSight weather records belong to specific lander coordinates, Sols, and UTC dates and are hydrostatically extrapolated (`extrapolateWeatherToSite`) to selected EVA regions with explicit delta uncertainty.
+5. REMS / MEDA rows are representative values for each rover site; they and InSight records are hydrostatically extrapolated (`extrapolateWeatherToSite`) to other sites with the elevation and latitude difference stated.
 6. The storm model has empirical optical-depth and dust-deposition constants; habitat heat loss (UA) and surface temperature are approximations.
 
 ## Data honesty (Module IV)
 
-Every externally fetched value carries one of four labels, shown in the UI next to the value:
+Every externally fetched value carries one of these labels, shown in the UI next to the value:
 
 | Label | Meaning |
 |---|---|
 | LIVE | fetched just now (NASA DONKI CME catalogue, last 30 days — propagated via 1.524 AU model) |
-| ARCHIVE | real measurement from an active or ended landed mission (REMS / MEDA / InSight, tagged with exact lat/lon, Sol, and UTC date) |
+| ARCHIVE | real measurement from an ended or active mission (InSight archive; the May 2024 solar-storm reference event) |
+| REPRESENTATIVE | rounded, season-typical values at a rover site (REMS / MEDA rows), not one archived sol |
 | REFERENCE | published climatology, not a measurement of today (InSight seasonal ranges, Banfield et al. 2020) |
 | OFFLINE | the request failed; offline guided demo scenario remains operational |
 
-No placeholder sol numbers, pressures or CME events are ever generated. Unit tests assert data-honesty and propagation rules (`tests/scoring.test.js`, `tests/ui.test.js`).
+No sol numbers or CME events are invented: the offline space-weather fallback is a single documented event (May 20 2024, Curiosity RAD ~8,100 µGy). Unit tests assert data-honesty and propagation rules (`tests/scoring.test.js`, `tests/ui.test.js`).
 
 ## 14. Tactical EVA (16 km²) and the suit energy model
 
