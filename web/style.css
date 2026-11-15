@@ -817,3 +817,12 @@ canvas:focus-visible { outline-offset: -2px; }
 .cv-lbl { color: var(--dim); text-transform: uppercase; letter-spacing: .04em; font-size: 9px; }
 .cv-chip.ok b { color: var(--ok-fg); } .cv-chip.warn b { color: var(--warn); } .cv-chip.bad b { color: var(--bad); }
 .cv-note { margin-top: 4px; }
+
+/* Landing tab: measured dust calendar */
+.ls-date-lbl { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; font-size: 12px; }
+.ls-cal-svg { width: 100%; height: auto; display: block; margin: 4px 0 6px; }
+.ls-cal-bar { fill: var(--muted); opacity: .55; }
+.ls-cal-bar.is-now { fill: var(--ochre); opacity: 1; }
+.ls-cal-p90 { stroke: var(--paper); stroke-width: 1.5; }
+.ls-cal-dusty { stroke: var(--bad); stroke-width: 1; stroke-dasharray: 3 3; }
+.ls-cal-tick { fill: var(--dim); font-size: 8px; font-family: var(--mono); }

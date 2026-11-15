@@ -337,7 +337,7 @@
         }, {
           VEHICLES: VEH, STORM, PLANET: global.PLANET_PROFILES && global.PLANET_PROFILES.get ? global.PLANET_PROFILES.get() : null,
           ls: S.crisis && S.crisis.ls != null ? S.crisis.ls : 251, lat: cv ? cv.lat : 0,
-          tau: cv && cv.dust != null ? 0.5 + cv.dust * 1.4 : 0.6, driveHoursPerSol: r.driveH, tr,
+          tau: (cv && typeof STORM.baselineTau === 'function') ? STORM.baselineTau(cv.lat, cv.lon, S.crisis && S.crisis.ls != null ? S.crisis.ls : 251, meanElevM) : 0.5, driveHoursPerSol: r.driveH, tr,
         });
         r.speed = est.kmPerSol; // km per sol for the selected class (also used by the brief export)
       }

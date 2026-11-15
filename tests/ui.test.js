@@ -302,11 +302,21 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   const resHarshLab = LS.analyzeSite({ cellValues: harshCell, roverId: 'lab_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
   const resBenignMini = LS.analyzeSite({ cellValues: benignCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
   const resHarshMini = LS.analyzeSite({ cellValues: harshCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
-  const resDustMini = LS.analyzeSite({ cellValues: { ...benignCell, dust: 0.8 }, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  // Air haze now comes from the measured climatology (fake grid here): a dusty season must cut solar-rover range.
+  const fakeClim = (meanScaled) => {
+    const n = 60 * 36 * 12;
+    return { meta: { grid: { dLon: 6, dLat: 5, nLon: 60, nLat: 36, lon0: -180, lat0: -90, nLs: 12 }, scale: { mean: 50, p90: 50, fDust: 250 }, marsYears: ['24', '36'], dustyTauThreshold: 1.5 }, mean: new Array(n).fill(meanScaled), p90: new Array(n).fill(meanScaled), fDust: new Array(n).fill(0) };
+  };
+  global.MDE_DUST_CLIM = fakeClim(25);   // tau 0.5
+  const resClearMini = LS.analyzeSite({ cellValues: benignCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  global.MDE_DUST_CLIM = fakeClim(100);  // tau 2.0
+  const resDustMini = LS.analyzeSite({ cellValues: benignCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  global.MDE_DUST_CLIM = null;
+  assert.ok(resClearMini.rangeKm > resDustMini.rangeKm && resDustMini.rover.dustClim && resDustMini.rover.localTau > 1.5, 'measured dusty-season haze reduces solar mini rover range');
   const resRoughLab = LS.analyzeSite({ cellValues: { ...benignCell, rough: 220 }, roverId: 'lab_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
   assert.ok(resBenignManned.rangeKm > resHarshManned.rangeKm, 'harsher environment reduces manned rover range');
   assert.ok(resBenignLab.rangeKm > resHarshLab.rangeKm && resBenignLab.rangeKm > resRoughLab.rangeKm, 'harsher terrain suitability reduces lab rover range');
-  assert.ok(resBenignMini.rangeKm > resHarshMini.rangeKm && resBenignMini.rangeKm > resDustMini.rangeKm, 'harsher terrain/dust reduces mini rover range');
+  assert.ok(resBenignMini.rangeKm > resHarshMini.rangeKm, 'harsher terrain reduces mini rover range');
   assert.ok(resBenignManned.rangeKm > resBenignLab.rangeKm && resBenignLab.rangeKm > resBenignMini.rangeKm, 'different rover classes compute distinct range radii');
   assert.ok(resHarshManned.negativeFactors.length >= 3 && resHarshManned.negativeFactors[0].lossPts >= resHarshManned.negativeFactors[1].lossPts, 'negative factors sorted by descending point loss');
   const blockedSteep = LS.analyzeSite({ cellValues: { ...benignCell, slope: 18 }, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: true });

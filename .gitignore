@@ -18,4 +18,6 @@ dist/
 
 # raw Montabone CDOD NetCDF files (large; only the generated web/dust_climatology_data.js is committed)
 dustdata/
+dust_data/
+*.tar
 *.nc

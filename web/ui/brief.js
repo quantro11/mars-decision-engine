@@ -67,10 +67,12 @@
     const crisisSite = S.crisis.site || (S.candidates[0] ? { x: S.candidates[0].x, y: S.candidates[0].y } : { x: W >> 1, y: 512 });
     const cv = cellValues(crisisSite.x, crisisSite.y), cnr = nearestRegion(cv.lat, cv.lon);
     const spe = SCORING.calcSPE(cv.elev, S.crisis.regolith ?? 1.5);
+    const briefTau0 = typeof STORM.baselineTau === 'function' ? STORM.baselineTau(cv.lat, cv.lon, S.crisis.ls, cv.elev) : 0.5;
+    const briefClim = typeof STORM.dustClimAt === 'function' ? STORM.dustClimAt(cv.lat, cv.lon, S.crisis.ls, cv.elev) : null;
     const sim = STORM.simulate({
       lat: cv.lat, ls: S.crisis.ls, ti: cv.ti, elev: cv.elev, panelArea: S.crisis.area, efficiency: 0.2,
       consumption: S.crisis.cons, capacity: S.crisis.batt, kilopower: S.crisis.kp, sols: 120,
-      storm: { tau0: 0.5, tauPeak: S.crisis.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
+      storm: { tau0: briefTau0, tauPeak: Math.max(S.crisis.tauPeak, briefTau0), startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
     });
     const mlDust = STORM.predictDustML ? STORM.predictDustML({
       lat: cv.lat, lon: cv.lon, elev: cv.elev, slope: cv.slope, ti: cv.ti, dust: cv.dust,
@@ -117,6 +119,8 @@
         season_ls_deg: S.crisis.ls,
         season_name: STORM.seasonName(S.crisis.ls),
         tau_peak: S.crisis.tauPeak,
+        tau_before_storm: briefTau0,
+        measured_dust_climatology: briefClim ? { typical_tau: briefClim.meanTau, dusty_day_tau_p90: briefClim.p90Tau, storm_haze_sol_fraction: briefClim.fDust, source: `Montabone et al. CDOD, ${briefClim.years}` } : null,
         nocturnal_surface_cold_c: STORM.surfaceTempC(cv.lat, S.crisis.ls, cv.ti, cv.elev).night,
         hab_heating_baseline_kw: STORM.thermalDemandKw(cv.lat, S.crisis.ls, cv.ti, cv.elev),
         spe_design_basis_assumption: {

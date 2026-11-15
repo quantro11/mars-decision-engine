@@ -211,8 +211,8 @@ Features (`STORM.extractDustMLFeatures`):
 * **Storm-season regions**: six approximate ellipses hand-placed after the storm-track maps in MDAD (Battalio & Wang 2021)
   and Montabone et al. (2015, 2020); positions and weights are rough.
 
-**Measured climatology (optional).** When `web/dust_climatology_data.js` has been generated from the Montabone et al.
-CDOD maps (`data_pipeline/build_dust_climatology.py`), the storm-season regions above are replaced by the measured share of
+**Measured climatology (bundled, MY24–MY36).** `web/dust_climatology_data.js` is generated from the Montabone et al.
+kriged CDOD maps (`data_pipeline/build_dust_climatology.py`; one daily value per sol per Mars year). The storm-season regions above are replaced by the measured share of
 sols with visible τ(610 Pa) ≥ 1.5 for that 6°×5° cell and 30° Ls bin, the default haze comes from the climatological mean
 (rescaled to site pressure), and the storm simulation starts from that haze instead of τ = 0.5.
 

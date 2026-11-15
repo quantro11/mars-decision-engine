@@ -89,7 +89,10 @@
     const roughM = Math.max(0, cellValues.rough || 0);
     const tiVal = cellValues.ti != null ? cellValues.ti : 220;
     const dustNorm = cellValues.dust != null ? cellValues.dust : 0.18;
-    const localTau = +(0.5 + dustNorm * 1.4).toFixed(2);
+    // Atmospheric dust for this site and season: measured climatology (Montabone CDOD, rescaled to site pressure)
+    // when bundled, else the clear-sky default 0.5. Surface dust cover (TES) is a ground property and is NOT used here.
+    const dustClim = STORM && typeof STORM.dustClimAt === 'function' ? STORM.dustClimAt(cellValues.lat, cellValues.lon, ls, cellValues.elev) : null;
+    const localTau = dustClim ? dustClim.meanTau : 0.5;
     const temp = STORM && STORM.surfaceTempC
       ? STORM.surfaceTempC(cellValues.lat, ls, cellValues.ti, cellValues.elev, localTau)
       : { mean: -63, night: -90, day: -20 };
@@ -118,7 +121,7 @@
     const tiMobility = 1 / Math.sqrt(tiMult);
     const roughFactor = 1 + Math.min(0.65, Math.max(0, roughM - 30) / 280);
     const roughMobility = 1 / roughFactor;
-    const dustVisFactor = 1 - Math.min(0.28, Math.max(0, dustNorm - 0.15) * 0.40);
+    const dustVisFactor = 1 - Math.min(0.28, Math.max(0, localTau - 0.5) * 0.12); // haze reduces visibility for driving
     // Terrain & hazard suitability factor slows ground progress and stretches avionics/heater burn per km
     const terrainMobility = Math.max(0.18, Math.min(1.0, slopeFactor * tiMobility * roughMobility * dustVisFactor));
     const effectiveSpeedKmh = speedKmh * terrainMobility;
@@ -229,6 +232,7 @@
       energyDetail,
       effWhKm: +effWhKm.toFixed(1),
       localTau,
+      dustClim,
       tempMeanC: Math.round(temp.mean),
       dailySolarKwhM2: +dailySolarKwhM2.toFixed(2),
       tiMult,
@@ -496,6 +500,104 @@
     const btnEva = doc.getElementById('ls-btn-eva');
     const btnWalk = doc.getElementById('ls-btn-walk');
     const btnStorm = doc.getElementById('ls-btn-storm');
+    const dateEl = doc.getElementById('ls-date');
+    const calEl = doc.getElementById('ls-cal-body');
+    const MT = () => global.MDE_MARS_TIME || (typeof globalThis !== 'undefined' ? globalThis.MDE_MARS_TIME : null);
+    const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+    /** Next Earth date (from today) when Mars reaches the given Ls (±0.6°), or null without the Mars clock. */
+    function nextDateForLs(lsTarget) {
+      const mt = MT();
+      if (!mt || !mt.computeMarsTime) return null;
+      const t0 = Date.parse(isoDay(Date.now()) + 'T00:00:00Z');
+      for (let d = 0; d <= 700; d++) {
+        const iso = isoDay(t0 + d * 86400000);
+        const diff = ((((mt.computeMarsTime(iso).lsDeg - lsTarget) % 360) + 540) % 360) - 180;
+        if (Math.abs(diff) <= 0.6) return iso;
+      }
+      return null;
+    }
+    function lsOfDate(iso) {
+      const mt = MT();
+      return mt && mt.computeMarsTime && iso ? (((mt.computeMarsTime(iso).lsDeg % 360) + 360) % 360) : null;
+    }
+
+    /** First Earth date (on/after `fromIso`) when Mars enters each 30° Ls bin; cached per start date. */
+    let binDatesCache = { from: null, dates: null };
+    function binStartDates(fromIso) {
+      if (binDatesCache.from === fromIso) return binDatesCache.dates;
+      const mt = MT();
+      const dates = new Array(12).fill(null);
+      if (mt && mt.computeMarsTime) {
+        const t0 = Date.parse(fromIso + 'T00:00:00Z');
+        let prevBin = null;
+        for (let d = 0; d <= 700; d++) {
+          const iso = isoDay(t0 + d * 86400000);
+          const b = Math.floor((((mt.computeMarsTime(iso).lsDeg % 360) + 360) % 360) / 30) % 12;
+          if (d === 0) dates[b] = iso;
+          else if (b !== prevBin && dates[b] === null) dates[b] = iso;
+          prevBin = b;
+        }
+      }
+      binDatesCache = { from: fromIso, dates };
+      return dates;
+    }
+
+    /** Dust calendar for the pinned site: 13 Mars years of measured haze per 30° Ls season (past behaviour). */
+    function renderCalendar(v, tr) {
+      if (!calEl) return;
+      if (!STORM || typeof STORM.dustClimAt !== 'function' || !STORM.dustClimAt(v.lat, v.lon, 0, v.elev)) {
+        calEl.innerHTML = `<div class="help note-sm">${escHtml(pick(tr, 'ls.calNone'))}</div>`;
+        return;
+      }
+      const lsNow = S.crisis && S.crisis.ls != null ? S.crisis.ls : 251;
+      // keep the date box on the same season as the rest of the app (e.g. after the storm-tab slider moved)
+      if (dateEl) {
+        const lsD = lsOfDate(dateEl.value);
+        if (lsD === null || Math.abs(((((lsD - lsNow) % 360) + 540) % 360) - 180) > 1) {
+          const iso = nextDateForLs(lsNow);
+          if (iso) dateEl.value = iso;
+        }
+      }
+      const nowBin = Math.floor((((lsNow % 360) + 360) % 360) / 30) % 12;
+      const bins = [];
+      for (let i = 0; i < 12; i++) bins.push(STORM.dustClimAt(v.lat, v.lon, i * 30 + 15, v.elev));
+      const now = STORM.dustClimAt(v.lat, v.lon, lsNow, v.elev);
+      const worst = bins.reduce((bi, c, i) => (c.p90Tau > bins[bi].p90Tau ? i : bi), 0);
+      const dates = binStartDates(isoDay(Date.now()));   // next occurrence counted from today
+      const W = 288, H = 86, padL = 22, padB = 16, bw = (W - padL - 4) / 12;
+      const maxTau = Math.max(1.5, ...bins.map((c) => c.p90Tau)) * 1.05;
+      const y = (t) => H - padB - (t / maxTau) * (H - padB - 6);
+      let svg = `<svg class="ls-cal-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(pick(tr, 'ls.calAria'))}">`;
+      const yDusty = y(STORM.dustClimAt(v.lat, v.lon, 0, v.elev).dustyTau);
+      svg += `<line class="ls-cal-dusty" x1="${padL}" x2="${W - 4}" y1="${yDusty.toFixed(1)}" y2="${yDusty.toFixed(1)}"/>`;
+      bins.forEach((c, i) => {
+        const x = padL + i * bw + 1.5;
+        svg += `<rect class="ls-cal-bar${i === nowBin ? ' is-now' : ''}" x="${x.toFixed(1)}" y="${y(c.meanTau).toFixed(1)}" width="${(bw - 3).toFixed(1)}" height="${(H - padB - y(c.meanTau)).toFixed(1)}"><title>Ls ${i * 30}–${i * 30 + 30}°: τ ${c.meanTau} · ${c.p90Tau} · ${(100 * c.fDust).toFixed(0)}%</title></rect>`;
+        svg += `<line class="ls-cal-p90" x1="${x.toFixed(1)}" x2="${(x + bw - 3).toFixed(1)}" y1="${y(c.p90Tau).toFixed(1)}" y2="${y(c.p90Tau).toFixed(1)}"/>`;
+      });
+      [0, 90, 180, 270].forEach((l) => { svg += `<text class="ls-cal-tick" x="${(padL + (l / 30) * bw).toFixed(1)}" y="${H - 4}">Ls ${l}°</text>`; });
+      svg += `<text class="ls-cal-tick" x="0" y="${(y(maxTau / 1.05) + 8).toFixed(1)}">τ ${(maxTau / 1.05).toFixed(1)}</text></svg>`;
+      const season = STORM.seasonName ? STORM.seasonName(lsNow) : '';
+      const seasonTxt = tr && global.MDE_I18N && global.MDE_I18N.trDomain ? global.MDE_I18N.trDomain(season) : season;
+      calEl.innerHTML = [
+        svg,
+        `<div class="kv"><span>${escHtml(pick(tr, 'ls.calNow', [Math.round(lsNow), seasonTxt.split(' /')[0]]))}</span><b>${escHtml(pick(tr, 'ls.calNowVal', [now.meanTau, now.p90Tau, (100 * now.fDust).toFixed(0)]))}</b></div>`,
+        `<div class="kv"><span>${escHtml(pick(tr, 'ls.calWorst'))}</span><b>Ls ${worst * 30}–${worst * 30 + 30}°${dates[worst] ? ' · ' + escHtml(pick(tr, 'ls.calFrom', [dates[worst]])) : ''}</b></div>`,
+        `<div class="help note-sm">${escHtml(pick(tr, 'ls.calNote', [now.years]))}</div>`,
+      ].join('');
+    }
+
+    if (dateEl) {
+      dateEl.onchange = () => {
+        const mt = MT();
+        if (!mt || !mt.computeMarsTime || !dateEl.value) return;
+        const ls = Math.round((((mt.computeMarsTime(dateEl.value).lsDeg % 360) + 360) % 360));
+        if (S.crisis) S.crisis.ls = ls;
+        const lsSlider = doc.getElementById('ls');       // keep the Dust-storm tab season in sync
+        if (lsSlider) { lsSlider.value = String(ls); if (typeof lsSlider.oninput === 'function') lsSlider.oninput(); }
+        if (S.customLanding) render();
+      };
+    }
 
     let roverId = 'manned_rover';
 
@@ -648,6 +750,7 @@
           `<div class="kv"><span>${escHtml(pick(tr, 'ls.mIce'))}</span><b>${escHtml(iceTxt)}</b></div>`,
           `<div class="kv"><span>${escHtml(pick(tr, 'ls.mTi'))}</span><b>${escHtml(tiTxt)}</b></div>`,
           `<div class="kv"><span>${escHtml(pick(tr, 'ls.mRad'))}</span><b>${Math.round(v.rad)} mSv/yr</b></div>`,
+          `<div class="kv"><span>${escHtml(pick(tr, 'ls.mDust'))}</span><b>${res.rover.dustClim ? escHtml(pick(tr, 'ls.mDustVal', [res.rover.dustClim.meanTau, res.rover.dustClim.p90Tau, (100 * res.rover.dustClim.fDust).toFixed(0)])) : escHtml(pick(tr, 'ls.mDustNone'))}</b></div>`,
         ].join('');
       }
 
@@ -656,7 +759,7 @@
       if (walkEl) {
         const locTi = v.ti != null ? v.ti : 215;
         const locDust = v.dust != null ? v.dust : 0.25;
-        const walkH = +(4.2 + v.slope * 0.11 + (v.rough / 180)).toFixed(1);
+        const walkH = 6.5; // planned EVA length (assumption: typical ISS/Apollo EVA ≈ 6.5–7.5 h)
         const bio = SCORING.calcPandolfMars
           ? SCORING.calcPandolfMars({ slopeDeg: v.slope, ti: locTi, sandFrac: Math.max(0, locDust - 0.2) * 0.6, durationH: walkH, loadKg: 15, speedKmh: 2.4, buddyMode: 'buddy' })
           : { metabolicKcalH: 228, o2RemainPct: 72, waterUsedL: 1.35, co2ScrubberUsedPct: 38, walkbackRadiusM: 760 };
@@ -688,6 +791,8 @@
           `<div class="kv"><span>${escHtml(pick(tr, 'ls.stSpe'))}</span><b>${spe.requiredRegolithM} m</b></div>`,
         ].join('');
       }
+
+      renderCalendar(v, tr);
 
       if (emptyEl) emptyEl.classList.add('hidden');
       if (closeBtn) closeBtn.classList.remove('hidden');
