@@ -223,7 +223,7 @@
       const fh = Math.round(9.5 * dpr);
       ctx.strokeStyle = 'rgba(148, 163, 184, 0.13)';
       ctx.lineWidth = 1;
-      ctx.font = `500 ${fh}px "Source Serif 4", Georgia, serif`;
+      ctx.font = `500 ${fh}px "Glacial Indifference", system-ui, sans-serif`;
       ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
       ctx.textBaseline = 'middle';
       for (let lon = -180; lon <= 180; lon += 30) {
@@ -355,7 +355,7 @@
 
       const effScale = S.viewMode === '3d' && globe ? (2.8 / Math.max(0.4, globe.state.camDist - 1.0)) : S.view.scale;
       const fontPx = Math.max(9.5, Math.min(12, 8.5 + effScale * 0.8)) * dpr;
-      ctx.font = `500 ${fontPx}px "Source Serif 4", Georgia, serif`;
+      ctx.font = `500 ${fontPx}px "Glacial Indifference", system-ui, sans-serif`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       if (S.showRegions || S.showEZ) for (const r of REGIONS) {
@@ -491,7 +491,7 @@
       // Rover-range label goes BELOW the pin: the legacy "EVA WALKBACK" label (when that demo
       // is open) sits above the same point, and at low zoom the two boxes used to overlap.
       const lbl = rangeKm > 0 ? `${rangeKm.toFixed(1)} km` : '0 km';
-      ctx.font = `600 ${Math.round(10 * dpr)}px "Source Serif 4", Georgia, serif`;
+      ctx.font = `600 ${Math.round(10 * dpr)}px "Glacial Indifference", system-ui, sans-serif`;
       const tw = ctx.measureText(lbl).width;
       ctx.fillStyle = 'rgba(12, 14, 18, 0.88)';
       ctx.fillRect(px - tw / 2 - 4 * dpr, py + r + 16 * dpr, tw + 8 * dpr, 13 * dpr);

@@ -1,3 +1,5 @@
+@font-face { font-family: "Glacial Indifference"; src: url("fonts/GlacialIndifference-Regular.woff2") format("woff2"); font-weight: 100 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Glacial Indifference"; src: url("fonts/GlacialIndifference-Bold.woff2") format("woff2"); font-weight: 700 900; font-style: normal; font-display: swap; }
 /* Mars Base Decision Engine — mission workbench styles & telemetry palette. */
 
 :root {
@@ -22,9 +24,9 @@
   --tip-bg: rgba(19, 10, 13, .96);
   --r: 4px;
   --r-lg: 6px;
-  --serif: "Cormorant Garamond", "Source Serif 4", Georgia, serif;
-  --sans: "Source Serif 4", Georgia, "Times New Roman", serif;
-  --mono: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --serif: "Glacial Indifference", "Segoe UI", system-ui, sans-serif;
+  --sans: "Glacial Indifference", "Segoe UI", system-ui, sans-serif;
+  --mono: "Glacial Indifference", "Segoe UI", system-ui, sans-serif;
   --ease: cubic-bezier(.25, .6, .3, 1);
 }
 
@@ -755,7 +757,7 @@ html[data-theme="light"] { --gold-line: rgba(134, 97, 15, .45); --gold-soft: rgb
 html[data-theme="light"] .mode-btn.active { color: var(--ochre); }
 .crisis-verdict { border-top: 2px solid var(--slate); }
 
-/* Serif everywhere: keep numbers aligned */
+/* Keep numbers aligned */
 body { font-variant-numeric: tabular-nums lining-nums; }
 
 /* More gold: lines, thumbs, frames */

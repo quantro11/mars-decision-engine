@@ -102,7 +102,7 @@
       ctx.setLineDash([]);
       if (revealed) {
         ctx.fillStyle = '#dfb365';
-        ctx.font = '500 9.5px "Source Serif 4", Georgia, serif';
+        ctx.font = '500 9.5px "Glacial Indifference", system-ui, sans-serif';
         ctx.fillText(st.label, sx(st.x) - 34, sy(st.y) + 3);
       }
       ctx.restore();
@@ -120,7 +120,7 @@
       ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#edf1f7';
-      ctx.font = '500 9.5px "Source Serif 4", Georgia, serif';
+      ctx.font = '500 9.5px "Glacial Indifference", system-ui, sans-serif';
       ctx.fillText(b.label, cx - rad, cy - rad - 4);
       ctx.restore();
     }
@@ -132,7 +132,7 @@
       ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(sx(w.x1), sy(w.y1)); ctx.lineTo(sx(w.x2), sy(w.y2)); ctx.stroke();
       ctx.fillStyle = '#edf1f7';
-      ctx.font = '500 9.5px "Source Serif 4", Georgia, serif';
+      ctx.font = '500 9.5px "Glacial Indifference", system-ui, sans-serif';
       ctx.fillText(w.label, sx((w.x1 + w.x2) / 2) - 42, sy((w.y1 + w.y2) / 2) - 7);
       ctx.restore();
     }
@@ -149,7 +149,7 @@
     ctx.beginPath(); ctx.arc(bx, by, wbRadiusPx, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = sim.withinWalkback ? '#adc7dd' : '#dfb365';
-    ctx.font = '600 10px "Source Serif 4", Georgia, serif';
+    ctx.font = '600 10px "Glacial Indifference", system-ui, sans-serif';
     const wbLabel = tr
       ? `WALKBACK SINIRI: ${walkbackRadiusM} m · SİNDİRİLEN: %${sim.navStack.autonav.assimilatedPct}`
       : `WALKBACK: ${walkbackRadiusM} m (Max ${maxRadiusFromBaseM} m) · ASSIM: ${sim.navStack.autonav.assimilatedPct}%`;
@@ -189,7 +189,7 @@
         ctx.beginPath(); ctx.arc(dx, dy, dr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = '#edf1f7';
-        ctx.font = '600 9.5px "Source Serif 4", Georgia, serif';
+        ctx.font = '600 9.5px "Glacial Indifference", system-ui, sans-serif';
         const i18n = getI18N();
         const anomalyTxt = (i18n && typeof i18n.pick === 'function')
           ? i18n.pick(tr, 'eva.anomalyLabel')
@@ -268,7 +268,7 @@
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(rx, ry, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#edf1f7';
-      ctx.font = '600 9.5px "Source Serif 4", Georgia, serif';
+      ctx.font = '600 9.5px "Glacial Indifference", system-ui, sans-serif';
       const rt = sim.realTimeTracking;
       const posLbl = rt ? `EVA (${rt.astronautXMeters}m,${rt.astronautYMeters}m · ETA ${rt.etaReturnBaseMin}m)` : 'EVA POS';
       ctx.fillText(posLbl, Math.min(W - 155, Math.max(8, rx - 35)), Math.max(28, ry - 9));
@@ -286,7 +286,7 @@
         ctx.fillRect(rx - 3.5, ry - 3.5, 7, 7);
         ctx.strokeRect(rx - 3.5, ry - 3.5, 7, 7);
         ctx.fillStyle = '#adc7dd';
-        ctx.font = '500 8.5px "Source Serif 4", Georgia, serif';
+        ctx.font = '500 8.5px "Glacial Indifference", system-ui, sans-serif';
         ctx.fillText(`R${idx + 1}`, rx + 5, ry + 3);
         ctx.restore();
       });
@@ -298,7 +298,7 @@
     ctx.strokeStyle = '#edf1f7';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.font = '600 10.5px "Source Serif 4", Georgia, serif';
+    ctx.font = '600 10.5px "Glacial Indifference", system-ui, sans-serif';
     ctx.fillStyle = '#edf1f7';
     ctx.fillText(zone.base.label, bx + 10, by + 4);
     ctx.restore();
@@ -318,7 +318,7 @@
       ctx.lineWidth = 1.8;
       ctx.beginPath(); ctx.arc(wx, wy, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#edf1f7';
-      ctx.font = '600 10px "Source Serif 4", Georgia, serif';
+      ctx.font = '600 10px "Glacial Indifference", system-ui, sans-serif';
       ctx.fillText(`${wp.id} · ${wp.code}`, wx + 10, wy + 3);
       ctx.restore();
     });
@@ -328,7 +328,7 @@
     ctx.fillStyle = 'rgba(12, 15, 20, 0.86)';
     ctx.fillRect(8, H - 23, W - 16, 17);
     ctx.fillStyle = '#c9d1dc';
-    ctx.font = '500 9.5px "Source Serif 4", Georgia, serif';
+    ctx.font = '500 9.5px "Glacial Indifference", system-ui, sans-serif';
     ctx.fillText(
       tr
         ? `10m/hücre DEM · Yeşil=AutoNav | Kırmızı=Ham Uydu (${sim.orbitalHazardHits} risk)${sim.speAlert ? ' | Sarı=SPE Kaçış' : ''} · ${domainLayer.toUpperCase()}`
@@ -455,7 +455,7 @@
     ctx.fillStyle = 'rgba(12, 15, 20, 0.80)';
     ctx.fillRect(W * 0.14, 14, W * 0.72, 24);
     ctx.fillStyle = '#edf1f7';
-    ctx.font = '600 10.5px "Source Serif 4", Georgia, serif';
+    ctx.font = '600 10.5px "Glacial Indifference", system-ui, sans-serif';
     ctx.textAlign = 'center';
     const mglTag = sim.navStack && sim.navStack.mgl && sim.navStack.mgl.locked
       ? `MGL ±${sim.navStack.mgl.mglCorrectedErrorM}m`
@@ -484,7 +484,7 @@
     // and flipped to the left of the reticle when it would run past the visor edge.
     const line1 = `TARGET: ${wp.id} (${wp.code}) · ${laserOn ? 'LIBS PLASMA ACTIVE' : 'OPTICAL LOCK'}`;
     const line2 = `SiO2 ${wp.chem.SiO2}% · SO3 ${wp.chem.SO3}% · FeO ${wp.chem.FeO}% · H2O ${wp.chem.H2O}%`;
-    ctx.font = '600 10px "Source Serif 4", Georgia, serif';
+    ctx.font = '600 10px "Glacial Indifference", system-ui, sans-serif';
     ctx.textAlign = 'left';
     const boxW = Math.ceil(Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width)) + 12;
     let boxX = tx + 24;
@@ -499,7 +499,7 @@
     ctx.fillStyle = 'rgba(12, 15, 20, 0.84)';
     ctx.fillRect(14, H - 34, W - 28, 22);
     ctx.fillStyle = '#edf1f7';
-    ctx.font = '500 10px "Source Serif 4", Georgia, serif';
+    ctx.font = '500 10px "Glacial Indifference", system-ui, sans-serif';
     const camTag = (o.camLabel) || wp.cam;
     ctx.fillText(
       tr
@@ -556,7 +556,7 @@
     ];
     const markers = bands.map((b) =>
       `<line x1="${b.x}" y1="22" x2="${b.x}" y2="78" stroke="#2c3545" stroke-width="1" stroke-dasharray="2 2"/>` +
-      `<text x="${b.x}" y="${b.row ? 98 : 89}" text-anchor="${b.anchor}" fill="#828c9c" font-size="7.5" font-family="Source Serif 4, Georgia, serif">${b.lbl}</text>`
+      `<text x="${b.x}" y="${b.row ? 98 : 89}" text-anchor="${b.anchor}" fill="#828c9c" font-size="7.5" font-family="Glacial Indifference, system-ui, sans-serif">${b.lbl}</text>`
     ).join('');
     const oxideSummary = hasChem
       ? `FeO ${chem.FeO ?? '-'} · MgO ${chem.MgO ?? '-'} · SO3 ${chem.SO3 ?? '-'} · H2O ${chem.H2O ?? '-'}`
@@ -566,7 +566,7 @@
       <line x1="16" y1="78" x2="268" y2="78" stroke="#2c3545" stroke-width="1"/>
       ${markers}
       <polyline fill="none" stroke="#7dbb8e" stroke-width="2.2" points="${series}"/>
-      <text x="14" y="13" fill="#adc7dd" font-size="8.2" font-family="Source Serif 4, Georgia, serif">${oxideSummary}</text>
+      <text x="14" y="13" fill="#adc7dd" font-size="8.2" font-family="Glacial Indifference, system-ui, sans-serif">${oxideSummary}</text>
     </svg>`;
   }
 
@@ -591,7 +591,7 @@
       ctx.lineWidth = 1.5 * dpr;
       ctx.strokeRect(pad, pad + Math.round(24 * dpr), boxW, boxH);
       ctx.fillStyle = '#edf1f7';
-      ctx.font = `600 ${Math.round(11 * dpr)}px "Source Serif 4", Georgia, serif`;
+      ctx.font = `600 ${Math.round(11 * dpr)}px "Glacial Indifference", system-ui, sans-serif`;
       const tr = isTr();
       const hdr = tr
         ? `FAZ 2 MERKEZ TAKTİK GÖRÜNÜM (1 km × 1 km @ 10m/hücre) · ${evaSim.zone.nameTr || evaSim.zone.name} · WALKBACK ${evaSim.walkbackRadiusM}m`
@@ -616,7 +616,7 @@
     ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(12, 15, 20, 0.85)';
     const lbl = `EVA WALKBACK ${walkbackKm.toFixed(2)} km`;
-    ctx.font = `600 ${Math.round(9.5 * dpr)}px "Source Serif 4", Georgia, serif`;
+    ctx.font = `600 ${Math.round(9.5 * dpr)}px "Glacial Indifference", system-ui, sans-serif`;
     const tw = ctx.measureText(lbl).width;
     ctx.fillRect(sx - tw / 2 - 4 * dpr, sy - radiusPx - 14 * dpr, tw + 8 * dpr, 13 * dpr);
     ctx.fillStyle = '#7dbb8e';

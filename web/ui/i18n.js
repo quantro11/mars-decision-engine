@@ -989,7 +989,7 @@
     ['#maxslope', 'Model eğim sınırı (zemin uyarlamalı) '],
     ['#kslope', 'Eğim cezası '],
     ['#speed', 'Sol başına sürüş süresi '],
-    ['#ls', 'Mevsim, L'],
+    ['#ls', 'Mars mevsimi (Lₛ) '],
     ['#opacity', 'Katman opaklığı '],
     ['#tau', 'Tepe optik derinlik τ '],
     ['#area', 'Güneş paneli alanı '],
