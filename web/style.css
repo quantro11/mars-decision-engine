@@ -1,25 +1,25 @@
 /* Mars Base Decision Engine — mission workbench styles & telemetry palette. */
 
 :root {
-  --ink: #0c0f14;
-  --ink-2: #12161d;
-  --ink-3: #181d26;
-  --ink-4: #202733;
-  --paper: #edf1f7;
-  --paper-2: #c9d1dc;
-  --muted: #9aa3b2;
-  --dim: #828c9c;
-  --hair: rgba(237, 241, 247, .10);
-  --hair-2: rgba(237, 241, 247, .20);
-  --ochre: #d87a42;
-  --ochre-2: #ea9662;
-  --slate: #7fa2bf;
-  --slate-2: #adc7dd;
+  --ink: #130a0d;
+  --ink-2: #1b0f13;
+  --ink-3: #241419;
+  --ink-4: #2e1a20;
+  --paper: #f6efe7;
+  --paper-2: #dccdc1;
+  --muted: #ad9e99;
+  --dim: #94837f;
+  --hair: rgba(246, 239, 231, .10);
+  --hair-2: rgba(246, 239, 231, .20);
+  --ochre: #cc5a70;
+  --ochre-2: #e27f91;
+  --slate: #d4ad5c;
+  --slate-2: #e9cf91;
   --ok: #7dbb8e;
-  --warn: #dfb365;
-  --bad: #de7a6b;
-  --hud-bg: rgba(12, 15, 20, .88);
-  --tip-bg: rgba(12, 15, 20, .96);
+  --warn: #eb9850;
+  --bad: #f2715f;
+  --hud-bg: rgba(19, 10, 13, .88);
+  --tip-bg: rgba(19, 10, 13, .96);
   --r: 4px;
   --r-lg: 6px;
   --serif: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
@@ -29,25 +29,25 @@
 }
 
 html[data-theme="light"] {
-  --ink: #f4f6f9;
-  --ink-2: #eaedf2;
-  --ink-3: #e0e5ec;
-  --ink-4: #d4dbe5;
-  --paper: #12161c;
-  --paper-2: #242a35;
-  --muted: #464e5c;
-  --dim: #545c6b;
-  --hair: rgba(18, 22, 28, .13);
-  --hair-2: rgba(18, 22, 28, .25);
-  --ochre: #a34914;
-  --ochre-2: #82370b;
-  --slate: #2b506e;
-  --slate-2: #1c3a52;
+  --ink: #fbf7f2;
+  --ink-2: #f3ece4;
+  --ink-3: #eae0d6;
+  --ink-4: #dfd1c5;
+  --paper: #1f1014;
+  --paper-2: #3b2329;
+  --muted: #5b4549;
+  --dim: #67525a;
+  --hair: rgba(31, 16, 20, .13);
+  --hair-2: rgba(31, 16, 20, .25);
+  --ochre: #7d1f35;
+  --ochre-2: #601727;
+  --slate: #86610f;
+  --slate-2: #694b0a;
   --ok: #1d6136;
-  --warn: #7d4f0d;
-  --bad: #a12920;
-  --hud-bg: rgba(244, 246, 249, .94);
-  --tip-bg: rgba(255, 255, 255, .97);
+  --warn: #9a4a0a;
+  --bad: #b3261e;
+  --hud-bg: rgba(251, 247, 242, .94);
+  --tip-bg: rgba(255, 253, 250, .97);
 }
 
 .skip-link {
@@ -299,7 +299,7 @@ label.check b { color: var(--paper-2); font-weight: 500; }
 .hud-pov-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: contrast(1.06) saturate(1.08); transition: opacity .25s var(--ease); z-index: 1; }
 .hud-pov-img.hidden { display: none; }
 .hud-pov-canvas { position: relative; z-index: 2; display: block; width: 100%; height: 100%; background: transparent; }
-.hud-visor-vignette { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(circle at center, transparent 58%, rgba(5, 8, 12, 0.72) 100%), repeating-linear-gradient(0deg, rgba(127, 162, 191, 0.03) 0px, rgba(127, 162, 191, 0.03) 1px, transparent 1px, transparent 3px); }
+.hud-visor-vignette { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(circle at center, transparent 58%, rgba(5, 8, 12, 0.72) 100%), repeating-linear-gradient(0deg, rgba(212, 173, 92, 0.03) 0px, rgba(212, 173, 92, 0.03) 1px, transparent 1px, transparent 3px); }
 .hud-cam-status-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; font: 10.5px var(--mono); color: var(--muted); padding: 5px 8px; background: var(--ink-2); border: 1px solid var(--hair); border-radius: var(--r); margin-top: 8px; }
 .hud-rad-banner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font: 11px var(--mono); padding: 6px 10px; background: var(--ink-3); border-radius: var(--r); margin-top: 8px; }
 .hud-Action-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
@@ -539,9 +539,9 @@ canvas:focus-visible { outline-offset: -3px; }
   .zoom-btns button, .globe-tools button, .row button, button.ghost, .modal-close { min-height: 36px; }
   label.check input { width: 18px; height: 18px; margin-top: 1px; }
 }
-.marswalk-micro-card { margin-top: 10px; padding: 10px 11px; border: 1px solid rgba(234, 150, 98, 0.35); border-radius: var(--r-md); background: rgba(234, 150, 98, 0.06); min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.marswalk-micro-card { margin-top: 10px; padding: 10px 11px; border: 1px solid rgba(204, 90, 112, 0.35); border-radius: var(--r-md); background: rgba(204, 90, 112, 0.06); min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .marswalk-micro-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ochre-2); margin-bottom: 6px; }
-.marswalk-mode-banner { padding: 6px 9px; margin-bottom: 8px; border-radius: var(--r-sm); border: 1px solid rgba(234, 150, 98, 0.38); background: rgba(234, 150, 98, 0.1); color: var(--ochre-2); font-family: var(--mono); font-size: 10.5px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
+.marswalk-mode-banner { padding: 6px 9px; margin-bottom: 8px; border-radius: var(--r-sm); border: 1px solid rgba(204, 90, 112, 0.38); background: rgba(204, 90, 112, 0.1); color: var(--ochre-2); font-family: var(--mono); font-size: 10.5px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
 #route-mode-seg { margin-bottom: 10px; }
 .eva-custom-weights { padding: 8px 10px; margin: 6px 0 8px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--ink-3); }
 .eva-custom-weights.hidden { display: none; }

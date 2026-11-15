@@ -7,7 +7,7 @@
     { key: 'optics',          label: 'Optics (imagery)',         labelTr: 'Optik (görüntü)',          unit: 'CTX / 0–100', defOn: true,  defOp: 90, lowRes: false, stops: ['#181c24', '#6d7888', '#d8dee8'] },
     { key: 'final',           label: 'Final landing score',      labelTr: 'Nihai iniş skoru',         unit: '0–100',       defOn: true,  defOp: 65, lowRes: false, stops: ['#9d2820', '#d88a2e', '#2ea35a'] },
     { key: 'power',           label: 'Power & Energy',           labelTr: 'Güç & Enerji',             unit: '0–100 / Wh',  defOn: false, defOp: 70, lowRes: false, stops: ['#8c2317', '#dfa13b', '#2eb369'] },
-    { key: 'topography',      label: 'Topography',               labelTr: 'Topografya',               unit: '0–100 / m',   defOn: false, defOp: 70, lowRes: false, stops: ['#24303c', '#7fa2bf', '#e2b86d'] },
+    { key: 'topography',      label: 'Topography',               labelTr: 'Topografya',               unit: '0–100 / m',   defOn: false, defOp: 70, lowRes: false, stops: ['#24303c', '#d4ad5c', '#e2b86d'] },
     { key: 'thermal',         label: 'Thermal',                  labelTr: 'Termal',                   unit: '0–100 / tiu', defOn: false, defOp: 70, lowRes: false, stops: ['#2b4c7e', '#3da36b', '#df8d3e'] },
     { key: 'radiation',       label: 'Radiation (space dose)',   labelTr: 'Radyasyon (uzay dozu)',    unit: '0–100 / mSv', defOn: false, defOp: 70, lowRes: false, stops: ['#8a2936', '#d6a33a', '#3aa884'] },
     { key: 'groundComp',      label: 'Ground composition (K/Th)',labelTr: 'Zemin bileşimi (K/Th)',    unit: 'wt% K, ppm Th',defOn: false, defOp: 70, lowRes: true,  stops: ['#2a528a', '#68a4ad', '#dfb85b'] },

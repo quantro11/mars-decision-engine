@@ -141,9 +141,9 @@
     const bx = sx(zone.base.x), by = sy(zone.base.y);
     const wbRadiusPx = Math.min(W * 0.92, (walkbackRadiusM / 1000) * W);
     ctx.save();
-    ctx.fillStyle = sim.withinWalkback ? 'rgba(127, 162, 191, 0.08)' : 'rgba(223, 179, 101, 0.09)';
+    ctx.fillStyle = sim.withinWalkback ? 'rgba(212, 173, 92, 0.08)' : 'rgba(223, 179, 101, 0.09)';
     ctx.beginPath(); ctx.arc(bx, by, wbRadiusPx, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = sim.withinWalkback ? '#7fa2bf' : '#dfb365';
+    ctx.strokeStyle = sim.withinWalkback ? '#d4ad5c' : '#dfb365';
     ctx.lineWidth = 2.0;
     ctx.setLineDash([7, 5]);
     ctx.beginPath(); ctx.arc(bx, by, wbRadiusPx, 0, Math.PI * 2); ctx.stroke();
@@ -258,8 +258,8 @@
       const rx = sx(assimMask.roverX), ry = sy(assimMask.roverY);
       ctx.save();
       if (sim.scanStep < 8) {
-        ctx.strokeStyle = 'rgba(127, 162, 191, 0.78)';
-        ctx.fillStyle = 'rgba(127, 162, 191, 0.14)';
+        ctx.strokeStyle = 'rgba(212, 173, 92, 0.78)';
+        ctx.fillStyle = 'rgba(212, 173, 92, 0.14)';
         ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(rx, ry, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       }
@@ -294,7 +294,7 @@
 
     // TRN Touchdown Pad Marker
     ctx.save();
-    ctx.fillStyle = '#7fa2bf';
+    ctx.fillStyle = '#d4ad5c';
     ctx.strokeStyle = '#edf1f7';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -309,11 +309,11 @@
       const isAct = idx === activeWpIdx;
       ctx.save();
       if (isAct) {
-        ctx.strokeStyle = '#ea9662';
+        ctx.strokeStyle = '#e27f91';
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(wx, wy, 13, 0, Math.PI * 2); ctx.stroke();
       }
-      ctx.fillStyle = isAct ? '#d87a42' : '#181d26';
+      ctx.fillStyle = isAct ? '#cc5a70' : '#181d26';
       ctx.strokeStyle = '#edf1f7';
       ctx.lineWidth = 1.8;
       ctx.beginPath(); ctx.arc(wx, wy, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -448,7 +448,7 @@
 
     const tx = W * 0.5, ty = H * 0.67;
     ctx.save();
-    ctx.strokeStyle = 'rgba(127, 162, 191, 0.45)';
+    ctx.strokeStyle = 'rgba(212, 173, 92, 0.45)';
     ctx.lineWidth = 2;
     ctx.strokeRect(8, 8, W - 16, H - 16);
 
