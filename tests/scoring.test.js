@@ -233,5 +233,23 @@ assert.strictEqual(mlVortex.validated, false, 'dust risk index is flagged as not
 assert.ok(!('overallAccuracyPct' in mlVortex) && !('overallRocAuc' in mlVortex), 'no accuracy claims are attached to the heuristic index');
 assert.strictEqual(typeof T.validateDustMLBenchmarks, 'undefined', 'synthetic ML benchmark generator removed');
 assert.ok(T.dustRiskSanityChecks().allPass, 'dust risk index responds in the physically expected direction');
+// Measured dust climatology hook (web/dust_climatology_data.js). Placeholder ships as null -> heuristic fallback.
+assert.strictEqual(T.dustClimAt(18, 77, 251, -2500), null, 'no climatology bundled -> null');
+assert.strictEqual(T.baselineTau(18, 77, 251, -2500), 0.5, 'default pre-storm haze is tau 0.5 without climatology');
+{
+  const nLon = 60, nLat = 36, nLs = 12, n = nLon * nLat * nLs;
+  const mean = new Array(n).fill(25), p90 = new Array(n).fill(40), fDust = new Array(n).fill(0);
+  const bin = 8, cell = Math.floor((18 + 90) / 5) * nLon + Math.floor((77 + 180) / 6);   // Ls 240-270 at Jezero
+  mean[bin * nLat * nLon + cell] = 75; fDust[bin * nLat * nLon + cell] = 100;
+  global.MDE_DUST_CLIM = { meta: { grid: { dLon: 6, dLat: 5, nLon, nLat, lon0: -180, lat0: -90, nLs }, scale: { mean: 50, p90: 50, fDust: 250 }, marsYears: ['28', '34'], dustyTauThreshold: 1.5 }, mean, p90, fDust };
+  const c = T.dustClimAt(18, 77, 251, 0);
+  assert.ok(Math.abs(c.meanTau - 1.5) < 1e-9 && Math.abs(c.fDust - 0.4) < 1e-9 && c.years === 'MY 28–34', 'climatology lookup decodes the packed grid');
+  assert.ok(T.dustClimAt(18, 77, 251, 5000).meanTau < c.meanTau, 'higher sites have less dust above them (pressure scaling)');
+  assert.ok(T.dustClimAt(18, 77, 90, 0).meanTau < c.meanTau, 'season bins differ');
+  assert.strictEqual(T.baselineTau(18, 77, 251, 0), 1.5, 'pre-storm haze comes from the climatology');
+  const f = T.extractDustMLFeatures({ lat: 18, lon: 77, ls: 251, elev: 0 });
+  assert.ok(/Montabone/.test(f.corridorName) && f.stormCorridorIndex > 0.8, 'storm-season index uses measured dusty-sol share');
+  global.MDE_DUST_CLIM = null;
+}
 
 console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation tests passed.');

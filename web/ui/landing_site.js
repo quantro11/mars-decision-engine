@@ -673,7 +673,7 @@
         const st = STORM.simulate({
           lat: v.lat, ls: c.ls, ti: v.ti, elev: v.elev, panelArea: c.area, efficiency: 0.2,
           consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
-          storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
+          storm: (() => { const t0 = STORM.baselineTau ? STORM.baselineTau(v.lat, v.lon, c.ls, v.elev) : 0.5; return { tau0: t0, tauPeak: Math.max(c.tauPeak, t0), startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 }; })(),
         });
         const spe = SCORING.calcSPE ? SCORING.calcSPE(v.elev, c.regolith ?? 1.5) : { requiredRegolithM: 1.5 };
         const pwrStatus = st.blackoutSol !== null

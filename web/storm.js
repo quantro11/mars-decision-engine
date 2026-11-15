@@ -201,8 +201,57 @@
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function sigmoid(z) { return 1 / (1 + Math.exp(-clamp(z, -20, 20))); }
 
+  // ---------------------------------------------------------------- measured dust climatology (optional)
+  // web/dust_climatology_data.js is generated from the Montabone et al. column dust optical depth maps by
+  // data_pipeline/build_dust_climatology.py. When it is present, site/season haze and storm likelihood come from
+  // those measurements; when it is null the code falls back to the hand-placed storm regions below.
+  function getDustClim() {
+    return global.MDE_DUST_CLIM || (typeof globalThis !== 'undefined' && globalThis.MDE_DUST_CLIM) || null;
+  }
+  /**
+   * Climatological visible dust optical depth at a site and season.
+   * Returns null when no climatology is bundled. elev (m) rescales the 610 Pa-normalised value to the site's pressure.
+   */
+  function dustClimAt(lat, lon, ls, elev) {
+    const D = getDustClim();
+    if (!D || !D.meta || !D.mean) return null;
+    const g = D.meta.grid, sc = D.meta.scale;
+    const lsVal = ((ls ?? 251) % 360 + 360) % 360;
+    const b = Math.floor(lsVal / (360 / g.nLs)) % g.nLs;
+    const lon180 = ((((lon ?? 0) + 180) % 360) + 360) % 360 - 180;
+    const yi = Math.max(0, Math.min(g.nLat - 1, Math.floor(((lat ?? 0) - g.lat0) / g.dLat)));
+    const xi = Math.max(0, Math.min(g.nLon - 1, Math.floor((lon180 - g.lon0) / g.dLon)));
+    const i = b * g.nLat * g.nLon + yi * g.nLon + xi;
+    const pScale = Number.isFinite(elev) ? Math.exp(-elev / PLANET.atmosphere.scaleHeightM.value) : 1;
+    const years = D.meta.marsYears || [];
+    return {
+      meanTau: +(D.mean[i] / sc.mean * pScale).toFixed(2),
+      p90Tau: +(D.p90[i] / sc.p90 * pScale).toFixed(2),
+      fDust: +(D.fDust[i] / sc.fDust).toFixed(3),
+      dustyTau: D.meta.dustyTauThreshold,
+      years: years.length ? `MY ${years[0]}${years.length > 1 ? '–' + years[years.length - 1] : ''}` : '',
+    };
+  }
+  /** Pre-storm "clear" haze for the power simulation: climatological mean when available, else 0.5. */
+  function baselineTau(lat, lon, ls, elev) {
+    const c = dustClimAt(lat, lon, ls, elev);
+    return c ? Math.max(0.2, Math.min(3, c.meanTau)) : 0.5;
+  }
+
   function evaluateCorridor(lat, lon, ls) {
     const lsVal = ((ls ?? 251) % 360 + 360) % 360;
+    const clim = dustClimAt(lat, lon, lsVal);
+    if (clim) {
+      // Measured: share of sols this cell/season had regional-storm-level haze, and the mean haze itself.
+      return {
+        corridorIndex: clamp(0.05 + 2.2 * clim.fDust, 0.04, 0.99),
+        seasonForcing: +clamp(clim.meanTau / 1.2, 0.15, 1.0).toFixed(3),
+        corridorId: 'montabone_cdod',
+        corridorName: `Dust climatology (Montabone ${clim.years}): dusty sols ${(100 * clim.fDust).toFixed(0)}%`,
+        corridorNameTr: `Toz klimatolojisi (Montabone ${clim.years}): tozlu sol %${(100 * clim.fDust).toFixed(0)}`,
+        measured: true,
+      };
+    }
     // Perihelion dust season envelope (Ls 180..330) + northern autumn baroclinic wave peak
     const perihelionBell = Math.exp(-0.5 * Math.pow(Math.sin((lsVal - 251) * DEG * 0.5) / 0.42, 2));
     const equinoxWave = 0.35 * Math.exp(-0.5 * Math.pow(Math.sin((lsVal - 195) * DEG * 0.5) / 0.28, 2));
@@ -246,7 +295,8 @@
     const dust = opts.dust !== null && opts.dust !== undefined
       ? clamp(+opts.dust, 0.02, 0.98)
       : clamp((290 - ti) / 260, 0.08, 0.92);
-    const tauCurrent = Math.max(0.2, +(opts.tauCurrent ?? (opts.tauPeak && opts.stormActive ? opts.tauPeak * 0.45 : 0.65)));
+    const climTau = dustClimAt(lat, lon, ls, elev);
+    const tauCurrent = Math.max(0.2, +(opts.tauCurrent ?? (opts.tauPeak && opts.stormActive ? opts.tauPeak * 0.45 : (climTau ? climTau.meanTau : 0.65))));
     const lmstHour = opts.lmstHour !== undefined ? (+opts.lmstHour % 24 + 24) % 24 : 13.25;
 
     // 1. Atmospheric column & density rho(h, Ls)
@@ -570,6 +620,6 @@
   global.STORM = {
     fTau, insolationTOA, seasonalFactor, seasonName, dailySolar, tauAt, simulate,
     surfaceTempC, thermalDemandKw, SOL_H, KILOPOWER_KW, LS_PER_SOL,
-    MDAD_CORRIDORS, extractDustMLFeatures, predictDustML, dustRiskSanityChecks
+    MDAD_CORRIDORS, extractDustMLFeatures, predictDustML, dustRiskSanityChecks, dustClimAt, baselineTau
   };
 })(typeof window !== 'undefined' ? window : module.exports);
