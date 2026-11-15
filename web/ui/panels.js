@@ -418,12 +418,14 @@
       }
       const v = layers.cellValues(c.site.x, c.site.y), nr = layers.nearestRegion(v.lat, v.lon);
       if ($('#crisis-site')) $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : L(tr, 'pn.nearRegion', [nr.region.name])} · ${fmtLat(v.lat)}, ${fmtLon(v.lon)}`;
-      const stormCfg = { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 };
+      const tau0 = typeof STORM.baselineTau === 'function' ? STORM.baselineTau(v.lat, v.lon, c.ls, v.elev) : 0.5;
+      const clim = typeof STORM.dustClimAt === 'function' ? STORM.dustClimAt(v.lat, v.lon, c.ls, v.elev) : null;
+      const stormCfg = { tau0, tauPeak: Math.max(c.tauPeak, tau0), startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 };
       const res = STORM.simulate({
         lat: v.lat, ls: c.ls, ti: v.ti, elev: v.elev, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
         storm: stormCfg,
       });
-      const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, c.ls);
+      const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, tau0, c.ls);
       const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
       // Every "peak storm" number below comes from the simulated sol with the weakest solar output at full
       // storm haze, so it includes the season at that sol, dust on the panels and the heaters, i.e. exactly
@@ -534,6 +536,7 @@
             <span class="cv-chip ${heatOk ? 'ok' : 'bad'}"><b>${mark(heatOk)} ${L(tr, 'pn.cvHeat')}</b> ${heatOk ? L(tr, 'pn.cvHeatOk') : L(tr, 'pn.cvHeatFail', [res.freezeSol])}</span>
             <span class="cv-chip ${doseCls}"><b>${mark(doseCls !== 'bad')} ${L(tr, 'pn.cvShelter')}</b> ${L(tr, 'pn.cvShelterTxt', [spe.shieldedDoseMsv < 1 ? '<1' : spe.shieldedDoseMsv, (c.regolith ?? 1.5).toFixed(1)])}</span>
           </div>
+          <div class="cv-row"><span class="cv-lbl">${L(tr, 'pn.cvHaze')}</span><span class="cv-chip">${clim ? L(tr, 'pn.cvHazeClim', [clim.meanTau, clim.p90Tau, (100 * clim.fDust).toFixed(0), clim.years]) : L(tr, 'pn.cvHazeDefault', [tau0])}</span></div>
           ${roverHtml ? `<div class="cv-row"><span class="cv-lbl">${L(tr, 'pn.cvVehicles')}</span>${roverHtml}</div><div class="help note-sm cv-note">${L(tr, 'pn.cvModelNote')}</div>` : ''}`;
       }
 

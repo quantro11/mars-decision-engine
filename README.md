@@ -68,6 +68,19 @@ node tools/validate.js          # -> docs/validation.md
 MOLA-HRSC 200 m DEM. They are **not** generated or deployed; `web/tiles/manifest.json` is a placeholder and the map
 uses the 5.2 km/px base layers.
 
+## Measured dust climatology (optional, recommended)
+
+The storm tab and the dust-risk index can use the **Montabone et al. column dust optical depth maps** instead of built-in
+assumptions (normal haze per site and season, and how often regional-storm haze occurs there):
+
+1. Download the NetCDF files from <https://www-mars.lmd.jussieu.fr/mars/dust_climatology/> (per-year files, or the
+   "All MYs" tar.gz) into one folder.
+2. `python data_pipeline/build_dust_climatology.py <that folder>` → writes `web/dust_climatology_data.js` (~200 KB).
+   NetCDF-4 files need `pip install netCDF4`.
+3. Rebuild (`node tools/build.js`) and commit the generated file.
+
+Without it, `web/dust_climatology_data.js` is a placeholder (`null`) and the app says so in the storm tab.
+
 ## Rebuild the data layers (optional)
 
 ```powershell

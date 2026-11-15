@@ -211,6 +211,11 @@ Features (`STORM.extractDustMLFeatures`):
 * **Storm-season regions**: six approximate ellipses hand-placed after the storm-track maps in MDAD (Battalio & Wang 2021)
   and Montabone et al. (2015, 2020); positions and weights are rough.
 
+**Measured climatology (optional).** When `web/dust_climatology_data.js` has been generated from the Montabone et al.
+CDOD maps (`data_pipeline/build_dust_climatology.py`), the storm-season regions above are replaced by the measured share of
+sols with visible τ(610 Pa) ≥ 1.5 for that 6°×5° cell and 30° Ls bin, the default haze comes from the climatological mean
+(rescaled to site pressure), and the storm simulation starts from that haze instead of τ = 0.5.
+
 `STORM.dustRiskSanityChecks()` only verifies that the index moves in the expected direction (calm → low, deep pressure drop
 → high, night < afternoon, perihelion season > aphelion). Testing it properly would need labelled pressure-drop catalogues
 (e.g. MEDA/InSight vortex detections), which we did not have time to assemble.
