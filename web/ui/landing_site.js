@@ -84,7 +84,17 @@
           ? pick(tr, 'ls.tiRock')
           : pick(tr, 'ls.tiFirm');
 
+    const slipDelta = tiVal < 100 ? -2.5 : tiVal < 150 ? -1.2 : 0;
+    const effSlopeLimit = Math.max(5, +(slopeLimitDeg + slipDelta).toFixed(1));
+    const slopeFactor = Math.max(0.25, 1 - 0.65 * (slopeDeg / effSlopeLimit));
+    const tiMobility = 1 / Math.sqrt(tiMult);
     const roughFactor = 1 + Math.min(0.65, Math.max(0, roughM - 30) / 280);
+    const roughMobility = 1 / roughFactor;
+    const dustVisFactor = 1 - Math.min(0.28, Math.max(0, dustNorm - 0.15) * 0.40);
+    // Terrain & hazard suitability factor slows ground progress and stretches avionics/heater burn per km
+    const terrainMobility = Math.max(0.18, Math.min(1.0, slopeFactor * tiMobility * roughMobility * dustVisFactor));
+    const effectiveSpeedKmh = speedKmh * terrainMobility;
+
     const massCoeff = eff.massEnergyCoeffWhPerKgKm ? eff.massEnergyCoeffWhPerKgKm.value : 0.28;
     const gradeEta = eff.gradeWorkEfficiency ? eff.gradeWorkEfficiency.value : 0.65;
     const climbWhKm = (totalMassKg * gravity * Math.sin(slopeDeg * DEG2RAD) * 1000) / (3600 * gradeEta);
@@ -95,10 +105,10 @@
     const heaterW = coldDelta * heaterCoeff * totalMassKg;
 
     const tractionWhKm = (totalMassKg * massCoeff * tiMult + climbWhKm) * roughFactor;
-    const hotelWhKm = (hotelW + heaterW) / Math.max(0.01, speedKmh);
+    const hotelWhKm = (hotelW + heaterW) / Math.max(0.003, effectiveSpeedKmh);
     const effWhKm = tractionWhKm + hotelWhKm;
 
-    const slopeBlocked = slopeDeg > slopeLimitDeg;
+    const slopeBlocked = slopeDeg > effSlopeLimit;
     let rangeKm = 0;
     let basisLabel = '';
     let energyDetail = '';
@@ -112,12 +122,13 @@
       } else if (powerMode === 'nuclear') {
         const genW = pwr.ratedPowerW ? pwr.ratedPowerW.value : 110;
         const campaignSols = 30;
-        // Daily MMRTG energy budget minus continuous cold survival heating; traverse limited by energy & speed.
+        // Daily MMRTG energy budget minus cold-survival margin, coupled with terrain-degraded speed
         const dailyGrossWh = genW * 24.65;
-        const dailyHotelWh = (hotelW + heaterW) * 8.0;
-        const netDriveWhSol = Math.max(0, dailyGrossWh - dailyHotelWh);
-        const driveWhKm = Math.max(1, tractionWhKm);
-        const dailyDistKm = Math.min(netDriveWhSol / driveWhKm, speedKmh * 8.0);
+        const coldOverhead = Math.max(0, heaterW - hotelW * 0.5);
+        const thermalDriveFactor = Math.max(0.40, 1 - coldOverhead / Math.max(120, genW * 3.5));
+        const kinematicKmSol = effectiveSpeedKmh * 8.0 * thermalDriveFactor;
+        const energyKmSol = dailyGrossWh / Math.max(1, effWhKm);
+        const dailyDistKm = Math.min(energyKmSol, kinematicKmSol);
         rangeKm = +(dailyDistKm * campaignSols).toFixed(1);
         basisLabel = pick(tr, 'ls.basisNuclear', [campaignSols]);
         energyDetail = `${dailyDistKm.toFixed(2)} km/sol · ${Math.round(effWhKm)} Wh/km`;
@@ -128,21 +139,28 @@
         const dailySolarWh = dailySolarKwhM2 * 1000 * solarArea * solarEta;
         const daytimeHotelWh = (hotelW + heaterW * 0.5) * 4.5;
         const netDriveWhSol = Math.max(0, dailySolarWh - daytimeHotelWh);
-        const dailyDistKm = Math.min(netDriveWhSol / Math.max(0.5, tractionWhKm), speedKmh * 5.0);
+        const solarWindowFactor = Math.max(0.15, Math.min(1.15, dailySolarKwhM2 / 2.5));
+        const kinematicKmSol = effectiveSpeedKmh * 5.0 * solarWindowFactor;
+        const energyKmSol = netDriveWhSol / Math.max(1, effWhKm);
+        const dailyDistKm = Math.min(energyKmSol, kinematicKmSol);
         rangeKm = +(dailyDistKm * campaignSols).toFixed(1);
         basisLabel = pick(tr, 'ls.basisSolar', [campaignSols]);
         energyDetail = `${Math.round(dailySolarWh)} Wh/sol (τ ${localTau})`;
       }
     } else {
-      basisLabel = pick(tr, 'ls.basisBlocked', [slopeDeg.toFixed(1), slopeLimitDeg]);
+      basisLabel = pick(tr, 'ls.basisBlocked', [slopeDeg.toFixed(1), effSlopeLimit]);
       energyDetail = `${Math.round(effWhKm)} Wh/km`;
     }
 
     const envPenalties = [];
     if (slopeBlocked) {
-      envPenalties.push(pick(tr, 'ls.envSlopeBlock', [slopeDeg.toFixed(1), slopeLimitDeg]));
+      envPenalties.push(pick(tr, 'ls.envSlopeBlock', [slopeDeg.toFixed(1), effSlopeLimit]));
     } else if (slopeDeg > 4) {
       envPenalties.push(pick(tr, 'ls.envSlopeDrag', [slopeDeg.toFixed(1), Math.round(climbWhKm)]));
+    }
+    if (terrainMobility < 0.88) {
+      const spdTxt = effectiveSpeedKmh < 0.1 ? effectiveSpeedKmh.toFixed(3) : effectiveSpeedKmh < 2 ? effectiveSpeedKmh.toFixed(2) : effectiveSpeedKmh.toFixed(1);
+      envPenalties.push(pick(tr, 'ls.envMobility', [Math.round(terrainMobility * 100), spdTxt]));
     }
     if (tiMult > 1.05) {
       envPenalties.push(pick(tr, 'ls.envSinkage', [Math.round(tiVal), tiTag, tiMult.toFixed(2)]));
@@ -162,7 +180,7 @@
       roverName: tr ? (rover.name_tr || rover.name) : rover.name,
       isConcept: !!rover.concept,
       slopeBlocked,
-      slopeLimitDeg,
+      slopeLimitDeg: effSlopeLimit,
       rangeKm,
       basisLabel,
       energyDetail,

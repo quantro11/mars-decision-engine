@@ -383,9 +383,16 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   const harshCell = { elev: 1500, slope: 12.0, rough: 190, ice: -0.6, ti: 75, dust: 0.65, lat: -48.0, lon: 120.0, rad: 280, cave: null };
   const resBenignManned = LS.analyzeSite({ cellValues: benignCell, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
   const resHarshManned = LS.analyzeSite({ cellValues: harshCell, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  const resBenignLab = LS.analyzeSite({ cellValues: benignCell, roverId: 'lab_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  const resHarshLab = LS.analyzeSite({ cellValues: harshCell, roverId: 'lab_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
   const resBenignMini = LS.analyzeSite({ cellValues: benignCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
-  assert.ok(resBenignManned.rangeKm > resHarshManned.rangeKm, 'harsher environment reduces rover range');
-  assert.ok(resBenignManned.rangeKm > resBenignMini.rangeKm, 'different rover classes compute distinct range radii');
+  const resHarshMini = LS.analyzeSite({ cellValues: harshCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  const resDustMini = LS.analyzeSite({ cellValues: { ...benignCell, dust: 0.8 }, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  const resRoughLab = LS.analyzeSite({ cellValues: { ...benignCell, rough: 220 }, roverId: 'lab_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  assert.ok(resBenignManned.rangeKm > resHarshManned.rangeKm, 'harsher environment reduces manned rover range');
+  assert.ok(resBenignLab.rangeKm > resHarshLab.rangeKm && resBenignLab.rangeKm > resRoughLab.rangeKm, 'harsher terrain suitability reduces lab rover range');
+  assert.ok(resBenignMini.rangeKm > resHarshMini.rangeKm && resBenignMini.rangeKm > resDustMini.rangeKm, 'harsher terrain/dust reduces mini rover range');
+  assert.ok(resBenignManned.rangeKm > resBenignLab.rangeKm && resBenignLab.rangeKm > resBenignMini.rangeKm, 'different rover classes compute distinct range radii');
   assert.ok(resHarshManned.negativeFactors.length >= 3 && resHarshManned.negativeFactors[0].lossPts >= resHarshManned.negativeFactors[1].lossPts, 'negative factors sorted by descending point loss');
   const blockedSteep = LS.analyzeSite({ cellValues: { ...benignCell, slope: 18 }, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: true });
   assert.ok(blockedSteep.rover.slopeBlocked && blockedSteep.rangeKm === 0 && blockedSteep.nasaVeto && blockedSteep.effectiveScore === 0, 'steep slope >15 deg triggers NASA veto and 0 range for manned rover');
