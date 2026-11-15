@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Quantro Flight Systems · Automated Fault Detection, Isolation & Recovery (FDIR)
-NASA-STD-8719.13 Software Safety & NPR 7150.2D Real-Time Execution Guard
+Software-safety style execution guard (patterned after NASA-STD-8719.13 / NPR 7150.2D practices; not certified)
 
 Provides autonomous fault mitigation, deterministic state machine monitoring,
 sensor plausibility validation, and emergency safe-mode containment for Mars rover
