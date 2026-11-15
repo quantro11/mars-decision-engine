@@ -633,17 +633,16 @@
   const DOM_TR = [
     ['.brand-name', 'Martiap'],
     ['.brand-sub', 'Gerçek yörünge verileriyle iniş sahası, Marswalk (EVA) rotası ve bilim planlaması'],
-    ['.mode-btn[data-mode="score"] .mode-label', 'Saha seçimi'],
     ['.mode-btn[data-mode="landing"] .mode-label', 'İniş yeri belirleme'],
     ['.mode-btn[data-mode="eva"] .mode-label', 'Taktik EVA · 16 km²'],
     ['.mode-btn[data-mode="route"] .mode-label', 'Rover rotası'],
     ['.mode-btn[data-mode="crisis"] .mode-label', 'Toz fırtınası gücü'],
-    ['.mode-btn[data-mode="habitability"] .mode-label', 'Yaşanabilirlik & API'],
     ['#btn-2d', 'Harita'],
     ['#btn-3d', '3B Küre'],
     ['#flyto option[value=""]', 'Bir bölgeye git…'],
     ['#btn-export', 'Rapor al'],
     ['#btn-about', 'Yöntem'],
+    ['#ls-priorities-sum', 'Görev önceliği ve ağırlıklar'],
     [['#panel-score .sec-head h2', 0], 'Görev önceliği'],
     ['#score-intro', 'Bir ön ayar seçin veya aşağıdaki kriter ağırlıklarını değiştirin.'],
     ['#guide-text', 'Aşağıdan bir aday bölge seçin veya haritada herhangi bir noktaya dokunup arazi, su buzu ve fırtına gücünü görün.'],
@@ -699,12 +698,6 @@
     ['#panel-crisis .sec-head h2', 'Toz fırtınası güç modeli'],
     ['#panel-crisis p.help', 'Bir saha seçin, ardından güç sistemini küresel toz fırtınasına göre boyutlandırın.'],
     ['#panel-crisis .station-lbl', 'Saha'],
-    ['#panel-habitability .sec-head h2', 'Gezegen & Yaşanabilirlik API'],
-    ['#panel-habitability p.help', 'Mars havası (InSight arşivi, gezgin sahalarında tipik değerler) ve NASA DONKI uzay havası.'],
-    ['#panel-habitability .api-key-box label', 'NASA Open API Anahtarı (isteğe bağlı)'],
-    ['#btn-save-key', 'Kaydet'],
-    ['#panel-habitability .api-key-box .note-sm', 'Sunucu proxy için boş bırakın veya tek başına kullanım için kişisel NASA anahtarı girin (DEMO_KEY saatlik/günlük sınırla çalışır).'],
-    ['#btn-fetch-live', 'Hava ve uzay havasını çek'],
     ['.layers .sec-head h2', 'Harita katmanı'],
     ['#overlay button[data-ov="score"]', 'Skor'],
     ['#overlay button[data-ov="ice"]', 'Buz'],
@@ -800,8 +793,8 @@
       <div>
         <h3>4 · Çoklu tehlike rota planlayıcı ve Mod Ayrımı</h3>
         <p>Boylam sarmalı 8-komşuluklu adaptif A* algoritması. Basınçlı Rover modu (~20 km/sol) ≥200 km aralıklı arazi mola noktaları üretir; Yaya EVA / Marswalk modu (2.4 km/sa) 200 km rover molalarını devre dışı bırakıp 1.5 km kısa molalar, CO₂ RCA filtre kapasitesi ve %25 dönüş rezervi hesaplar. EVA giysi parametreleri Ay referansı xEMU’nun Mars 0.38g / 6–10 mbar CO₂ koşullarına uyarlamasıdır; uçuşa hazır Mars giysisi değildir.</p>
-        <h3>5 · Toz fırtınası enerji &amp; hava modelleri</h3>
-        <p>Günlük güneş enerjisi <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35(τ−0.5)</sup></code> bağıntısıyla τ ≈ 10.8’de Opportunity 2018 kaybını doğrular. REMS/MEDA satırları her gezgin sahası için tipik değerlerdir (tek bir arşiv solü değil); InSight verisi arşivinden gelir. İkisi de rakım (hidrostatik) ve enleme göre başka sahaya aktarılabilir. NASA DONKI olayları anlık doz değil 1.524 AU güneş rüzgarı yayılım modeli olarak ayrı hesaplanır.</p>
+        <h3>5 · Toz fırtınası enerji modeli</h3>
+        <p>Günlük güneş enerjisi <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35(τ−0.5)</sup></code> bağıntısıyla τ ≈ 10.8’de Opportunity 2018 kaybını doğrular.</p>
       </div>
     </div>
     <h3>6 · Mevsim, radyasyon ve Monte Carlo (N=100) ağırlık duyarlılığı</h3>
@@ -944,19 +937,6 @@
     if (aboutC) {
       if (aboutC._mdeEnHtml === undefined) aboutC._mdeEnHtml = aboutC.innerHTML;
       aboutC.innerHTML = lang === 'tr' ? ABOUT_TR_HTML : aboutC._mdeEnHtml;
-    }
-
-    const btnTog = doc.querySelector('#btn-toggle-key');
-    const inpKey = doc.querySelector('#nasa-api-key');
-    if (btnTog && inpKey) btnTog.textContent = t(inpKey.type === 'text' ? 'apiHide' : 'apiShow', lang);
-    if (inpKey) {
-      if (inpKey._mdeEnPh === undefined) inpKey._mdeEnPh = inpKey.placeholder || '';
-      inpKey.placeholder = lang === 'tr' ? 'boş = sunucu proxy kullan' : inpKey._mdeEnPh;
-    }
-
-    const apiSt = doc.querySelector('#live-api-status');
-    if (apiSt && (!global.MDE_LIVE_STATE || apiSt.textContent.includes('Ready to query') || apiSt.textContent.includes('sorgusuna hazır'))) {
-      apiSt.textContent = lang === 'tr' ? 'NASA API sorgusuna hazır' : 'Ready to query NASA APIs';
     }
 
     const btnLang = doc.querySelector('#btn-lang');

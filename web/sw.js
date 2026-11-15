@@ -1,7 +1,7 @@
 // Offline Cache-First Service Worker for Martiap (Planetary Layers & Core UI)
 (function (sw) {
   'use strict';
-  const CACHE_NAME = 'mde-planetary-cache-v5';
+  const CACHE_NAME = 'mde-planetary-cache-v6';
   const CORE_ASSETS = [
     './',
     './index.html',
@@ -14,7 +14,6 @@
     './astar.js',
     './storm.js',
     './globe3d.js',
-    './live_api.js',
     './mars_time.js',
     './vehicles_data.js',
     './tactical_config_data.js',
@@ -30,7 +29,6 @@
     './ui/panels.js',
     './ui/landing_site.js',
     './ui/map2d.js',
-    './ui/habitability.js',
     './ui/brief.js',
     './app.js',
     './worker.js',

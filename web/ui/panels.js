@@ -475,11 +475,6 @@
         ? `<div class="summary-big bad mt-sm">${L(tr, 'pn.habitatInteriorBelow0C', [res.freezeSol])}</div><div class="help">${L(tr, 'pn.notEnoughHeatOncePower', [res.minHabTemp])}</div>`
         : `<div class="summary-big ok mt-sm">${L(tr, 'pn.thermalLifeSupportMaintained')}</div><div class="help">${L(tr, 'pn.internalHabitatComfort20C', [stormNightC])}</div>`;
 
-      const liveSpace = global.MDE_LIVE_STATE && global.MDE_LIVE_STATE.space;
-      const liveCmeRow = liveSpace && liveSpace.mode === 'live'
-        ? `<div class="kv"><span>${L(tr, 'pn.donkiCmes30dLive')}</span><b>${liveSpace.events.length} ${L(tr, 'pn.catalogued')}</b></div>`
-        : '';
-
       const activeRegime = c.mlRegime || 'auto';
       const mlPred = typeof STORM.predictDustML === 'function'
         ? STORM.predictDustML({
@@ -557,7 +552,7 @@
         <div class="kv"><span>${L(tr, 'pn.shieldedMRegolith', [(c.regolith ?? 1.5).toFixed(1)])}</span><b class="${spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad'}">${spe.shieldedDoseMsv < 1 ? '<1' : spe.shieldedDoseMsv} mSv (${escHtml(trDom(spe.survivalStatus))})</b></div>
         <div class="kv"><span>${L(tr, 'pn.regolithFor100Msv2')}</span><b>${spe.requiredRegolithM} m</b></div>
         <div class="help note-sm">${L(tr, 'pn.speFiguresUseAnAssumed')}</div>
-        ${liveCmeRow}
+
         ${CHARTS.crisisSVG(res.rows, c.batt)}
         <div class="help mt-sm">${L(tr, 'pn.profileSol20Onset10')} ${c.kp === 0 && res.blackoutSol !== null ? (L(tr, 'pn.addFissionPowerKilopowerClass')) : ''}</div>`;
       el.querySelectorAll('.ml-regime-btn').forEach(btn => {

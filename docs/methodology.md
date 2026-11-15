@@ -161,23 +161,14 @@ See [`docs/validation.md`](validation.md) (regenerate with `node tools/validate.
 1. Global 5 km/px cells (TES ≈ 10 km) cannot see boulders or small craters; HiRISE stereo DTM metadata (`DTEEC_*`, SOCET SET, `1.0–2.0 m/post`, <3% planetary coverage) is required for human EVA verification. Every layer's dataset code, CRS (`IAU_Mars_2000`), resolution, and epoch is exported in `SCORING.LAYER_PROVENANCE` and the Mission Brief.
 2. MGC³ caves are **unconfirmed** orbital thermal/optical anomalies (Cushing et al. 2015) rather than verified shelter caverns.
 3. SWIM coverage ends at ±60°; outside ±60° is strictly reported as `NO_DATA` rather than `UNLIKELY`.
-4. NASA DONKI solar flare / CME events reflect 1 AU heliospheric observations and are propagated through a separate `1.524 AU` transit delay & attenuation model (`estimateMarsSpaceWeatherImpact`) rather than presented as instantaneous Martian surface radiation.
-5. REMS / MEDA rows are representative values for each rover site; they and InSight records are hydrostatically extrapolated (`extrapolateWeatherToSite`) to other sites with the elevation and latitude difference stated.
 6. The storm model has empirical optical-depth and dust-deposition constants; habitat heat loss (UA) and surface temperature are approximations.
 
-## Data honesty (Module IV)
+## Data honesty
 
-Every externally fetched value carries one of these labels, shown in the UI next to the value:
-
-| Label | Meaning |
-|---|---|
-| LIVE | fetched just now (NASA DONKI CME catalogue, last 30 days — propagated via 1.524 AU model) |
-| ARCHIVE | real measurement from an ended or active mission (InSight archive; the May 2024 solar-storm reference event) |
-| REPRESENTATIVE | rounded, season-typical values at a rover site (REMS / MEDA rows), not one archived sol |
-| REFERENCE | published climatology, not a measurement of today (InSight seasonal ranges, Banfield et al. 2020) |
-| OFFLINE | the request failed; offline guided demo scenario remains operational |
-
-No sol numbers or CME events are invented: the offline space-weather fallback is a single documented event (May 20 2024, Curiosity RAD ~8,100 µGy). Unit tests assert data-honesty and propagation rules (`tests/scoring.test.js`, `tests/ui.test.js`).
+The live weather / space-weather tab (NASA InSight, DONKI, REMS/MEDA) was removed to keep one clear flow. The only
+optional network query left is the JMARS WMS proxy in Tactical EVA (off by default); with it off, every number comes from
+the bundled layers and pre-cuts. Values that are assumptions rather than data are marked `verified: false` with a source
+note in `web/vehicles.json` and `web/tactical_config.json`.
 
 ## 14. Tactical EVA (16 km²) and the suit energy model
 

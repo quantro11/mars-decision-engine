@@ -10,15 +10,15 @@ into a decision a team can make and defend."
 thermal inertia and dust, Viking imagery — scored with NASA's HLS-2015 landing rules. One flow: pick a site, see how far
 you can travel from it, and test whether the base survives a dust storm."
 
-**0:40 — Demo 1: Site selection (30 s)**
+**0:40 — Demo 1: Landing site — priorities (30 s)**
 *Click "Landing safety".* "Equatorial lowlands light up — Elysium, Isidis, Chryse."
 *Click "Water ice & resources".* "The optimum moves north to Arcadia and Utopia — regions NASA's SWIM team flagged. The
 model was never told their names." *Open a candidate.* "Each pick explains itself: elevation, slope, ice consistency (we
 separate 'no data' from 'unlikely'), radiation dose with its uncertainty, and how stable the ranking is under 100 random
 weight changes."
 
-**1:10 — Demo 2: Landing site → Tactical EVA (35 s)**
-*Pin a site in "Landing site".* "Pick a rover class and its range circle updates — the small rover is limited by driving
+**1:10 — Demo 2: Pin a site → Tactical EVA (35 s)**
+*Click a spot on the map.* "Pick a rover class and its range circle updates — the small rover is limited by driving
 hours, the crewed rover by its battery."
 *Open "Tactical EVA · 16 km²".* "Now we zoom from 5 km pixels to a 4 × 4 km box at 100 m per cell, cut from the MOLA-HRSC
 200 m terrain model and THEMIS 100 m thermal images. Every cell gets a compatibility score with NASA's veto rules, and

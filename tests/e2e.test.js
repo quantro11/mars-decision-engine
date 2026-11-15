@@ -502,7 +502,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
     await evalJS(`document.getElementById('tac-normal-day-btn').click()`);
     await evalJS(`(() => { document.querySelector('#tac-tau-presets button[data-tau="10.8"]').click(); })()`);
 
-    await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+    await evalJS(`document.querySelector('.mode-btn[data-mode="landing"]').click()`);
     const cardCoord = await evalJS(`(() => {
       const card = document.querySelector('#candidates .card');
       card.click();
@@ -517,7 +517,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert.strictEqual(cardCoord.veh, 'mini_rover', 'Vehicle class input persists across tab switches');
     assert.strictEqual(cardCoord.tau, '10.8', 'Dust tau input persists across tab switches');
 
-    await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+    await evalJS(`document.querySelector('.mode-btn[data-mode="landing"]').click()`);
 
     await evalJS(`document.getElementById('guide-dismiss').click()`);
     assert(await evalJS(`document.getElementById('welcome-guide').classList.contains('hidden')`), '#guide-dismiss should hide the quick-start guide');
@@ -525,23 +525,21 @@ async function runHttpE2E(browserPath, securityHeaders) {
     await evalJS(`document.getElementById('btn-lang').click()`);
     const trState = await evalJS(`({
       lang: document.documentElement.getAttribute('lang'),
-      modeLabel: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent,
+      modeLabel: document.querySelector('.mode-btn[data-mode="landing"] .mode-label').textContent,
       slopeLead: document.querySelector('#maxslope').closest('label').firstChild.nodeValue,
       legendText: document.getElementById('legend').textContent,
-      saveText: document.getElementById('btn-save-key').textContent,
       aboutHtml: document.getElementById('about-content').textContent,
       plainTr: document.querySelector('#detail .plain-verdict') ? document.querySelector('#detail .plain-verdict').textContent : '',
     })`);
     assert.strictEqual(trState.lang, 'tr', 'Clicking #btn-lang should set html lang="tr"');
-    assert.strictEqual(trState.modeLabel, 'Saha seçimi', 'Turkish mode button label rendered');
+    assert.strictEqual(trState.modeLabel, 'İniş yeri belirleme', 'Turkish mode button label rendered');
     assert.strictEqual(trState.slopeLead, 'Model eğim sınırı (zemin uyarlamalı) ', 'Turkish slider label preserved without clobbering input');
     assert(trState.legendText.includes('ELENDİ/ZAYIF') || trState.legendText.includes('DİK'), `Legend should localize cleanly: ${trState.legendText}`);
-    assert.strictEqual(trState.saveText, 'Kaydet', 'Module IV save button localized');
     assert(trState.aboutHtml.includes('Mühendislik Gerekçesi'), '#about-content Method modal translates to Turkish');
     assert(trState.plainTr.includes('Bir bakışta özet'), `Turkish plain summary card missing: ${trState.plainTr}`);
     await evalJS(`document.getElementById('btn-lang').click()`);
-    const enCheck = await evalJS(`({ mode: document.querySelector('.mode-btn[data-mode="score"] .mode-label').textContent, aboutHtml: document.getElementById('about-content').textContent })`);
-    assert.strictEqual(enCheck.mode, 'Site selection', 'Second #btn-lang click reverts cleanly back to English');
+    const enCheck = await evalJS(`({ mode: document.querySelector('.mode-btn[data-mode="landing"] .mode-label').textContent, aboutHtml: document.getElementById('about-content').textContent })`);
+    assert.strictEqual(enCheck.mode, 'Landing site', 'Second #btn-lang click reverts cleanly back to English');
     assert(enCheck.aboutHtml.includes('Why it matters'), '#about-content reverts cleanly back to English');
 
     // 7. Multi-device responsive layout & touch viewport verification (laptop, tablet, phone, small phone, landscape)
@@ -594,7 +592,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
       }
       if (vp.name === 'mobile-360') {
         await evalJS(`document.getElementById('btn-lang').click()`);
-        await evalJS(`document.querySelector('.mode-btn[data-mode="habitability"]').click()`);
+        await evalJS(`document.querySelector('.mode-btn[data-mode="landing"]').click()`);
         await evalJS(`document.getElementById('btn-export').click()`);
         await evalJS(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
         const mobileModal = await evalJS(`({
@@ -605,7 +603,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
         assert(mobileModal.scrollW <= mobileModal.innerW, `mobile-360 TR + brief modal horizontal overflow (${mobileModal.scrollW} > ${mobileModal.innerW})`);
         assert(mobileModal.modalBoxW <= 360, `mobile-360 modal box wider than viewport: ${mobileModal.modalBoxW}`);
         await evalJS(`document.getElementById('brief-close').click()`);
-        await evalJS(`document.querySelector('.mode-btn[data-mode="score"]').click()`);
+        await evalJS(`document.querySelector('.mode-btn[data-mode="landing"]').click()`);
         await evalJS(`document.getElementById('btn-lang').click()`);
       }
     }
@@ -645,7 +643,7 @@ async function runHttpE2E(browserPath, securityHeaders) {
       const opened = !!(card && !card.classList.contains('hidden') && empty.classList.contains('hidden'));
       document.getElementById('ls-close-btn').click();
       const closedAfterX = card.classList.contains('hidden') && !empty.classList.contains('hidden') && window.MDE.S.customLanding === null;
-      document.querySelector('.mode-btn[data-mode="score"]').click();
+      document.querySelector('.mode-btn[data-mode="landing"]').click();
       return {
         panelOpenedEmpty, opened, r1, r2,
         hasCirclePt: !!(pt && pt.length === 2),

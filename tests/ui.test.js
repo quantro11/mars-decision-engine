@@ -8,8 +8,6 @@ const FMT = require('../web/ui/format.js').MDE_FMT;
 const OV = require('../web/ui/overlays.js').MDE_OVERLAYS;
 const MK = require('../web/ui/markers.js').MDE_MARKERS;
 const BR = require('../web/ui/brief.js').MDE_BRIEF;
-const HAB = require('../web/ui/habitability.js').MDE_HAB;
-const Live = require('../web/live_api.js').LIVE_API;
 
 // --- 1. Escaping & Formatting
 assert.strictEqual(FMT.escHtml('<script>alert("x&\'1")</script>'), '&lt;script&gt;alert(&quot;x&amp;&#39;1&quot;)&lt;/script&gt;');
@@ -215,47 +213,8 @@ const cvHole = store0.cellValues(3, 3);
 assert.ok(cvHole.ti !== null && cvHole.ti > 150, 'TES TI nodata pixel interpolated from neighbors');
 assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel interpolated from neighbors');
 
-// --- 7. Habitability API DOM controller, key visibility toggle, & XSS safety
+// --- 7. (Habitability tab removed)
 (async () => {
-  const store = { nasa_api_key: 'SECRET_1234' };
-  const mockStorage = { getItem: (k) => store[k] || null, setItem: (k, v) => { store[k] = v; } };
-  const els = {
-    '#nasa-api-key': { value: '', type: 'password' },
-    '#btn-toggle-key': { textContent: 'Show', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, onclick: null },
-    '#btn-save-key': { onclick: null },
-    '#btn-fetch-live': { disabled: false, onclick: null },
-    '#live-api-status': { textContent: '', innerHTML: '' },
-    '#live-api-results': { innerHTML: '' },
-  };
-  const mockDoc = { querySelector: (s) => els[s] || null };
-  let liveStateUpdated = null;
-  HAB.initHabitabilityAPI({ document: mockDoc, storage: mockStorage, liveApi: Live, onLiveUpdate: (st) => { liveStateUpdated = st; } });
-  assert.strictEqual(els['#nasa-api-key'].value, 'SECRET_1234');
-  els['#btn-toggle-key'].onclick();
-  assert.strictEqual(els['#nasa-api-key'].type, 'text');
-  assert.strictEqual(els['#btn-toggle-key'].textContent, 'Hide');
-  els['#btn-toggle-key'].onclick();
-  assert.strictEqual(els['#nasa-api-key'].type, 'password');
-
-  const okXssFetch = async (url) => {
-    if (url.includes('insight_weather')) return { ok: true, json: async () => ({ sol_keys: ['675'], '675': { PRE: { av: 750 }, First_UTC: '<script>10-19' } }) };
-    return { ok: true, json: async () => [{ activityID: 'CME-1', startTime: '<svg onload=alert(1)>', cmeAnalyses: [{ speed: 950 }] }] };
-  };
-  await HAB.renderHabitability(true, {
-    document: mockDoc, storage: mockStorage, liveApi: Live, fetchFn: okXssFetch,
-    onLiveUpdate: (st) => { liveStateUpdated = st; },
-  });
-  assert.strictEqual(els['#btn-fetch-live'].disabled, false, 'fetch button re-enabled after completion');
-  assert.ok(liveStateUpdated && liveStateUpdated.space.events.length === 1);
-  assert.ok(!els['#live-api-results'].innerHTML.includes('<script'));
-  assert.ok(!els['#live-api-results'].innerHTML.includes('<svg onload'));
-  assert.ok(els['#live-api-results'].innerHTML.includes('&lt;script&gt;'));
-  assert.ok(els['#live-api-results'].innerHTML.includes('&lt;svg onload=alert(1)&gt;'));
-  I18N.setLang('tr', fakeDoc);
-  await HAB.renderHabitability(false, { useCache: true, document: mockDoc, storage: mockStorage, liveApi: Live });
-  assert.ok(els['#live-api-results'].innerHTML.includes('Mars Yüzey Hava Durumu') && els['#live-api-status'].innerHTML.includes('ARŞİV'), 'Turkish cached re-render translates Module IV');
-  I18N.setLang('en', fakeDoc);
-
   // --- 8. 3D WebGL Globe engine: fallback, raycast project/unproject, context loss/restore
   const g3dMod = require('../web/globe3d.js');
   const GL = g3dMod.GLOBE3D || (global.window && global.window.GLOBE3D);
@@ -320,11 +279,6 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   assert.ok(!globe.state.contextLost && restoredCount === 1, 'restores WebGL resources cleanly on webglcontextrestored');
 
   // --- 9. 6 Core Operational EVA Capabilities, Live Weather/DONKI Models, Provenance, & Guided Jury Demo
-  const extW = Live.extrapolateWeatherToSite(Live.ACTIVE_ROVER_WEATHER_2026[1], -42, 70, -6500);
-  assert.ok(extW && extW.projectedPressurePa > 734 && typeof extW.deltaElevM === 'number', 'Weather extrapolation computes hydrostatic pressure & temperature shift');
-  const spImpact = Live.estimateMarsSpaceWeatherImpact([{ speed_kms: 1400, startTime: '2026-11-05T00:00Z' }], { classType: 'X1.2' }, -2500);
-  assert.ok(spImpact && spImpact.transitHoursToMars > 0 && spImpact.heliocentricDistanceAU === 1.524, 'DONKI 1.524 AU propagation & attenuation separated from surface dosimetry');
-
   payload.layer_provenance = S.LAYER_PROVENANCE;
   const fullHtml = BR.renderBriefHTML(payload, FMT);
   assert.ok(fullHtml.includes('Scientific Dataset Traceability'), 'Mission Brief HTML renders HiRISE DTM ID, Completion Report, and Traceability table');
@@ -379,5 +333,5 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   const rpMan = LS.roverStormPower(VEHICLES.classes.manned_rover, stormEnv(8));
   assert.ok(rpMan.autonomySols < rpMan.stormSols && !rpMan.survives, 'battery-only crewed rover cannot outlast an 80-sol storm');
 
-  console.log('All UI module / A* window / brief / habitability XSS / markers / WebGL 3D / landing site tests passed.');
+  console.log('All UI module / A* window / brief / markers / WebGL 3D / landing site tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

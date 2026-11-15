@@ -9,7 +9,6 @@
   const CHARTS = window.MDE_CHARTS;
   const OVERLAYS = window.MDE_OVERLAYS;
   const { escHtml } = FMT;
-  const { initHabitabilityAPI, renderHabitability } = window.MDE_HAB;
   const { buildBriefPayload, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON, downloadBriefMAVLink } = window.MDE_BRIEF;
   const I18N = window.MDE_I18N;
   const t = (k) => (I18N && I18N.t(k)) || k;
@@ -39,7 +38,6 @@
     if ($('#ls-v')) $('#ls-v').textContent = `${S.crisis.ls}° · ${(I18N.trDomain ? I18N.trDomain(STORM.seasonName(S.crisis.ls)) : STORM.seasonName(S.crisis.ls)).split(' /')[0]}`;
     if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
     if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onLangChange(); if (landingTool) landingTool.onLangChange();
-    if (globalThis.MDE_LIVE_STATE && renderHabitability) renderHabitability(false, { useCache: true });
     if (viewport) viewport.draw();
   }
   try { applyTheme(localStorage.getItem('mde_theme') || 'dark'); } catch (e) { applyTheme('dark'); }
@@ -49,7 +47,7 @@
   // ------------------------------------------------------------ state & core services
   const S = {
     viewMode: '2d',
-    mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
+    mode: 'landing', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null, customLanding: null,
     sensSpread: 0.2, agg: 'sum',
@@ -273,16 +271,15 @@
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    for (const k of ['score', 'landing', 'eva', 'route', 'crisis', 'habitability']) {
+    for (const k of ['landing', 'eva', 'route', 'crisis']) {
       if ($('#panel-' + k)) $('#panel-' + k).classList.toggle('hidden', k !== m);
     }
-    if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'score' || m === 'landing') S.overlay = 'score';
+    if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'landing') S.overlay = 'score';
     document.querySelectorAll('#overlay button').forEach(b => { const isActive = b.dataset.ov === S.overlay; b.classList.toggle('active', isActive); b.setAttribute('aria-pressed', String(isActive)); });
     updateHudLayer(); viewport.markOverlayDirty(); renderLegend();
     if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
-    if (m === 'habitability') renderHabitability();
     viewport.draw();
   }
 
@@ -425,7 +422,6 @@
   on('#guide-dismiss', 'onclick', () => { if ($('#welcome-guide')) $('#welcome-guide').classList.add('hidden'); try { localStorage.setItem('mde_hide_guide', '1'); } catch (e) { /* storage disabled */ } });
   if (I18N && I18N.getLang() === 'tr') applyLang('tr'); else { panels.buildPresets(); panels.buildSliders(); panels.renderRoute(); }
   renderLegend();
-  initHabitabilityAPI({ onLiveUpdate: () => { if (S.mode === 'crisis') panels.runCrisis(); } });
 
   layers.ensureFileDataBundle().then(() => {
     const isFile = location.protocol === 'file:' && !!window.LAYER_DATA;
