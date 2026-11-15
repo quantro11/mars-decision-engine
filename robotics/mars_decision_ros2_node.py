@@ -108,6 +108,43 @@ class MarsDecisionKernel:
             'battery_draw_w': round(120.0 + (m_watts * 0.15), 1),  # suit avionics + cooling
         }
 
+    def calculate_bekker_terramechanics(self, ti: float = 220.0,
+                                        wheel_load_n: float = 450.0,
+                                        wheel_width_m: float = 0.25,
+                                        wheel_radius_m: float = 0.25) -> Dict[str, Any]:
+        """Bekker-Wong Terramechanics formulation: Calculates vehicle ground sinkage,
+        compaction resistance, and tractive pull/slip safety factor."""
+        kc, kphi, n, c_cohesion, phi_deg = 15000.0, 1800000.0, 0.8, 1.2, 33.0
+        soil_class = 'consolidated_regolith'
+        if ti < 100:
+            kc, kphi, n, c_cohesion, phi_deg = 1000.0, 350000.0, 1.1, 0.15, 22.0
+            soil_class = 'loose_fine_dust'
+        elif ti < 150:
+            kc, kphi, n, c_cohesion, phi_deg = 3000.0, 950000.0, 0.95, 0.4, 28.0
+            soil_class = 'unconsolidated_sand'
+        elif ti >= 340:
+            kc, kphi, n, c_cohesion, phi_deg = 80000.0, 6500000.0, 0.65, 8.5, 40.0
+            soil_class = 'indurated_duricrust'
+
+        b = max(0.05, wheel_width_m)
+        r = max(0.05, wheel_radius_m)
+        denom = (kc / b + kphi) * b * math.sqrt(2.0 * r)
+        z_sinkage_m = min(r * 0.8, (max(10.0, wheel_load_n) / max(10.0, denom)) ** (2.0 / (2.0 * n + 1.0)))
+        rc_compaction_n = (b * (kc / b + kphi) * (z_sinkage_m ** (n + 1))) / (n + 1)
+        max_thrust_n = wheel_load_n * math.tan(math.radians(phi_deg)) + (c_cohesion * b * math.sqrt(2.0 * r * z_sinkage_m) * 1000.0)
+        drawbar_pull_n = max(0.0, max_thrust_n - rc_compaction_n)
+        slip_risk_pct = round(min(100.0, max(5.0, (z_sinkage_m / (r * 0.25)) * 100.0)))
+
+        return {
+            'soil_class': soil_class,
+            'sinkage_mm': round(z_sinkage_m * 1000.0, 1),
+            'compaction_resistance_n': round(rc_compaction_n, 1),
+            'drawbar_pull_n': round(drawbar_pull_n, 1),
+            'slip_risk_pct': slip_risk_pct,
+            'safe_traction': slip_risk_pct < 45,
+            'model': 'Bekker-Wong Soil Mechanics (kc, kphi, n)'
+        }
+
     def plan_multihazard_astar(self, grid: List[List[float]],
                                start: Tuple[int, int],
                                goal: Tuple[int, int],

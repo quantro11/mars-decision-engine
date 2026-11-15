@@ -84,6 +84,39 @@
     };
   }
 
+  // Bekker-Wong Terramechanics formulation: Calculates vehicle ground sinkage, compaction resistance,
+  // and tractive pull/slip safety factor based on soil regime (TI proxy), vehicle mass, and wheel geometry.
+  function calcBekkerTerramechanics(ti = 220, wheelLoadN = 450, wheelWidthM = 0.25, wheelRadiusM = 0.25) {
+    const tiVal = ti === null || ti === undefined ? 215 : ti;
+    let kc = 15000.0, kphi = 1800000.0, n = 0.8, c_cohesion = 1.2, phi_deg = 33.0;
+    let soilClass = 'consolidated_regolith';
+    if (tiVal < 100) {
+      kc = 1000.0; kphi = 350000.0; n = 1.1; c_cohesion = 0.15; phi_deg = 22.0; soilClass = 'loose_fine_dust';
+    } else if (tiVal < 150) {
+      kc = 3000.0; kphi = 950000.0; n = 0.95; c_cohesion = 0.4; phi_deg = 28.0; soilClass = 'unconsolidated_sand';
+    } else if (tiVal >= 340) {
+      kc = 80000.0; kphi = 6500000.0; n = 0.65; c_cohesion = 8.5; phi_deg = 40.0; soilClass = 'indurated_duricrust';
+    }
+    const b = Math.max(0.05, wheelWidthM);
+    const r = Math.max(0.05, wheelRadiusM);
+    const denom = (kc / b + kphi) * b * Math.sqrt(2 * r);
+    const z_sinkage_m = Math.min(r * 0.8, Math.pow(Math.max(10, wheelLoadN) / Math.max(10, denom), 2.0 / (2.0 * n + 1.0)));
+    const rc_compaction_n = (b * (kc / b + kphi) * Math.pow(z_sinkage_m, n + 1)) / (n + 1);
+    const maxThrustN = wheelLoadN * Math.tan(phi_deg * Math.PI / 180.0) + (c_cohesion * b * Math.sqrt(2 * r * z_sinkage_m) * 1000.0);
+    const drawbarPullN = Math.max(0, maxThrustN - rc_compaction_n);
+    const slipRiskPct = Math.round(Math.min(100, Math.max(5, (z_sinkage_m / (r * 0.25)) * 100)));
+
+    return {
+      soilClass,
+      sinkageMm: +(z_sinkage_m * 1000).toFixed(1),
+      compactionResistanceN: +rc_compaction_n.toFixed(1),
+      drawbarPullN: +drawbarPullN.toFixed(1),
+      slipRiskPct,
+      safeTraction: slipRiskPct < 45,
+      model: 'Bekker-Wong Soil Mechanics (kc, kphi, n)'
+    };
+  }
+
   // ---------------------------------------------------------------- Ice access (replaces the old "ISRU yield")
   // SWIM 2.0 "consistency" (-1..1) measures how strongly five independent datasets AGREE that ice is present
   // (Morgan et al. 2021, Nat. Astron. 5). It does NOT measure ice concentration, purity or extraction yield,
@@ -479,5 +512,5 @@
     { id: 'eva_dtm', name: 'Phase 2 Tactical Surface DTM / Micro-DEM', productCode: 'UA_HIRISE_PDS_DTM (DTEEC_045994_1985 / DTEEC_023957_1745) + MOLA/TES Prior', crs: 'Local Metric Tangent Plane (1 km × 1 km)', nativeRes: '1.0–2.0 m/post (where stereo exists)', shippedRes: '10 m/cell (100×100) + 1 m HUD', epoch: 'PDS4 Mars 2020 / MSL Archive (2024–2026)' }
   ];
 
-  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, radDoseBand, effectiveSlopeLimit, calcIceAccess, calcSPE, speDose, calcTerrainClass, calcPandolfMars, sensitivity, sensitivityCI, wilson95CI, sampleBilinear, mulberry32, LAYER_PROVENANCE };
+  global.SCORING = { F, CRITERIA, PRESETS, HARD, normalize, scoreCell, scoreMap, topCandidates, ramp, atmoColumnGcm2, radDose, radDoseMsvYr, radDoseBand, effectiveSlopeLimit, calcBekkerTerramechanics, calcIceAccess, calcSPE, speDose, calcTerrainClass, calcPandolfMars, sensitivity, sensitivityCI, wilson95CI, sampleBilinear, mulberry32, LAYER_PROVENANCE };
 })(typeof window !== 'undefined' ? window : module.exports);

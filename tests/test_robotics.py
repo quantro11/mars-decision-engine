@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(ROOT, 'robotics'))
 from mars_decision_ros2_node import MarsDecisionKernel
 from mavlink_mission_exporter import export_mavlink_mission, format_mavlink_waypoint_line
 from hil_telemetry_bridge import generate_hil_telemetry_packet
+from terrestrial_sar_engine import TerrestrialSAREngine
 
 
 class TestRoboticsPackage(unittest.TestCase):
@@ -66,6 +67,14 @@ class TestRoboticsPackage(unittest.TestCase):
         self.assertEqual(path[-1], (2, 2))
         self.assertNotIn((1, 1), path)
 
+    def test_bekker_terramechanics_python(self):
+        b_dust = self.kernel.calculate_bekker_terramechanics(ti=70.0)
+        b_rock = self.kernel.calculate_bekker_terramechanics(ti=350.0)
+        self.assertGreater(b_dust['sinkage_mm'], b_rock['sinkage_mm'])
+        self.assertGreater(b_dust['slip_risk_pct'], b_rock['slip_risk_pct'])
+        self.assertFalse(b_dust['safe_traction'])
+        self.assertTrue(b_rock['safe_traction'])
+
     def test_mavlink_wpl110_format(self):
         waypoints = [
             {'lat': 18.38, 'lon': 77.58, 'elev_m': 2.0, 'is_rest_stop': False},
@@ -90,6 +99,33 @@ class TestRoboticsPackage(unittest.TestCase):
         self.assertIn('position', pkt)
         self.assertIn('life_support_plss', pkt)
         self.assertTrue(pkt['life_support_plss']['return_reserve_safe'])
+
+    def test_terrestrial_sar_engine(self):
+        sar = TerrestrialSAREngine()
+        # Haversine distance between two points ~1 deg apart (~111 km)
+        d = sar.haversine_distance_m(45.0, 10.0, 46.0, 10.0)
+        self.assertGreater(d, 100000.0)
+        self.assertLess(d, 120000.0)
+
+        # Pandolf bioenergetics under Earth 1.0g
+        bio = sar.calculate_crew_pandolf_earth(speed_kmh=4.0, slope_pct=5.0, body_mass_kg=80.0, pack_mass_kg=20.0)
+        self.assertGreater(bio['metabolic_power_w'], 250.0)
+        self.assertLess(bio['metabolic_power_w'], 750.0)
+        self.assertGreater(bio['recommended_hydration_l_h'], 0.3)
+
+        # Landslide hazard evaluation
+        flat_hazard = sar.evaluate_landslide_hazard(slope_deg=4.0, rainfall_mm_24h=100.0)
+        self.assertEqual(flat_hazard['risk_level'], 'LOW')
+        self.assertTrue(flat_hazard['is_passable_for_crew'])
+
+        steep_hazard = sar.evaluate_landslide_hazard(slope_deg=35.0, rainfall_mm_24h=180.0)
+        self.assertIn(steep_hazard['risk_level'], ('MODERATE', 'CRITICAL_HAZARD'))
+
+        # SAR GeoJSON export
+        wps = [{'lat': 45.1, 'lon': 10.1}, {'lat': 45.2, 'lon': 10.2}]
+        geo = sar.export_sar_geojson(wps, mission_name='Test SAR')
+        self.assertEqual(geo['type'], 'FeatureCollection')
+        self.assertEqual(len(geo['features']), 1)
 
 
 if __name__ == '__main__':

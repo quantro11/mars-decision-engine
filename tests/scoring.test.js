@@ -220,6 +220,9 @@ assert.ok(Array.isArray(mcOut.ci95) && mcOut.ci95.length === 1 && mcOut.ci95[0][
 const radB = S.radDoseBand(-4400, 0);
 assert.ok(radB.uncMsvYr > 30 && radB.relUncPct === 18.8 && radB.min < radB.nominal && radB.max > radB.nominal, 'RAD global extrapolation includes ±18.8% uncertainty band');
 assert.ok(S.effectiveSlopeLimit(15, 70).effectiveMaxDeg < 15 && S.effectiveSlopeLimit(15, 250).effectiveMaxDeg >= 15, '15° operational slope limit adapts to soil thermal inertia');
+const bekkerFine = S.calcBekkerTerramechanics(70, 450, 0.25, 0.25);
+const bekkerRock = S.calcBekkerTerramechanics(350, 450, 0.25, 0.25);
+assert.ok(bekkerFine.sinkageMm > bekkerRock.sinkageMm && bekkerFine.slipRiskPct > bekkerRock.slipRiskPct, 'Bekker terramechanics correctly predicts higher sinkage and slip in loose dust');
 assert.ok(Array.isArray(S.LAYER_PROVENANCE) && S.LAYER_PROVENANCE.length >= 7 && S.LAYER_PROVENANCE.every(p => p.name && p.productCode && p.crs && p.nativeRes && p.shippedRes && p.epoch), 'Full scientific layer provenance catalog exported');
 assert.ok(typeof safe.stats.totalAscentM === 'number' && safe.stats.hazardZones && typeof safe.stats.hazardZones.steepKm === 'number' && safe.stats.returnRoute && safe.stats.returnRoute.returnKm > 0, 'ASTAR.plan exports ascent/descent, hazardZones, and returnRoute');
 assert.ok(safe.stats.evaStats && typeof safe.stats.evaStats.co2ScrubberUsedPct === 'number' && safe.stats.evaStats.returnReserveProtected === true, 'ASTAR.plan evaStats includes CO2 RCA scrubber and return reserve protection');
