@@ -704,8 +704,8 @@
     <h3>10 · Autonomous Flight Architecture &amp; Robotics Kernel (Quantro Q-11)</h3>
     <ul class="spec-list">
       <li><b>ROS 2 &amp; Embedded Daemon Integration.</b> Direct dual-mode execution via <code>robotics/mars_decision_ros2_node.py</code> running natively under ROS 2 (Humble/Iron/Rolling) or as a zero-dependency headless Linux daemon on onboard rover/flight avionics (Jetson Orin, Raspberry Pi).</li>
-      <li><b>MAVLink WPL 110 Waypoint Protocol.</b> One-click generation of flight plans executable directly by ArduPilot, PX4, QGroundControl, and Mission Planner autopilots via <code>Export MAVLink (.waypoints)</code>.</li>
-      <li><b>Hardware-in-the-Loop (HIL) Sensor Telemetry.</b> Physical sensor streaming via <code>robotics/hil_telemetry_bridge.py</code> providing live IMU, barometer, and 0.38g Pandolf bioenergetics verification.</li>
+      <li><b>MAVLink WPL 110 Waypoint Protocol.</b> <code>Export MAVLink (.waypoints)</code> writes the Top-5 candidate coordinates in the QGroundControl / ArduPilot / PX4 waypoint format, for integration tests with standard autopilot tooling (Earth autopilots do not navigate on Mars).</li>
+      <li><b>Hardware-in-the-Loop (HIL) test bridge.</b> <code>robotics/hil_telemetry_bridge.py</code> streams JSON telemetry packets over TCP/WebSocket; by default it generates simulated IMU, barometer and battery values so the console can be tested before real hardware is attached.</li>
       <li><b>Systems Architecture.</b> Designed and engineered by Quantro Flight Systems.</li>
     </ul>
     <div id="tac-benchmark-box" class="tac-benchmark-box"></div>

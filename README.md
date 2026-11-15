@@ -60,6 +60,7 @@ node tests/ui.test.js           # UI modules, brief/GeoJSON export, i18n parity,
 node tests/tactical_eva.test.js # 16 km² Tactical EVA engine, configs, VICAR parsing
 node tests/integrity.test.js    # DOM/i18n sync, strict CSP, accessibility, every service-worker asset exists
 python tests/test_pipeline.py   # data pipeline unit checks
+python tests/test_robotics.py   # robotics kernel and MAVLink export
 node tests/e2e.test.js          # headless Chromium (HTTP + file://, Web Worker, WebGL, CSP)
 node tools/build.js             # dist/ for HTTP hosting (excludes the file://-only layers_data.js)
 node tools/validate.js          # -> docs/validation.md
@@ -91,7 +92,8 @@ web/             index.html, style.css, app.js, worker.js, sw.js, globe3d.js, sc
                  tactical_eva_engine.js, vehicles.json (+ vehicles_data.js mirror), layers/
 web/ui/          panels.js, landing_site.js, tactical_eva_ui.js, map2d.js, brief.js, i18n.js (EN/TR), …
 tools/           validate.js, build.js, sync_configs_to_js.js, hls2015_ez_sites.json
-tests/           scoring, ui, tactical_eva, integrity, e2e, test_pipeline.py
+robotics/        ROS 2 node, MAVLink waypoint exporter, HIL test bridge (simulated telemetry by default)
+tests/           scoring, ui, tactical_eva, integrity, e2e, test_pipeline.py, test_robotics.py
 docs/            methodology.md, validation.md, pitch.md, yarisma_raporu_tr.md
 ```
 
