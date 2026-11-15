@@ -129,7 +129,7 @@ class MarsDecisionKernel:
         b = max(0.05, wheel_width_m)
         r = max(0.05, wheel_radius_m)
         denom = (kc / b + kphi) * b * math.sqrt(2.0 * r)
-        z_sinkage_m = min(r * 0.8, (max(10.0, wheel_load_n) / max(10.0, denom)) ** (2.0 / (2.0 * n + 1.0)))
+        z_sinkage_m = min(r * 0.8, ((3.0 * max(10.0, wheel_load_n)) / ((3.0 - n) * max(10.0, denom))) ** (2.0 / (2.0 * n + 1.0)))  # Bekker/Wong rigid wheel
         rc_compaction_n = (b * (kc / b + kphi) * (z_sinkage_m ** (n + 1))) / (n + 1)
         max_thrust_n = wheel_load_n * math.tan(math.radians(phi_deg)) + (c_cohesion * b * math.sqrt(2.0 * r * z_sinkage_m) * 1000.0)
         drawbar_pull_n = max(0.0, max_thrust_n - rc_compaction_n)

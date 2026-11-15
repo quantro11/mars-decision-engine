@@ -100,7 +100,9 @@
     const b = Math.max(0.05, wheelWidthM);
     const r = Math.max(0.05, wheelRadiusM);
     const denom = (kc / b + kphi) * b * Math.sqrt(2 * r);
-    const z_sinkage_m = Math.min(r * 0.8, Math.pow(Math.max(10, wheelLoadN) / Math.max(10, denom), 2.0 / (2.0 * n + 1.0)));
+    // Rigid-wheel sinkage (Bekker/Wong): z = [3W / ((3 - n)(kc + b·kphi)·sqrt(D))]^(2/(2n+1)), D = 2r.
+    // Soil constants per TI class are assumed values in the range published for lunar/Mars simulants, not Mars measurements.
+    const z_sinkage_m = Math.min(r * 0.8, Math.pow((3 * Math.max(10, wheelLoadN)) / ((3 - n) * Math.max(10, denom)), 2.0 / (2.0 * n + 1.0)));
     const rc_compaction_n = (b * (kc / b + kphi) * Math.pow(z_sinkage_m, n + 1)) / (n + 1);
     const maxThrustN = wheelLoadN * Math.tan(phi_deg * Math.PI / 180.0) + (c_cohesion * b * Math.sqrt(2 * r * z_sinkage_m) * 1000.0);
     const drawbarPullN = Math.max(0, maxThrustN - rc_compaction_n);
