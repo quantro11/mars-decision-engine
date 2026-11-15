@@ -135,13 +135,6 @@ assert.ok(geoScore < sumScore - 0.1, 'unsafe slope is not bought back by ice und
 const blk = new Float32Array(16 * 16).fill(0.9); for (let i = 0; i < 16 * 8; i++) blk[i] = 0;   // half vetoed
 assert.strictEqual(S.topCandidates(blk, 16, 16, 1, 16, 4).length, 0, 'half-vetoed block is not a candidate');
 
-// --- Live Planetary APIs & Earth vs Mars Habitability Baseline
-const Live = require('../web/live_api.js').LIVE_API;
-assert.ok(Live.EARTH_BASELINE.pressure_kpa === 101.3);
-assert.ok(Live.MARS_HABITABILITY_CRITERIA.length === 6, '6 vital biosphere habitability markers defined');
-const waterCrit = Live.MARS_HABITABILITY_CRITERIA.find(c => /Water/i.test(c.marker));
-assert.ok(waterCrit && /SWIM 2\.0/.test(waterCrit.eclss) && !/\bL\/sol\b/.test(waterCrit.eclss), 'Habitability water marker references SWIM 2.0 without invented L/sol claim');
-
 // --- UI helper modules (pure, extracted from app.js)
 const FMT = require('../web/ui/format.js').MDE_FMT, CH = require('../web/ui/charts.js').MDE_CHARTS;
 assert.strictEqual(FMT.fmtLat(-5.44), '5.4°S'); assert.strictEqual(FMT.fmtLon(137.8), '137.8°E');
@@ -220,6 +213,9 @@ assert.ok(Array.isArray(mcOut.ci95) && mcOut.ci95.length === 1 && mcOut.ci95[0][
 const radB = S.radDoseBand(-4400, 0);
 assert.ok(radB.uncMsvYr > 30 && radB.relUncPct === 18.8 && radB.min < radB.nominal && radB.max > radB.nominal, 'RAD global extrapolation includes ±18.8% uncertainty band');
 assert.ok(S.effectiveSlopeLimit(15, 70).effectiveMaxDeg < 15 && S.effectiveSlopeLimit(15, 250).effectiveMaxDeg >= 15, '15° operational slope limit adapts to soil thermal inertia');
+const bekkerFine = S.calcBekkerTerramechanics(70, 450, 0.25, 0.25);
+const bekkerRock = S.calcBekkerTerramechanics(350, 450, 0.25, 0.25);
+assert.ok(bekkerFine.sinkageMm > bekkerRock.sinkageMm && bekkerFine.slipRiskPct > bekkerRock.slipRiskPct, 'Bekker terramechanics correctly predicts higher sinkage and slip in loose dust');
 assert.ok(Array.isArray(S.LAYER_PROVENANCE) && S.LAYER_PROVENANCE.length >= 7 && S.LAYER_PROVENANCE.every(p => p.name && p.productCode && p.crs && p.nativeRes && p.shippedRes && p.epoch), 'Full scientific layer provenance catalog exported');
 assert.ok(typeof safe.stats.totalAscentM === 'number' && safe.stats.hazardZones && typeof safe.stats.hazardZones.steepKm === 'number' && safe.stats.returnRoute && safe.stats.returnRoute.returnKm > 0, 'ASTAR.plan exports ascent/descent, hazardZones, and returnRoute');
 assert.ok(safe.stats.evaStats && typeof safe.stats.evaStats.co2ScrubberUsedPct === 'number' && safe.stats.evaStats.returnReserveProtected === true, 'ASTAR.plan evaStats includes CO2 RCA scrubber and return reserve protection');
@@ -238,16 +234,4 @@ assert.ok(!('overallAccuracyPct' in mlVortex) && !('overallRocAuc' in mlVortex),
 assert.strictEqual(typeof T.validateDustMLBenchmarks, 'undefined', 'synthetic ML benchmark generator removed');
 assert.ok(T.dustRiskSanityChecks().allPass, 'dust risk index responds in the physically expected direction');
 
-(async () => {
-  const fail = async () => { throw new Error('net down'); };
-  const w = await Live.fetchNASAWeather('DEMO_KEY', fail);
-  assert.strictEqual(w.mode, 'reference'); assert.strictEqual(w.data, null, 'no invented sol / pressure');
-  const sw = await Live.fetchSpaceWeather('DEMO_KEY', fail);
-  assert.strictEqual(sw.mode, 'live_archive'); assert.strictEqual(sw.events.length, 1, 'offline fallback is the single documented May 2024 event'); assert.ok(/2024-05-20/.test(sw.events[0].startTime));
-  const ok = (body) => async () => ({ ok: true, json: async () => body });
-  const arch = await Live.fetchNASAWeather('k', ok({ sol_keys: ['675'], '675': { AT: { mn: -90, mx: -20, av: -60 }, PRE: { av: 750 }, First_UTC: '2020-10-19T18:32:20Z' } }));
-  assert.strictEqual(arch.mode, 'archive'); assert.strictEqual(arch.data.sol, 675); assert.strictEqual(arch.data.pressure_pa, 750);
-  const live = await Live.fetchSpaceWeather('k', ok([{ activityID: 'A', startTime: '2026-11-01T00:00Z' }, { activityID: 'B', startTime: '2026-11-05T00:00Z' }]));
-  assert.strictEqual(live.mode, 'live'); assert.strictEqual(live.events[0].id, 'B', 'newest CME first');
-  console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation / live-API tests passed.');
-})().catch((e) => { console.error(e); process.exit(1); });
+console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation tests passed.');

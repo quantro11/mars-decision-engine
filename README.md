@@ -8,16 +8,14 @@ can safely travel from there**, and **whether the base survives a global dust st
 
 ![screenshot](docs/screenshot_score.png)
 
-## One flow, six tabs
+## One flow, four tabs
 
 | Tab | What it answers | Data / model |
 |---|---|---|
-| **Site selection** | Which ~2°×2° regions best balance safe landing, water ice and daily life? Presets, weight sliders, NASA HLS-2015 vetoes (elevation ≤ +2 km, slope, \|lat\| ≤ 50°), Top-5 candidates, 100-run Monte Carlo weight sensitivity with 95 % Wilson interval. | MOLA elevation / slope / roughness (~5.2 km/px), SWIM 2.0 ice consistency (3 depth bands, ±60°), TES thermal inertia and dust, MSL-RAD-calibrated GCR dose, MGC³ cave candidates (unconfirmed, weight 0 by default) |
-| **Landing site** | Put a pin anywhere: compatibility score, what hurts it, and how far each rover class can range from it. | Rover energy/range model per class (Mini / Lab / Crewed); drive hours per sol calibrated to NASA rover drive records; class parameters marked as assumptions in `web/vehicles.json` |
+| **Landing site** | Which regions best balance safe landing, water ice and daily life, and what does one chosen spot look like? Mission presets and weight sliders (HLS-2015 vetoes: elevation ≤ +2 km, slope, \|lat\| ≤ 50°), Top-5 candidates with 100-run Monte Carlo stability (95 % Wilson interval). Pin any spot for its compatibility score, what hurts it, and each rover class's range. | MOLA elevation / slope / roughness (~5.2 km/px), SWIM 2.0 ice consistency, TES thermal inertia and dust, MSL-RAD-calibrated GCR dose, MGC³ cave candidates (unconfirmed); rover energy/range model per class (assumptions marked in `web/vehicles.json`) |
 | **Tactical EVA · 16 km²** | Around a chosen site, which 100 m cells are drivable, which are risky, and what limits the rover? | Pre-cut **4 km × 4 km, 40 × 40 cells at 100 m** from the MOLA-HRSC 200 m blended DEM and THEMIS 100 m day-IR mosaic for 9 sites (4 well-known landing areas + 5 Top-5 candidates); optional live JMARS WMS queries (off by default) |
 | **Rover route** | Safest A* path between two points for a Mini, Lab or Crewed rover (or a walking EVA): distance, climb, slope check, sols needed, energy and recharge stops. | 8-connected spherical A* on the 4096 × 2048 grid with slope, roughness and loose-dust costs |
 | **Dust-storm power** | Does the base keep power and heat through a 2018-class storm (τ up to ~11)? A strip under the sliders gives the answer immediately, with per-rover survival. | 120-sol power/thermal simulation calibrated to Opportunity's June 2018 storm (τ ≈ 10.8), seasonal insolation, dust on panels, Kilopower 10 kWe design target, SPE shelter depth |
-| **Habitability & APIs** | Current rover weather, Mars-propagated space weather and Earth-vs-Mars habitability numbers. | NASA DONKI (CME/flares) via same-origin proxy, Curiosity REMS / Perseverance MEDA point observations, InSight archive |
 
 Plus a 2D map / 3D WebGL MOLA globe and an **Export brief** button (JSON + printable report + GeoJSON).
 
@@ -47,10 +45,10 @@ web/index.html          # open directly in a modern browser (file:// works offli
 
 Deep links: `index.html?preset=isru`, `?view=3d`, `?demo=route&from=Jezero&to=Nili`, `?demo=crisis&site=Arcadia&tau=9&kp=1`.
 
-**What runs where:** all analysis runs in the browser with no third-party JavaScript libraries. The hosted site additionally
-uses small Vercel serverless proxies (`/api/insight`, `/api/rover`, `/api/wms`, `/api/donki/*`) for live NASA data, each with an
-offline/archive fallback, and loads its fonts from Google Fonts (system fonts are used when unavailable). A service worker
-caches the app for offline use after the first visit.
+**What runs where:** all analysis runs in the browser with no third-party JavaScript libraries. The hosted site has one
+small Vercel serverless proxy (`/api/wms`, optional live JMARS queries in Tactical EVA, off by default) and loads its fonts
+from Google Fonts (system fonts are used when unavailable). A service worker caches the app for offline use after the
+first visit.
 
 ## Tests and build
 
@@ -86,7 +84,7 @@ python fetch_eva_cutouts.py  # 16 km² Tactical EVA pre-cuts (with node ../tools
 ## Repository layout
 
 ```
-api/             insight.js, rover.js, wms.js, donki/   Same-origin NASA API proxies with fallbacks
+api/             wms.js   Optional JMARS WMS proxy for live Tactical EVA queries
 data_pipeline/   Download and preprocessing scripts for all layers and Tactical EVA pre-cuts
 web/             index.html, style.css, app.js, worker.js, sw.js, globe3d.js, scoring.js, astar.js, storm.js,
                  tactical_eva_engine.js, vehicles.json (+ vehicles_data.js mirror), layers/

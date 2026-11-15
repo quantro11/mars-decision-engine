@@ -39,12 +39,10 @@
   </div>
 
   <nav class="modes" aria-label="Modules">
-    <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-label">Site selection</span></button>
-    <button class="mode-btn" data-mode="landing" aria-pressed="false"><span class="mode-label">Landing site</span></button>
+    <button class="mode-btn active" data-mode="landing" aria-pressed="true"><span class="mode-label">Landing site</span></button>
     <button class="mode-btn" data-mode="eva" aria-pressed="false"><span class="mode-label">Tactical EVA · 16 km²</span></button>
     <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-label">Dust-storm power</span></button>
-    <button class="mode-btn" data-mode="habitability" aria-pressed="false"><span class="mode-label">Habitability &amp; APIs</span></button>
   </nav>
 
   <div class="topbar-right">
@@ -67,43 +65,8 @@
 <main id="main-workspace" class="layout" tabindex="-1">
   <!-- LEFT -->
   <aside class="panel left" aria-label="Mission controls">
-    <section id="panel-score" class="mode-panel">
-      <div class="sec-head"><h2>Mission priority</h2></div>
-      <p class="intro-lead" id="score-intro">Pick a preset or tune weights below to rank landing areas.</p>
-      <div class="presets" id="presets"></div>
 
-      <div class="sec-head"><h2>Criteria weights</h2><span class="hint">normalised to 100 %</span></div>
-      <div id="sliders" class="sliders-box"></div>
-
-      <div class="constraint-box">
-        <label class="check">
-          <input type="checkbox" id="hard" checked>
-          <span><b>NASA landing-site constraints</b><br>Cells above +2 km, steeper than 15°, or beyond ±50° latitude are excluded.</span>
-        </label>
-        <label class="check">
-          <input type="checkbox" id="agg-geo">
-          <span><b>No compensation</b><br>Weighted geometric mean: a near-zero criterion cannot be bought back by others.</span>
-        </label>
-      </div>
-
-      <div class="sec-head"><h2>Ice depth</h2><span class="hint">SWIM 2.0</span></div>
-      <div class="seg" id="iceband">
-        <button data-band="ice01" aria-pressed="false">0–1 m</button>
-        <button data-band="ice15" class="active" aria-pressed="true">1–5 m</button>
-        <button data-band="ice5" aria-pressed="false">&gt; 5 m</button>
-      </div>
-
-      <div class="sec-head"><h2>Weight sensitivity</h2><span class="hint">Monte Carlo · N=100</span></div>
-      <p class="help">Re-ranks 100 times with random weights to test how stable the top sites are.</p>
-      <div class="control-group">
-        <label>Weight uncertainty <span id="sens-v">±20%</span>
-          <input type="range" id="sens" min="5" max="50" value="20"></label>
-      </div>
-      <div class="row"><button id="sens-run" class="ghost">Run robustness test</button></div>
-      <div id="sens-result"></div>
-    </section>
-
-    <section id="panel-landing" class="mode-panel hidden" aria-label="Landing site planner">
+    <section id="panel-landing" class="mode-panel" aria-label="Landing site planner">
       <div class="sec-head">
         <h2 id="ls-tab-title">Landing Site Planner</h2>
         <button id="ls-close-btn" class="ls-close-btn tac-close-btn hidden" type="button" title="Clear landing site" aria-label="Clear landing site">✕</button>
@@ -169,6 +132,44 @@
           </div>
         </div>
       </div>
+      <details id="ls-priorities" class="tac-sec ls-priorities" open>
+        <summary id="ls-priorities-sum">Mission priority &amp; weights</summary>
+        <div id="panel-score" class="tac-sec-body">
+      <div class="sec-head"><h2>Mission priority</h2></div>
+      <p class="intro-lead" id="score-intro">Pick a preset or tune weights below to rank landing areas.</p>
+      <div class="presets" id="presets"></div>
+
+      <div class="sec-head"><h2>Criteria weights</h2><span class="hint">normalised to 100 %</span></div>
+      <div id="sliders" class="sliders-box"></div>
+
+      <div class="constraint-box">
+        <label class="check">
+          <input type="checkbox" id="hard" checked>
+          <span><b>NASA landing-site constraints</b><br>Cells above +2 km, steeper than 15°, or beyond ±50° latitude are excluded.</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="agg-geo">
+          <span><b>No compensation</b><br>Weighted geometric mean: a near-zero criterion cannot be bought back by others.</span>
+        </label>
+      </div>
+
+      <div class="sec-head"><h2>Ice depth</h2><span class="hint">SWIM 2.0</span></div>
+      <div class="seg" id="iceband">
+        <button data-band="ice01" aria-pressed="false">0–1 m</button>
+        <button data-band="ice15" class="active" aria-pressed="true">1–5 m</button>
+        <button data-band="ice5" aria-pressed="false">&gt; 5 m</button>
+      </div>
+
+      <div class="sec-head"><h2>Weight sensitivity</h2><span class="hint">Monte Carlo · N=100</span></div>
+      <p class="help">Re-ranks 100 times with random weights to test how stable the top sites are.</p>
+      <div class="control-group">
+        <label>Weight uncertainty <span id="sens-v">±20%</span>
+          <input type="range" id="sens" min="5" max="50" value="20"></label>
+      </div>
+      <div class="row"><button id="sens-run" class="ghost">Run robustness test</button></div>
+      <div id="sens-result"></div>
+        </div>
+      </details>
     </section>
 
     <section id="panel-eva" class="mode-panel hidden">
@@ -459,27 +460,6 @@
       <div id="crisis-summary"></div>
     </section>
 
-    <section id="panel-habitability" class="mode-panel hidden">
-      <div class="sec-head"><h2>Planetary &amp; Habitability APIs</h2></div>
-      <p class="help">Mars weather (InSight archive, typical rover-site values) and space weather from NASA DONKI.</p>
-
-      <div class="api-key-box">
-        <label for="nasa-api-key">NASA Open API Key <span class="hint">optional</span></label>
-        <div class="api-key-row">
-          <input type="password" id="nasa-api-key" placeholder="empty = use server proxy" autocomplete="off">
-          <button type="button" id="btn-toggle-key" class="ghost" aria-pressed="false">Show</button>
-          <button type="button" id="btn-save-key" class="ghost">Save</button>
-        </div>
-        <div class="help note-sm">Leave blank for server proxy, or add a personal NASA key for standalone use (<b>DEMO_KEY</b> has strict IP rate limits).</div>
-      </div>
-
-      <div class="row">
-        <button id="btn-fetch-live" class="btn-spec btn-full">Fetch weather &amp; space weather</button>
-      </div>
-
-      <div id="live-api-status" class="live-status" role="status" aria-live="polite">Ready to query NASA APIs</div>
-      <div id="live-api-results"></div>
-    </section>
 
     <section class="layers">
       <div class="sec-head"><h2>Map layer</h2></div>
@@ -672,8 +652,8 @@
       <div>
         <h3>4 · Route planner &amp; Mode Separation</h3>
         <p>Multi-hazard A* over an 8-connected, longitude-wrapping grid. Each step costs <code>distance × (1 + k · (slope + rough_pen + dust_pen))</code>, penalising steep grades, rough sub-cell relief (&gt;50 m) and low-TI fine dust traps (&lt;100 tiu). Pressurized Rover mode (~20 km/sol) places terrain rest stops ≥200 km apart; Foot EVA / Marswalk mode (2.4 km/h nominal) disables 200 km rover stops and models 1.5 km micro-rests, CO₂ RCA scrubber saturation, and a protected 25% return reserve. EVA uses the Lunar xEMU reference architecture extrapolated to Mars 0.38g / 6–10 mbar CO₂ (not flight-certified Mars hardware).</p>
-        <h3>5 · Dust-storm power &amp; weather models</h3>
-        <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code> calibrated so τ ≈ 10.8 reproduces Opportunity's 2018 loss. REMS/MEDA rows are typical values for each rover site (not a single archived sol); InSight data come from its archive. Both can be extrapolated to another site by elevation (hydrostatic) and latitude. NASA DONKI alerts model 1.524 AU propagation &amp; transit delay separately from instantaneous surface radiation.</p>
+        <h3>5 · Dust-storm power model</h3>
+        <p>Daily solar energy is <code>3.0 kWh/m²/sol × S(φ, Lₛ) × e<sup>−0.35 (τ − 0.5)</sup></code> calibrated so τ ≈ 10.8 reproduces Opportunity's 2018 loss.</p>
       </div>
     </div>
 
@@ -741,7 +721,6 @@
 <script src="astar.js"></script>
 <script src="storm.js"></script>
 <script src="globe3d.js"></script>
-<script src="live_api.js"></script>
 <script src="ui/format.js"></script>
 <script src="ui/charts.js"></script>
 <script src="ui/markers.js"></script>
@@ -757,7 +736,6 @@
 <script src="ui/panels.js"></script>
 <script src="ui/landing_site.js"></script>
 <script src="ui/map2d.js"></script>
-<script src="ui/habitability.js"></script>
 <script src="ui/brief.js"></script>
 <script src="app.js"></script>
 </body>

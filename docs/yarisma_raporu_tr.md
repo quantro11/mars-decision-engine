@@ -6,13 +6,11 @@
 **nereye inmeli**, **oradan ne kadar uzağa güvenle gidilebilir** ve **üs bir küresel toz fırtınasında ayakta kalır mı**.
 Canlı sürüm: <https://mars-decision-engine.vercel.app>.
 
-Uygulama tek bir akıştan ve altı sekmeden oluşur:
-1. **Saha seçimi:** 8 kriter (MOLA rakımı, %90'lık eğim, SWIM 2.0 buz tutarlılığı, pürüzlülük, enlem, TES termal atalet, MSL-RAD kalibreli GCR dozu, doğrulanmamış mağara adayı mesafesi), NASA HLS-2015 eleme kuralları, isteğe bağlı geometrik ortalama, ilk 5 aday ve 100 koşulu Monte Carlo duyarlılık testi (%95 Wilson aralığı).
-2. **İniş yeri:** Haritaya iğne konur; uyumluluk puanı, puanı düşüren etkenler ve her gezgin sınıfı (Mini / Laboratuvar / İnsanlı) için menzil çemberi gösterilir.
-3. **Taktik EVA · 16 km²:** 9 saha için önceden kesilmiş **4 km × 4 km, 100 m/hücre (40 × 40)** veriler (MOLA-HRSC 200 m arazi modeli + THEMIS 100 m gündüz kızılötesi). Her hücre sekiz alanda puanlanır ve HLS-2015 kurallarıyla elenir; eklenen saha ölçümleri çevredeki hücreleri günceller.
-4. **Gezgin rotası:** Küresel ızgarada A\* ile en güvenli yol; seçilen gezgin sınıfına göre sol başına km, gereken sol sayısı, enerji, şarj durakları ve eğim sınırı kontrolü. Yaya EVA modu da vardır.
-5. **Toz fırtınası gücü:** Opportunity 2018 fırtınasına kalibreli 120 sollük güç/ısı simülasyonu. Kaydırıcıların hemen altındaki şerit üssün ayakta kalıp kalmadığını ve her gezginin durumunu anında söyler.
-6. **Yaşanabilirlik ve API'ler:** DONKI uzay havası (Mars'a taşınmış), REMS/MEDA hava ölçümleri, InSight arşivi.
+Uygulama tek bir akıştan ve dört sekmeden oluşur:
+1. **İniş yeri:** Görev ön ayarları ve 8 kriterin ağırlıkları (MOLA rakımı, %90'lık eğim, SWIM 2.0 buz tutarlılığı, pürüzlülük, enlem, TES termal atalet, MSL-RAD kalibreli GCR dozu, doğrulanmamış mağara adayı mesafesi), NASA HLS-2015 eleme kuralları, ilk 5 aday ve 100 koşulu Monte Carlo duyarlılık testi (%95 Wilson aralığı). Haritaya iğne konunca uyumluluk puanı, puanı düşüren etkenler ve her gezgin sınıfı (Mini / Laboratuvar / İnsanlı) için menzil çemberi gösterilir.
+2. **Taktik EVA · 16 km²:** 9 saha için önceden kesilmiş **4 km × 4 km, 100 m/hücre (40 × 40)** veriler (MOLA-HRSC 200 m arazi modeli + THEMIS 100 m gündüz kızılötesi). Her hücre sekiz alanda puanlanır ve HLS-2015 kurallarıyla elenir; eklenen saha ölçümleri çevredeki hücreleri günceller.
+3. **Gezgin rotası:** Küresel ızgarada A\* ile en güvenli yol; seçilen gezgin sınıfına göre sol başına km, gereken sol sayısı, enerji, şarj durakları ve eğim sınırı kontrolü. Yaya EVA modu da vardır.
+4. **Toz fırtınası gücü:** Opportunity 2018 fırtınasına kalibreli 120 sollük güç/ısı simülasyonu. Kaydırıcıların hemen altındaki şerit üssün ayakta kalıp kalmadığını ve her gezginin durumunu anında söyler.
 
 ---
 
@@ -33,7 +31,7 @@ Uygulama tek bir akıştan ve altı sekmeden oluşur:
 - **TES:** termal atalet ve toz (tane boyutu göstergesi; taşıma kapasitesi değil).
 - **MOLA-HRSC 200 m ve THEMIS 100 m:** Taktik EVA kesitleri.
 - **MGC³ (Cushing 2017):** doğrulanmamış mağara adayları.
-- **Teslimat:** `file://` ile internetsiz açılış (`web/layers_data.js`) veya `tools/build.js` ile HTTP paketi (`dist/`). Barındırılan sürüm canlı NASA verisi için küçük Vercel sunucusuz vekiller (`/api/*`) ve Google Fonts kullanır; her vekilin arşiv yedeği vardır.
+- **Teslimat:** `file://` ile internetsiz açılış (`web/layers_data.js`) veya `tools/build.js` ile HTTP paketi (`dist/`). Barındırılan sürüm Taktik EVA için isteğe bağlı tek bir vekil (`/api/wms`, varsayılan kapalı) ve Google Fonts kullanır.
 
 ---
 
@@ -63,8 +61,8 @@ Uygulama tek bir akıştan ve altı sekmeden oluşur:
 
 ## 6. 3 dakikalık canlı demo
 
-1. **0:00–0:45 Saha seçimi:** "Landing safety" ve "Water ice & resources" ön ayarları arasında geçiş yapın; en iyi bölgenin ekvatordan kuzeye kaydığını gösterin. Bir adayı açıp puanını açıklayın.
-2. **0:45–1:30 İniş yeri ve Taktik EVA:** Bir iğne koyun, gezgin sınıfını değiştirip menzil çemberini gösterin; ardından 16 km² sekmesinde 100 m çözünürlüğe inin.
+1. **0:00–0:45 İniş yeri – öncelikler:** "Landing safety" ve "Water ice & resources" ön ayarları arasında geçiş yapın; en iyi bölgenin ekvatordan kuzeye kaydığını gösterin. Bir adayı açıp puanını açıklayın.
+2. **0:45–1:30 İğne ve Taktik EVA:** Haritada bir noktaya tıklayın, gezgin sınıfını değiştirip menzil çemberini gösterin; ardından 16 km² sekmesinde 100 m çözünürlüğe inin.
 3. **1:30–2:15 Rota ve fırtına:** `?lang=tr&demo=route&from=Jezero&to=Nili` ile rotayı gösterin, gezgin sınıfını değiştirin. Sonra `?lang=tr&demo=crisis&site=Arcadia&tau=9` açın; şerit kırmızıya döner. Bir reaktör ekleyin, yeşile döner.
 4. **2:15–3:00 Kanıt ve dürüstlük:** 90. ve 71. yüzdelik sonuçlarını, Apollo karşılaştırmasını ve toz indeksinin bilerek "sezgisel" etiketlendiğini anlatın.
 
