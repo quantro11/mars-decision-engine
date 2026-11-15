@@ -10,7 +10,7 @@
   const OVERLAYS = window.MDE_OVERLAYS;
   const { escHtml } = FMT;
   const { initHabitabilityAPI, renderHabitability } = window.MDE_HAB;
-  const { buildBriefPayload, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON } = window.MDE_BRIEF;
+  const { buildBriefPayload, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON, downloadBriefMAVLink } = window.MDE_BRIEF;
   const I18N = window.MDE_I18N;
   const t = (k) => (I18N && I18N.t(k)) || k;
   const META = window.LAYER_META;
@@ -385,6 +385,7 @@
   on('#brief-modal', 'onclick', (e) => { if (e.target.id === 'brief-modal') closeModal($('#brief-modal')); });
   on('#btn-dl-json', 'onclick', () => downloadBriefJSON(getBriefPayload()));
   on('#btn-dl-geojson', 'onclick', () => downloadBriefGeoJSON(getBriefCtx()));
+  on('#btn-dl-mavlink', 'onclick', () => downloadBriefMAVLink(getBriefPayload()));
   on('#btn-print-brief', 'onclick', () => window.print());
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closeModal($('#about')); closeModal($('#brief-modal')); return; }

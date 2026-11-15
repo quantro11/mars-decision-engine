@@ -743,6 +743,7 @@
     ['#brief-title', 'Üs seçimi ve hayatta kalma brifingi'],
     ['#btn-dl-json', 'JSON İndir'],
     ['#btn-dl-geojson', 'GeoJSON İndir'],
+    ['#btn-dl-mavlink', 'MAVLink dışa aktar (.waypoints)'],
     ['#btn-print-brief', 'Yazdır / PDF'],
     ['#brief-close', 'Kapat'],
     ['#about .modal-header .hint', 'Yöntem'],
@@ -822,6 +823,13 @@
       <li><b>Yerel Karışım &amp; Saha Yayılım Formülü:</b> Her 4 km × 4 km (40×40, 100 m/hücre) ızgara, merkez çevre durumuyla yörünge verisini <code>V_hücre = (1 − w) · V_merkez + w · V_yerel</code> bağıntısıyla birleştirir. Bölüm D saha ölçümleri hedef hücreyi doğrudan günceller ve komşu hücrelere <code>k(d) = (1 − (d / R)²)²</code> (varsayılan etki yarıçapı <code>R = 300 m</code>) ağırlığıyla yayılır; yörüngeyle fark &gt;%50 ise uyuşmazlık uyarısı üretilir.</li>
       <li><b>8 Puanlanan Alan (Güç &amp; Enerji dahil):</b> Termal, Radyasyon, Topografya, Optik, Jeoloji, Yükseklik &amp; Eğim, Toz ve Güç &amp; Enerji alanları STORM güneş/MMRTG + ısıtıcı modeliyle hesaplanır. Günlük enerji açığı durumunda Güç = 0, Son Uyum ≤ 20 (VETO) uygulanır.</li>
       <li><b>Yüksek Çözünürlüklü Veriler:</b> Önceden kesilmiş bölgeler (4 temel saha + 5 aday bölge) MOLA-HRSC 200 m DEM eğimi ve 100 m THEMIS Day IR göreli parlaklık modülasyonu (<code>MODEL</code> rozeti) içerir.</li>
+    </ul>
+    <h3>10 · Otonom uçuş mimarisi ve robotik çekirdek (Quantro Q-11)</h3>
+    <ul class="spec-list">
+      <li><b>ROS 2 ve gömülü servis:</b> <code>robotics/mars_decision_ros2_node.py</code> ROS 2 altında (Humble/Iron/Rolling) veya bağımlılıksız bir Linux servisi olarak (Jetson Orin, Raspberry Pi) çalışır.</li>
+      <li><b>MAVLink WPL 110:</b> <code>MAVLink dışa aktar (.waypoints)</code> ilk 5 aday koordinatını QGroundControl / ArduPilot / PX4 rota biçiminde yazar; standart otopilot araçlarıyla entegrasyon testi içindir (Dünya otopilotları Mars’ta seyir yapmaz).</li>
+      <li><b>Donanım-döngüde (HIL) test köprüsü:</b> <code>robotics/hil_telemetry_bridge.py</code> TCP/WebSocket üzerinden JSON telemetri paketleri gönderir; varsayılan olarak gerçek donanım bağlanmadan önce test için simüle edilmiş IMU, barometre ve batarya değerleri üretir.</li>
+      <li><b>Sistem mimarisi:</b> Quantro Flight Systems tarafından tasarlanmıştır.</li>
     </ul>
     <div id="tac-benchmark-box" class="tac-benchmark-box"></div>`;
 

@@ -701,6 +701,13 @@
       <li><b>Orbital Data Sources &amp; Integrity.</b> Pre-cut bundles (4 preset sites + 5 balanced candidates) integrate USGS/MOLA-HRSC 200 m Blended DEM slope (<code>Mars_HRSC_MOLA_BlendDEM_Global_200mp_v2</code>) and 100 m THEMIS Day IR relative brightness (<code>Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12</code>) as normalized thermal/optical modulation (labeled <code>MODEL</code>, never fake TI).</li>
       <li><b>Vehicle Config &amp; Constraints.</b> All vehicle specs live in <code>web/vehicles.json</code> and <code>web/tactical_config.json</code> with explicit <code>source</code> and <code>verified</code> flags; placeholder/fallback sources render as <code>ESTIMATE / TAHMİN</code>.</li>
     </ul>
+    <h3>10 · Autonomous Flight Architecture &amp; Robotics Kernel (Quantro Q-11)</h3>
+    <ul class="spec-list">
+      <li><b>ROS 2 &amp; Embedded Daemon Integration.</b> Direct dual-mode execution via <code>robotics/mars_decision_ros2_node.py</code> running natively under ROS 2 (Humble/Iron/Rolling) or as a zero-dependency headless Linux daemon on onboard rover/flight avionics (Jetson Orin, Raspberry Pi).</li>
+      <li><b>MAVLink WPL 110 Waypoint Protocol.</b> <code>Export MAVLink (.waypoints)</code> writes the Top-5 candidate coordinates in the QGroundControl / ArduPilot / PX4 waypoint format, for integration tests with standard autopilot tooling (Earth autopilots do not navigate on Mars).</li>
+      <li><b>Hardware-in-the-Loop (HIL) test bridge.</b> <code>robotics/hil_telemetry_bridge.py</code> streams JSON telemetry packets over TCP/WebSocket; by default it generates simulated IMU, barometer and battery values so the console can be tested before real hardware is attached.</li>
+      <li><b>Systems Architecture.</b> Designed and engineered by Quantro Flight Systems.</li>
+    </ul>
     <div id="tac-benchmark-box" class="tac-benchmark-box"></div>
     </div>
   </div>
@@ -716,6 +723,7 @@
       <div class="brief-actions">
         <button id="btn-dl-json" class="btn-spec">Download JSON</button>
         <button id="btn-dl-geojson" class="btn-spec">Download GeoJSON</button>
+        <button id="btn-dl-mavlink" class="btn-spec" title="Export MAVLink WPL 110 mission flight plan for rovers/autopilots">Export MAVLink (.waypoints)</button>
         <button id="btn-print-brief" class="btn-spec">Print / PDF</button>
         <button class="modal-close" id="brief-close" aria-label="Close">Close</button>
       </div>

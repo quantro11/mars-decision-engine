@@ -78,7 +78,8 @@
 
     return {
       generated_at: new Date().toISOString(),
-      system: 'Martiap (MDE-3.0)',
+      system: 'Quantro Q-11 Mars Autonomous Reconnaissance & Flight Engine (Martiap MDE-3.0)',
+      architect: 'Quantro Flight Systems',
       architecture_preset: S.preset || 'custom',
       scoring_aggregation: S.agg || 'sum',
       hard_constraints_hls2015: S.hard,
@@ -367,5 +368,16 @@
     triggerDownload('mars-mission-sites.geojson', 'application/geo+json', JSON.stringify(buildGeoJSON(ctx), null, 2));
   }
 
-  global.MDE_BRIEF = { buildBriefPayload, buildGeoJSON, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON };
+  function downloadBriefMAVLink(payload) {
+    const cands = payload.top_candidates || [];
+    const lines = ['QGC WPL 110'];
+    const home = cands[0] || { lat_deg: 0, lon_deg: 0, elev_m: 0 };
+    lines.push(`0\t1\t0\t16\t0.000000\t0.000000\t0.000000\t0.000000\t${Number(home.lat_deg).toFixed(8)}\t${Number(home.lon_deg).toFixed(8)}\t0.000000\t1`);
+    cands.forEach((c, i) => {
+      lines.push(`${i + 1}\t0\t3\t16\t0.000000\t0.000000\t0.000000\t0.000000\t${Number(c.lat_deg).toFixed(8)}\t${Number(c.lon_deg).toFixed(8)}\t2.000000\t1`);
+    });
+    triggerDownload('mars-mission-flightplan.waypoints', 'text/plain', lines.join('\n') + '\n');
+  }
+
+  global.MDE_BRIEF = { buildBriefPayload, buildGeoJSON, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON, downloadBriefMAVLink };
 })(typeof module === 'object' && module.exports ? module.exports : globalThis);
