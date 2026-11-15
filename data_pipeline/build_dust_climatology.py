@@ -25,6 +25,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import tarfile
 
@@ -112,13 +113,16 @@ def extract(vars_, name):
     lon = vars_[lon_k][0].astype(float).ravel()
     lat = vars_[lat_k][0].astype(float).ravel()
     ls_k = pick(vars_, 'Ls', 'ls', 'solar_longitude')
+    t_k = pick(vars_, 'Time', 'time', 'sol', 'soy')
+    t = vars_[t_k][0].astype(float).ravel() if t_k is not None and vars_[t_k][0].size == data.shape[0] else None
     if ls_k is not None and vars_[ls_k][0].size == data.shape[0]:
         ls = vars_[ls_k][0].astype(float).ravel() % 360
+    elif t is not None:
+        ls = ls_from_soy(t)
     else:
-        t_k = pick(vars_, 'Time', 'time', 'sol', 'soy')
-        if t_k is None:
-            raise RuntimeError(f'{name}: no Ls or Time variable')
-        ls = ls_from_soy(vars_[t_k][0].astype(float).ravel())
+        raise RuntimeError(f'{name}: no Ls or Time variable')
+    # one key per sol: integer sol-of-year when a Time axis exists, else 0.5° Ls steps (~1 sol)
+    sol_key = np.floor(t + 1e-6).astype(int) if t is not None else np.round(ls / 0.5).astype(int)
     # put dimensions in (time, lat, lon) order
     shp = data.shape
     if shp[1] == lon.size and shp[2] == lat.size:
@@ -126,30 +130,45 @@ def extract(vars_, name):
     elif not (shp[1] == lat.size and shp[2] == lon.size):
         raise RuntimeError(f'{name}: unexpected shape {shp} for lat {lat.size} / lon {lon.size}')
     lon = ((lon + 180) % 360) - 180
-    return var_k, ls, lat, lon, data * VIS_PER_ABS
+    return var_k, ls, sol_key, lat, lon, data * VIS_PER_ABS
 
 
-def iter_inputs(paths):
+def mars_year_of(name):
+    m = re.search(r'MY[_-]?(\d{2})', name, re.I)
+    return m.group(1) if m else None
+
+
+def list_inputs(paths):
+    """[(name, loader)] for every .nc file (directly, inside folders, or inside .tar/.tar.gz archives)."""
+    items = []
+    def add_tar(path):
+        with tarfile.open(path) as tf:
+            for m in tf.getmembers():
+                if m.isfile() and m.name.endswith('.nc'):
+                    items.append((os.path.basename(m.name), (lambda p=path, n=m.name: _read_member(p, n))))
     for p in paths:
         if os.path.isdir(p):
             for root, _, files in os.walk(p):
                 for fn in sorted(files):
                     full = os.path.join(root, fn)
                     if fn.endswith('.nc'):
-                        yield fn, full
+                        items.append((fn, (lambda f=full: f)))
                     elif fn.endswith(('.tar.gz', '.tgz', '.tar')):
-                        yield from iter_tar(full)
+                        add_tar(full)
         elif p.endswith(('.tar.gz', '.tgz', '.tar')):
-            yield from iter_tar(p)
+            add_tar(p)
         else:
-            yield os.path.basename(p), p
+            items.append((os.path.basename(p), (lambda f=p: f)))
+    return items
 
 
-def iter_tar(path):
-    with tarfile.open(path) as tf:
-        for m in tf.getmembers():
-            if m.isfile() and m.name.endswith('.nc'):
-                yield os.path.basename(m.name), tf.extractfile(m).read()
+def _read_member(tar_path, member):
+    with tarfile.open(tar_path) as tf:
+        return tf.extractfile(member).read()
+
+
+TAU_BIN = 0.05            # histogram step for percentiles (visible tau)
+N_TAU = 241               # 0 .. 12 (last bin = 12+)
 
 
 def main(argv):
@@ -157,51 +176,64 @@ def main(argv):
         print(__doc__)
         return 2
     n_lon, n_lat = int(360 / D_LON), int(180 / D_LAT)
-    samples = [[[] for _ in range(n_lat * n_lon)] for _ in range(N_LS)]
-    years, used = [], []
-    for name, src in iter_inputs(argv):
-        try:
-            var_k, ls, lat, lon, tau = extract(open_vars(src, name), name)
-        except RuntimeError as ex:
-            print('  skip:', ex)
+    n_cell = n_lat * n_lon
+    # streaming statistics per Ls bin x cell: sum, count, histogram (for p90), dusty count
+    tsum = np.zeros((N_LS, n_cell)); tcnt = np.zeros((N_LS, n_cell))
+    hist = np.zeros((N_LS, n_cell, N_TAU), dtype=np.uint32)
+    used, years = [], []
+    items = list_inputs(argv)
+    groups = {}
+    for name, loader in items:
+        groups.setdefault(mars_year_of(name) or ('?' + name), []).append((name, loader))
+    for my, files in sorted(groups.items()):
+        # Several files for the same Mars year (e.g. gridded + kriged, or sub-daily maps) are first averaged per sol
+        # and cell, so every Mars year and every sol counts exactly once.
+        per_sol = {}   # sol_key -> [ls, sums(n_cell), counts(n_cell)]
+        for name, loader in files:
+            try:
+                var_k, ls, sol_key, lat, lon, tau = extract(open_vars(loader(), name), name)
+            except RuntimeError as ex:
+                print('  skip:', ex)
+                continue
+            yi = np.clip(((lat + 90) // D_LAT).astype(int), 0, n_lat - 1)
+            xi = np.clip(((lon + 180) // D_LON).astype(int), 0, n_lon - 1)
+            cell = (yi[:, None] * n_lon + xi[None, :]).ravel()
+            for k in range(tau.shape[0]):
+                frame = tau[k].ravel()
+                ok = ~np.isnan(frame)
+                rec = per_sol.setdefault(int(sol_key[k]), [ls[k], np.zeros(n_cell), np.zeros(n_cell)])
+                rec[1] += np.bincount(cell[ok], weights=frame[ok], minlength=n_cell)
+                rec[2] += np.bincount(cell[ok], minlength=n_cell)
+            used.append(f'{name} ({var_k}, {tau.shape[0]} maps)')
+            print('  read', used[-1])
+            del tau
+        if not per_sol:
             continue
-        yi = np.clip(((lat + 90) // D_LAT).astype(int), 0, n_lat - 1)
-        xi = np.clip(((lon + 180) // D_LON).astype(int), 0, n_lon - 1)
-        cell = (yi[:, None] * n_lon + xi[None, :]).ravel()
-        for t in range(tau.shape[0]):
-            b = int(ls[t] // (360 / N_LS)) % N_LS
-            frame = tau[t].ravel()
-            ok = ~np.isnan(frame)
-            # mean per output cell for this sol, then store one sample per cell per sol
-            sums = np.bincount(cell[ok], weights=frame[ok], minlength=n_lat * n_lon)
-            cnts = np.bincount(cell[ok], minlength=n_lat * n_lon)
-            for c in np.nonzero(cnts)[0]:
-                samples[b][c].append(sums[c] / cnts[c])
-        my = ''.join(ch for ch in name if ch.isdigit())[:2]
-        years.append(my or name)
-        used.append(f'{name} ({var_k}, {tau.shape[0]} sols)')
-        print('  read', used[-1])
+        years.append(my)
+        for ls_k, sums, cnts in per_sol.values():
+            b = int(ls_k // (360 / N_LS)) % N_LS
+            ok = cnts > 0
+            daily = np.zeros(n_cell); daily[ok] = sums[ok] / cnts[ok]
+            tsum[b, ok] += daily[ok]; tcnt[b, ok] += 1
+            hb = np.clip((daily / TAU_BIN).astype(int), 0, N_TAU - 1)
+            idx = np.nonzero(ok)[0]
+            hist[b, idx, hb[idx]] += 1
+        print(f'  Mars year {my}: {len(per_sol)} sols')
     if not used:
         print('No usable CDOD files found.')
         return 1
-    mean = np.full((N_LS, n_lat * n_lon), np.nan)
-    p90 = np.full_like(mean, np.nan)
-    fdust = np.full_like(mean, np.nan)
-    for b in range(N_LS):
-        for c in range(n_lat * n_lon):
-            s = samples[b][c]
-            if len(s) >= 3:
-                a = np.asarray(s)
-                mean[b, c] = a.mean()
-                p90[b, c] = np.percentile(a, 90)
-                fdust[b, c] = float((a >= DUSTY_TAU).mean())
-    # fill cells without data (e.g. polar night) from the zonal mean of the same Ls bin
-    for arr in (mean, p90, fdust):
+    mean = np.where(tcnt >= 3, tsum / np.maximum(tcnt, 1), np.nan)
+    cum = np.cumsum(hist, axis=2)
+    tot = cum[:, :, -1:]
+    p90_bin = np.argmax(cum >= 0.9 * np.maximum(tot, 1), axis=2)
+    p90 = np.where(tcnt >= 3, (p90_bin + 0.5) * TAU_BIN, np.nan)
+    dusty_from = int(round(DUSTY_TAU / TAU_BIN))
+    fdust = np.where(tcnt >= 3, hist[:, :, dusty_from:].sum(axis=2) / np.maximum(tcnt, 1), np.nan)
+    import warnings
+    warnings.simplefilter('ignore', category=RuntimeWarning)
+    for arr in (mean, p90, fdust):  # cells without data (polar night) take the zonal mean of their Ls bin
         g = arr.reshape(N_LS, n_lat, n_lon)
-        with np.errstate(all="ignore"):
-            import warnings
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            zonal = np.nanmean(g, axis=2, keepdims=True)
+        zonal = np.nanmean(g, axis=2, keepdims=True)
         g[:] = np.where(np.isnan(g), np.broadcast_to(zonal, g.shape), g)
         g[np.isnan(g)] = 0.0
     q = lambda arr, s: [int(round(v * s)) for v in np.clip(arr, 0, 255 / s).ravel()]  # noqa: E731
@@ -209,20 +241,22 @@ def main(argv):
         'meta': {
             'source': 'Montabone et al. column dust optical depth maps (LMD Mars Climate Database dust climatology)',
             'files': used,
-            'marsYears': sorted(set(years)),
-            'units': 'visible dust optical depth normalised to 610 Pa (2.6 × 9.3 µm absorption CDOD)',
+            'marsYears': sorted(y for y in years if not y.startswith('?')),
+            'solsPerYear': None,
+            'units': 'visible dust optical depth normalised to 610 Pa (2.6 x 9.3 um absorption CDOD); daily means, each Mars year and sol counted once',
             'dustyTauThreshold': DUSTY_TAU,
             'grid': {'dLon': D_LON, 'dLat': D_LAT, 'nLon': n_lon, 'nLat': n_lat, 'lon0': -180, 'lat0': -90, 'nLs': N_LS},
             'scale': {'mean': 50, 'p90': 50, 'fDust': 250},
         },
         'mean': q(mean, 50), 'p90': q(p90, 50), 'fDust': q(fdust, 250),
     }
+    del payload['meta']['solsPerYear']
     js = ('// Auto-generated by data_pipeline/build_dust_climatology.py from the Montabone et al. CDOD maps. Do not edit.\n'
           '(function (global) { global.MDE_DUST_CLIM = ' + json.dumps(payload, separators=(',', ':')) + '; })'
           "(typeof window !== 'undefined' ? window : module.exports);\n")
     with open(OUT, 'w', encoding='utf-8') as fh:
         fh.write(js)
-    print(f'Wrote {os.path.relpath(OUT)} ({len(js) / 1024:.0f} KB) from {len(used)} file(s).')
+    print(f'Wrote {os.path.relpath(OUT)} ({len(js) / 1024:.0f} KB) from {len(used)} file(s), Mars years {payload["meta"]["marsYears"]}.')
     return 0
 
 
