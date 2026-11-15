@@ -1000,6 +1000,18 @@
       if (lineEl) lineEl.style.width = `${Math.round(target * 0.25)}px`;
     }
 
+    /** Measured typical haze (Montabone CDOD climatology) at the box centre on the chosen date; null if not bundled. */
+    function measuredTau() {
+      if (!storm || typeof storm.baselineTau !== 'function' || typeof storm.dustClimAt !== 'function') return null;
+      const loc = engine.validateLocation(inputs.lat, inputs.lonInput, inputs.lonConvention, tacticalCfg);
+      if (!loc.valid) return null;
+      const lon180 = loc.lon360 > 180 ? loc.lon360 - 360 : loc.lon360;
+      const ls = marsTime && marsTime.computeMarsTime ? marsTime.computeMarsTime(inputs.earthDateUtc, loc.lon360).lsDeg : 251;
+      const elevM = analysis && analysis.centerBase ? analysis.centerBase.elevM : 0;
+      if (!storm.dustClimAt(loc.latDeg, lon180, ls, elevM)) return null;
+      return +storm.baselineTau(loc.latDeg, lon180, ls, elevM).toFixed(1);
+    }
+
     function syncEnvInputsToDom() {
       if ($('tac-date')) $('tac-date').value = inputs.earthDateUtc;
       if ($('tac-ltst')) $('tac-ltst').value = String(inputs.ltstHours);
@@ -1399,7 +1411,11 @@
       }
       doc.querySelectorAll('#tac-tau-presets button').forEach((b) => {
         b.onclick = () => {
-          inputs.tau = Number(b.dataset.tau);
+          if (b.dataset.tau === 'clim') {
+            const mt = measuredTau();
+            if (mt === null) { if (onToast) onToast('No measured dust climatology bundled'); return; }
+            inputs.tau = Math.max(0.2, mt);
+          } else inputs.tau = Number(b.dataset.tau);
           lastScenarioTag = null;
           if (tauEl) tauEl.value = String(inputs.tau);
           if (tauV) tauV.textContent = `τ ${inputs.tau.toFixed(1)}`;
@@ -1449,7 +1465,8 @@
       const normBtn = $('tac-normal-day-btn');
       if (normBtn) {
         normBtn.onclick = () => {
-          inputs.tau = 0.5;
+          inputs.earthDateUtc = engine.getUtcTodayIso();
+          inputs.tau = measuredTau() ?? 0.5;   // measured typical haze for this site and date when available
           inputs.solarCycle = 'mid';
           inputs.speActive = false;
           inputs.ltstHours = 12.0;

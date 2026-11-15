@@ -251,5 +251,16 @@ assert.strictEqual(T.baselineTau(18, 77, 251, -2500), 0.5, 'default pre-storm ha
   assert.ok(/Montabone/.test(f.corridorName) && f.stormCorridorIndex > 0.8, 'storm-season index uses measured dusty-sol share');
   global.MDE_DUST_CLIM = null;
 }
+// Real bundled climatology (13 Mars years of Montabone CDOD): sanity against known Mars dust behaviour
+{
+  const REAL = require('../web/dust_climatology_data.js').MDE_DUST_CLIM;
+  assert.ok(REAL && REAL.meta.marsYears.length === 13 && REAL.meta.marsYears[0] === '24' && REAL.meta.marsYears[12] === '36', 'bundled dust climatology covers MY24-MY36');
+  global.MDE_DUST_CLIM = REAL;
+  const galeDusty = T.dustClimAt(-4.6, 137.4, 255, 0), galeClear = T.dustClimAt(-4.6, 137.4, 75, 0);
+  assert.ok(galeDusty.meanTau > 2 * galeClear.meanTau, 'perihelion dust season is much hazier than aphelion at Gale');
+  assert.ok(galeClear.meanTau > 0.1 && galeClear.meanTau < 0.5 && galeDusty.meanTau > 0.5 && galeDusty.meanTau < 1.5, 'Gale haze in the observed range');
+  assert.ok(T.dustClimAt(-4.6, 137.4, 255, -4500).meanTau > galeDusty.meanTau, 'low sites sit under a thicker dust column');
+  global.MDE_DUST_CLIM = null;
+}
 
 console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation tests passed.');

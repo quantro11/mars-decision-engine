@@ -68,18 +68,21 @@ node tools/validate.js          # -> docs/validation.md
 MOLA-HRSC 200 m DEM. They are **not** generated or deployed; `web/tiles/manifest.json` is a placeholder and the map
 uses the 5.2 km/px base layers.
 
-## Measured dust climatology (optional, recommended)
+## Measured dust climatology (bundled)
 
-The storm tab and the dust-risk index can use the **Montabone et al. column dust optical depth maps** instead of built-in
-assumptions (normal haze per site and season, and how often regional-storm haze occurs there):
+`web/dust_climatology_data.js` (~200 KB) holds **13 Mars years (MY24–MY36) of the Montabone et al. column dust optical
+depth maps** (kriged daily maps, LMD Mars Climate Database, CC BY-SA), reduced to a 6°×5° grid and twelve 30° Ls seasons:
+typical haze, dusty-day haze (90th percentile) and the share of sols with regional-storm haze (visible τ ≥ 1.5 at 610 Pa).
+Each Mars year contributes one daily value per sol, so no year is counted twice.
 
-1. Download the NetCDF files from <https://www-mars.lmd.jussieu.fr/mars/dust_climatology/> (per-year files, or the
-   "All MYs" tar.gz) into one folder.
-2. `python data_pipeline/build_dust_climatology.py <that folder>` → writes `web/dust_climatology_data.js` (~200 KB).
-   NetCDF-4 files need `pip install netCDF4`.
-3. Rebuild (`node tools/build.js`) and commit the generated file.
+It drives: rover range and driving visibility (Landing site), route energy (Rover route), the haze before a storm and the
+storm simulation (Dust-storm power), the "Typical (data)" preset in Tactical EVA, the dust-risk index's storm-season term,
+and the **dust calendar** on the Landing site tab (pick a mission date → Mars season → measured haze for that site; it
+shows past behaviour, not a forecast). The only weather variable in this dataset is dust; wind, temperature and pressure
+are not included.
 
-Without it, `web/dust_climatology_data.js` is a placeholder (`null`) and the app says so in the storm tab.
+To rebuild: download the kriged maps from <https://www-mars.lmd.jussieu.fr/mars/dust_climatology/>, then
+`python data_pipeline/build_dust_climatology.py <folder>` and `node tools/build.js`. Raw `.nc` files are git-ignored.
 
 ## Rebuild the data layers (optional)
 

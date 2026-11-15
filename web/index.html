@@ -131,6 +131,14 @@
             <button id="ls-btn-storm" type="button" class="ghost">Open Dust-Storm Power</button>
           </div>
         </div>
+
+        <div class="ls-section ls-block">
+          <div id="ls-cal-lbl" class="ls-sub-lbl">5 · Dust calendar (measured, not a forecast)</div>
+          <label for="ls-date" class="ls-date-lbl"><span id="ls-date-lead">Mission date</span>
+            <input type="date" id="ls-date">
+          </label>
+          <div id="ls-cal-body" class="ls-test-body">—</div>
+        </div>
       </div>
       <details id="ls-priorities" class="tac-sec ls-priorities" open>
         <summary id="ls-priorities-sum">Mission priority &amp; weights</summary>
@@ -232,6 +240,7 @@
             <input type="range" id="tac-tau" min="0.2" max="11" step="0.1" value="0.5">
           </label>
           <div id="tac-tau-presets" class="seg tac-seg-sm" role="group" aria-label="Dust tau presets">
+            <button type="button" data-tau="clim" aria-pressed="false" title="Measured typical haze for this site and date (Montabone CDOD, MY24–36)">Typical (data)</button>
             <button type="button" data-tau="0.5" class="active" aria-pressed="true">Clear 0.5</button>
             <button type="button" data-tau="1.5" aria-pressed="false">Dusty 1.5</button>
             <button type="button" data-tau="4" aria-pressed="false">Regional 4</button>
