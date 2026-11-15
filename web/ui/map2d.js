@@ -488,15 +488,17 @@
       ctx.stroke();
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(px, py, 2.5 * dpr, 0, Math.PI * 2); ctx.fill();
+      // Rover-range label goes BELOW the pin: the legacy "EVA WALKBACK" label (when that demo
+      // is open) sits above the same point, and at low zoom the two boxes used to overlap.
       const lbl = rangeKm > 0 ? `${rangeKm.toFixed(1)} km` : '0 km';
       ctx.font = `600 ${Math.round(10 * dpr)}px "IBM Plex Mono", monospace`;
       const tw = ctx.measureText(lbl).width;
       ctx.fillStyle = 'rgba(12, 14, 18, 0.88)';
-      ctx.fillRect(px - tw / 2 - 4 * dpr, py - r - 18 * dpr, tw + 8 * dpr, 13 * dpr);
+      ctx.fillRect(px - tw / 2 - 4 * dpr, py + r + 16 * dpr, tw + 8 * dpr, 13 * dpr);
       ctx.fillStyle = col;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(lbl, px, py - r - 11.5 * dpr);
+      ctx.fillText(lbl, px, py + r + 22.5 * dpr);
     }
 
     function zoomBy(factor) {

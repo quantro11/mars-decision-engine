@@ -1,0 +1,7 @@
+{
+  "status": "not_generated",
+  "note": "Placeholder. Run `node tools/build_detail_tiles.mjs` (needs the MOLA-HRSC 200 m DEM locally) to generate relief tiles; it overwrites this file.",
+  "tileSize": 256,
+  "baseLevel": 3,
+  "levels": []
+}

@@ -410,6 +410,35 @@
       const pTherm = STORM.thermalDemandKw(v.lat, c.ls, v.ti, v.elev, 0.5);
       const spe = SCORING.calcSPE(v.elev, c.regolith ?? 1.5);
 
+      // "What drives this result": once peak-storm solar falls well below demand the blackout sol is set by
+      // battery autonomy + reactors, and τ / panel area / season stop moving the headline. Show that
+      // explicitly, plus each slider's min→max effect, so an insensitive slider reads as physics, not a bug.
+      const solarShare = c.cons > 0 ? peakSolar / c.cons : 0;
+      const autonomySols = c.cons > 0 ? (c.batt / c.cons).toFixed(1) : '∞';
+      const driverTxt = solarShare < 0.25
+        ? L(tr, 'pn.driverSolarGone', [c.tauPeak.toFixed(1), peakSolar.toFixed(0), (100 * solarShare).toFixed(0), c.cons, autonomySols])
+        : L(tr, 'pn.driverSolarMargin', [c.tauPeak.toFixed(1), peakSolar.toFixed(0), (100 * solarShare).toFixed(0), c.cons, autonomySols]);
+      const simWith = (over) => STORM.simulate({
+        lat: v.lat, ls: c.ls, ti: v.ti, elev: v.elev, panelArea: over.area ?? c.area, efficiency: 0.2,
+        consumption: over.cons ?? c.cons, capacity: over.batt ?? c.batt, kilopower: over.kp ?? c.kp, sols: 120,
+        storm: { tau0: 0.5, tauPeak: over.tauPeak ?? c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
+      }).blackoutSol;
+      const bo = (sol) => (sol === null ? L(tr, 'pn.sensSurvives') : `sol ${sol}`);
+      const sensRows = [
+        [L(tr, 'pn.sensTau', [2, 12]), simWith({ tauPeak: 2 }), simWith({ tauPeak: 12 })],
+        [L(tr, 'pn.sensArea', [100, 5000]), simWith({ area: 100 }), simWith({ area: 5000 })],
+        [L(tr, 'pn.sensBatt', [100, 10000]), simWith({ batt: 100 }), simWith({ batt: 10000 })],
+        [L(tr, 'pn.sensCons', [50, 1000]), simWith({ cons: 50 }), simWith({ cons: 1000 })],
+        [L(tr, 'pn.sensKp', [0, 4]), simWith({ kp: 0 }), simWith({ kp: 4 })],
+      ].map(([lbl, a, b]) => `<div class="kv"><span>${escHtml(lbl)}</span><b>${escHtml(bo(a))} → ${escHtml(bo(b))}</b></div>`).join('');
+      const driverHtml = `
+        <div class="marswalk-micro-card">
+          <div class="marswalk-micro-head"><b>${L(tr, 'pn.whatDrivesResult')}</b><span class="badge-mode badge-model">MODEL</span></div>
+          <div class="help note-sm">${driverTxt}</div>
+          <div class="help note-sm mt-sm"><b>${L(tr, 'pn.sensSliderRange')}</b></div>
+          ${sensRows}
+        </div>`;
+
       const verdict = res.blackoutSol !== null
         ? `<div class="summary-big bad">${escHtml(t('stormBlackout', 'Power blackout on sol'))} ${res.blackoutSol}</div><div class="help">${L(tr, 'pn.batteryReserveExhaustedSolsAfter', [res.blackoutSol - 20, (peakSolar + nuc).toFixed(0), c.cons])}</div>`
         : `<div class="summary-big ok">${escHtml(t('stormSurvives', 'Base survives the storm'))}</div><div class="help">${L(tr, 'pn.minimumBatteryReserveKwhNet', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0), (peakSolar + nuc - c.cons).toFixed(0)])}</div>`;
@@ -455,6 +484,7 @@
 
       el.innerHTML = `${verdict}
         ${thermVerdict}
+        ${driverHtml}
         ${mlCardHtml}
         <div class="kv"><span>${L(tr, 'pn.season')} (L<sub>s</sub> = ${c.ls}°)</span><b>${escHtml(trDom(STORM.seasonName(c.ls)))}</b></div>
         <div class="kv"><span>${L(tr, 'pn.surfaceTempApprox')}</span><b>${L(tr, 'pn.night')} ${sTemp.night}°C · ${L(tr, 'pn.mean')} ${sTemp.mean}°C</b></div>

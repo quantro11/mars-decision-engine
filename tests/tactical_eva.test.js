@@ -207,6 +207,7 @@ check(nucStormCold.summary.powerDeficit === false && nucStormCold.summary.domain
 
 const cellExp = ENGINE.getCellPopup(blendedRes, 820, 'en');
 check(typeof cellExp.explanation === 'string' && cellExp.explanation.length > 15, `Cell explanation renders rule-based sentence: ${cellExp.explanation}`);
+check(Number.isFinite(cellExp.elevM) && Number.isInteger(cellExp.elevM), `Cell popup carries integer elevM for its header (was rendering 'undefined m'): ${cellExp.elevM}`);
 
 const coldEst = ENGINE.findColdestEarthDateForLat(32.3, 114.2, -4500, MARS_TIME, STORM, '2026-06-01');
 check(coldEst && typeof coldEst.earthDateUtc === 'string' && coldEst.earthDateUtc.length === 10, `Coldest seasonal date found for northern plains: ${coldEst.earthDateUtc} (Ls ${coldEst.lsDeg})`);

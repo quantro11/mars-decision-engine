@@ -247,7 +247,7 @@
       }
       const subEl = $('#hud-modal-sub');
       if (subEl) {
-        subEl.textContent = `${zone.name} · ${wp.cam} · HDG ${wp.heading}° · dElev +${wp.elevRel} m`;
+        subEl.textContent = `${zone.name} · ${tr ? 'Ref. gözlem' : 'Ref. obs'}: ${wp.cam} · HDG ${wp.heading}° · dElev +${wp.elevRel} m`;
       }
 
       const body = $('#hud-modal-body');
@@ -340,6 +340,9 @@
           const f = frames[idx];
           const roverTitle = rover === 'perseverance' ? 'Perseverance' : 'Curiosity';
           const solTag = f.sol !== null && f.sol !== undefined ? `Sol ${f.sol}` : (f.earthDate || 'Archive');
+          // The visor tape must describe the image actually on screen (live NASA frame + its sol),
+          // not the waypoint's reference observation, otherwise two different sols show at once.
+          const liveCamLabel = `${roverTitle} ${f.camera} · ${solTag}`;
           if (camMeta) {
             camMeta.textContent = `● ${roverTitle} ${f.camera} · ${solTag} · ${L(tr, 'eva.frame')} ${idx + 1}/${frames.length} · ${povRes.source}`;
           }
@@ -352,7 +355,7 @@
                   drawGroundPovCanvas(povCanvas, sim, wp, state.laserOn, {
                     transparentBackdrop: true,
                     frameIdx: idx,
-                    camLabel: `${roverTitle} ${f.camera}`
+                    camLabel: liveCamLabel
                   });
                 }
               }
@@ -374,7 +377,7 @@
                 drawGroundPovCanvas(povCanvas, sim, wp, state.laserOn, {
                   transparentBackdrop: false,
                   frameIdx: idx,
-                  camLabel: `${roverTitle} ${f.camera}`
+                  camLabel: liveCamLabel
                 });
               }
               povImg.setAttribute('src', f.imgUrl);
@@ -384,7 +387,7 @@
                 drawGroundPovCanvas(povCanvas, sim, wp, state.laserOn, {
                   transparentBackdrop: true,
                   frameIdx: idx,
-                  camLabel: `${roverTitle} ${f.camera}`
+                  camLabel: liveCamLabel
                 });
               }
             }

@@ -480,14 +480,21 @@
     ctx.moveTo(tx, ty + 12); ctx.lineTo(tx, ty + 32);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(12, 15, 20, 0.72)';
-    ctx.fillRect(tx + 24, ty - 22, 250, 38);
-    ctx.fillStyle = '#7dbb8e';
+    // Target readout box: sized to its text (the fixed 250 px box used to clip "H2O x.x%")
+    // and flipped to the left of the reticle when it would run past the visor edge.
+    const line1 = `TARGET: ${wp.id} (${wp.code}) · ${laserOn ? 'LIBS PLASMA ACTIVE' : 'OPTICAL LOCK'}`;
+    const line2 = `SiO2 ${wp.chem.SiO2}% · SO3 ${wp.chem.SO3}% · FeO ${wp.chem.FeO}% · H2O ${wp.chem.H2O}%`;
     ctx.font = '600 10px "IBM Plex Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`TARGET: ${wp.id} (${wp.code}) · ${laserOn ? 'LIBS PLASMA ACTIVE' : 'OPTICAL LOCK'}`, tx + 30, ty - 8);
+    const boxW = Math.ceil(Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width)) + 12;
+    let boxX = tx + 24;
+    if (boxX + boxW > W - 12) boxX = Math.max(12, tx - 24 - boxW);
+    ctx.fillStyle = 'rgba(12, 15, 20, 0.72)';
+    ctx.fillRect(boxX, ty - 22, boxW, 38);
+    ctx.fillStyle = '#7dbb8e';
+    ctx.fillText(line1, boxX + 6, ty - 8);
     ctx.fillStyle = '#c9d1dc';
-    ctx.fillText(`SiO2 ${wp.chem.SiO2}% · SO3 ${wp.chem.SO3}% · FeO ${wp.chem.FeO}% · H2O ${wp.chem.H2O}%`, tx + 30, ty + 8);
+    ctx.fillText(line2, boxX + 6, ty + 8);
 
     ctx.fillStyle = 'rgba(12, 15, 20, 0.84)';
     ctx.fillRect(14, H - 34, W - 28, 22);
@@ -538,21 +545,24 @@
       const y = Math.round(78 - val * 54);
       return `${x},${y}`;
     }).join(' ');
+    // Band markers sit on the series x positions (FeII=idx0, MgII=idx1, S=idx6, OH=idx8).
+    // The two UV lines are only 28 px apart, so their labels go on two rows and the
+    // left-most one is start-anchored instead of being centred on the chart edge.
     const bands = [
-      { x: 16, lbl: '248nm FeII' },
-      { x: 44, lbl: '280nm MgII' },
-      { x: 184, lbl: '545nm S/SO4' },
-      { x: 240, lbl: '656nm Ha/OH' }
+      { x: 16, lbl: '248nm FeII', anchor: 'start', row: 0 },
+      { x: 44, lbl: '280nm MgII', anchor: 'start', row: 1 },
+      { x: 184, lbl: '545nm S/SO4', anchor: 'middle', row: 0 },
+      { x: 240, lbl: '656nm Ha/OH', anchor: 'middle', row: 1 }
     ];
     const markers = bands.map((b) =>
       `<line x1="${b.x}" y1="22" x2="${b.x}" y2="78" stroke="#2c3545" stroke-width="1" stroke-dasharray="2 2"/>` +
-      `<text x="${b.x}" y="90" text-anchor="middle" fill="#828c9c" font-size="7.5" font-family="IBM Plex Mono, monospace">${b.lbl}</text>`
+      `<text x="${b.x}" y="${b.row ? 98 : 89}" text-anchor="${b.anchor}" fill="#828c9c" font-size="7.5" font-family="IBM Plex Mono, monospace">${b.lbl}</text>`
     ).join('');
     const oxideSummary = hasChem
       ? `FeO ${chem.FeO ?? '-'} · MgO ${chem.MgO ?? '-'} · SO3 ${chem.SO3 ?? '-'} · H2O ${chem.H2O ?? '-'}`
       : 'LIBS + VNIR (0.25-2.5 um · Fe/Mg/Si/Ca/Al/SO4/OH)';
-    return `<svg class="hud-spec-svg" viewBox="0 0 284 98" role="img" aria-label="LIBS and VNIR reflectance spectrum">
-      <rect x="0" y="0" width="284" height="98" rx="4" fill="#12161d"/>
+    return `<svg class="hud-spec-svg" viewBox="0 0 284 104" role="img" aria-label="LIBS and VNIR reflectance spectrum">
+      <rect x="0" y="0" width="284" height="104" rx="4" fill="#12161d"/>
       <line x1="16" y1="78" x2="268" y2="78" stroke="#2c3545" stroke-width="1"/>
       ${markers}
       <polyline fill="none" stroke="#7dbb8e" stroke-width="2.2" points="${series}"/>

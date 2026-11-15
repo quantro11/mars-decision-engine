@@ -151,7 +151,10 @@
       weights,
       fieldRadiusM: fdCfg ? fdCfg.defaultInfluenceRadiusM.value : 300,
       useCoarseBaseline: false,
-      onlineEnabled: true,
+      // Off by default: the JMARS WMS proxy has been returning 502 (upstream unreachable), which
+      // showed as a red request in DevTools during demos. The offline 100-200 m pre-cuts are the
+      // primary data path; the toggle stays available for live queries when the upstream is up.
+      onlineEnabled: false,
     };
   }
 
@@ -1419,6 +1422,7 @@
       lon180: cellLon180,
       lon360: +normalizeLon360(cellLon180).toFixed(5),
       finalScore: +g.final[i].toFixed(1),
+      elevM: elevInt,
       slopeDeg: slopeVal,
       ti: tiInt,
       tempC: tempVal,

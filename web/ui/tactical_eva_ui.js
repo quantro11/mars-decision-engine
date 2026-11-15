@@ -887,7 +887,8 @@
       const rowsHtml = p.domains.map((d) => {
         const lbl = tr ? (d.labelTr || d.label) : d.label;
         const scTxt = d.score == null ? (tr ? 'Bilgi' : 'Info') : `${d.score}/100`;
-        let rawTxt = `${d.raw}${d.unit ? ' ' + d.unit : ''}`;
+        // d.raw already carries its units ("254 mSv/yr", "albedo 0.21, τ=0.5"); d.unit is metadata for exports.
+        let rawTxt = `${d.raw}`;
         if (d.key === 'thermal') rawTxt = `${p.ti} tiu, ${p.tempC} °C`;
         return `<div class="tac-popup-row"><span><b>${escHtml(lbl)}</b> — ${scTxt} · ${escHtml(rawTxt)}</span>` +
           `<span class="${popupBadgeClass(d.badge)}">${escHtml(d.badge)}</span></div>`;
