@@ -22,9 +22,9 @@
   --tip-bg: rgba(19, 10, 13, .96);
   --r: 4px;
   --r-lg: 6px;
-  --serif: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
-  --sans: "IBM Plex Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
+  --serif: "Cormorant Garamond", "Source Serif 4", Georgia, serif;
+  --sans: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "Source Serif 4", Georgia, "Times New Roman", serif;
   --ease: cubic-bezier(.25, .6, .3, 1);
 }
 
@@ -733,3 +733,40 @@ canvas:focus-visible { outline-offset: -3px; }
 .cv-lbl { color: var(--dim); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
 .cv-chip.ok b { color: var(--ok); } .cv-chip.warn b { color: var(--warn); } .cv-chip.bad b { color: var(--bad); }
 .cv-note { margin-top: 6px; }
+
+/* Gold line accents (burgundy + gold theme) */
+:root { --gold-line: rgba(212, 173, 92, .38); --gold-soft: rgba(212, 173, 92, .16); }
+html[data-theme="light"] { --gold-line: rgba(134, 97, 15, .45); --gold-soft: rgba(134, 97, 15, .18); }
+.topbar { border-bottom: 1px solid var(--gold-line) !important; box-shadow: 0 1px 0 var(--gold-soft); }
+.panel.left { border-right: 1px solid var(--gold-line); }
+.panel.right { border-left: 1px solid var(--gold-line); }
+.sec-head { border-bottom-color: var(--gold-soft); position: relative; }
+.sec-head::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 36px; height: 1px; background: var(--slate); }
+.mode-btn::after { background: linear-gradient(90deg, var(--ochre), var(--slate)); }
+.mode-btn.active { color: var(--slate-2); }
+.map-wrap::after { box-shadow: inset 0 0 0 1px var(--gold-line), inset 0 0 120px rgba(0,0,0,.55); }
+.card { border-color: var(--gold-soft); }
+.card:hover { border-color: var(--gold-line); }
+.card.active { border-color: var(--ochre); box-shadow: inset 0 2px 0 var(--slate); }
+.card .rank { color: var(--slate); }
+.btn-spec:hover { border-color: var(--slate); color: var(--slate-2); }
+.seg { border-color: var(--gold-line); }
+.seg button.active { background: var(--ochre); color: #fff; }
+html[data-theme="light"] .mode-btn.active { color: var(--ochre); }
+.crisis-verdict { border-top: 2px solid var(--slate); }
+
+/* Serif everywhere: keep numbers aligned */
+body { font-variant-numeric: tabular-nums lining-nums; }
+
+/* More gold: lines, thumbs, frames */
+.topbar { background-image: linear-gradient(90deg, transparent, var(--gold-soft) 20%, var(--gold-soft) 80%, transparent); background-size: 100% 1px; background-repeat: no-repeat; background-position: bottom; }
+.brand-name { color: var(--slate-2); letter-spacing: .02em; }
+footer.sources { border-top: 1px solid var(--gold-line); }
+.panel { scrollbar-color: var(--gold-line) transparent; }
+input[type=range]::-webkit-slider-thumb { background: var(--slate); box-shadow: 0 0 0 3px var(--ink-2), 0 0 0 4px var(--gold-line); }
+input[type=range]::-moz-range-thumb { background: var(--slate); }
+input[type=range] { accent-color: var(--slate); }
+.panel h2, .panel .sec-head h2, .panel .sec-head h3 { color: var(--paper); }
+.station-lock, .control-group > .help.note-sm, .kv { border-color: var(--gold-soft); }
+.modal-box { border: 1px solid var(--gold-line); }
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, .card:focus-visible { outline-color: var(--slate); }

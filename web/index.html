@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -94,7 +94,7 @@
       </div>
 
       <div class="sec-head"><h2>Weight sensitivity</h2><span class="hint">Monte Carlo · N=100</span></div>
-      <p class="help">Perturb every weight and re-rank 100 times (with 95% Wilson confidence intervals) to test whether top candidates survive weight uncertainty.</p>
+      <p class="help">Re-ranks 100 times with random weights to test how stable the top sites are.</p>
       <div class="control-group">
         <label>Weight uncertainty <span id="sens-v">±20%</span>
           <input type="range" id="sens" min="5" max="50" value="20"></label>
@@ -108,7 +108,7 @@
         <h2 id="ls-tab-title">Landing Site Planner</h2>
         <button id="ls-close-btn" class="ls-close-btn tac-close-btn hidden" type="button" title="Clear landing site" aria-label="Clear landing site">✕</button>
       </div>
-      <p class="intro-lead" id="ls-intro">Click anywhere on the Mars map or 3D globe to place your landing spot, draw its rover range circle, and inspect compatibility, summary, walk/EVA, and dust-storm tests.</p>
+      <p class="intro-lead" id="ls-intro">Click the map or globe to place a landing site.</p>
 
       <div id="ls-empty" class="empty-state ls-empty-box">
         <p class="help" id="ls-empty-msg">Click any location on the map or 3D globe to create a landing site here.</p>
@@ -177,7 +177,7 @@
       <details id="tac-sec-a" class="tac-sec" open>
         <summary>Section A · Location</summary>
         <div class="tac-sec-body">
-          <p class="tac-sec-desc" id="tac-desc-a">Center of the 4 km × 4 km local area to analyze.</p>
+          <p class="tac-sec-desc" id="tac-desc-a">Center of the 4 × 4 km area.</p>
           <label for="tac-preset-zone">Target Region (High-Res Cutout or Custom Coordinate)
             <select id="tac-preset-zone">
               <option value="jezero_delta" selected>Jezero Delta Front (18.38°, 77.58° E)</option>
@@ -208,14 +208,14 @@
           </label>
           <div class="tac-readout">Nearest named feature: <b id="tac-region-name">Jezero Crater</b></div>
           <div id="tac-loc-error" class="tac-error hidden" role="alert"></div>
-          <p class="help">Tip: Click any cell on the global Mars map or any candidate card to auto-fill center coordinates.</p>
+          <p class="help">Click the map or a candidate to fill coordinates.</p>
         </div>
       </details>
 
       <details id="tac-sec-b" class="tac-sec" open>
         <summary>Section B · Time &amp; Environment</summary>
         <div class="tac-sec-body">
-          <p class="tac-sec-desc" id="tac-desc-b">Mission date, local solar time, dust opacity, and solar radiation conditions.</p>
+          <p class="tac-sec-desc" id="tac-desc-b">Date, time of day and dust.</p>
           <div class="tac-preset-btns">
             <button type="button" id="tac-worst-day-btn" class="tac-btn-warn">⚡ Worst-day scenario</button>
             <button type="button" id="tac-normal-day-btn" class="ghost">↺ Normal conditions</button>
@@ -250,7 +250,7 @@
       <details id="tac-sec-c" class="tac-sec" open>
         <summary>Section C · Vehicle</summary>
         <div class="tac-sec-body">
-          <p class="tac-sec-desc" id="tac-desc-c">Select rover class, speed, payload mass, and power architecture.</p>
+          <p class="tac-sec-desc" id="tac-desc-c">Rover, speed, load and power.</p>
           <label for="tac-veh-class">Rover Class
             <select id="tac-veh-class">
               <option value="mini_rover">Mini rover (Sojourner-class, ~11.5 kg, Solar)</option>
@@ -258,7 +258,7 @@
               <option value="manned_rover">Manned rover (CONCEPT – not flight data)</option>
             </select>
           </label>
-          <div id="tac-veh-concept-banner" class="tac-concept-banner hidden">CONCEPT – not flight data: pressurized crewed rover parameters are engineering concepts, not flight-certified hardware.</div>
+          <div id="tac-veh-concept-banner" class="tac-concept-banner hidden">Concept values, not flight data.</div>
           <div id="tac-veh-specs" class="tac-specs"></div>
           <label for="tac-veh-speed">Traverse speed <span id="tac-veh-speed-v">0.10 km/h</span>
             <input type="range" id="tac-veh-speed" min="0.02" max="0.15" step="0.005" value="0.10">
@@ -280,7 +280,7 @@
       <details id="tac-sec-field" class="tac-sec">
         <summary>Section D · Field Data (optional — real mission measurements)</summary>
         <div class="tac-sec-body">
-          <p class="tac-sec-desc" id="tac-desc-d">Add in-situ rover/astronaut measurements to override and propagate locally across cells.</p>
+          <p class="tac-sec-desc" id="tac-desc-d">Add your own field measurements.</p>
           <p class="help" id="tac-fd-tip">Click a cell on the local 16 km² map to auto-fill lat/lon below.</p>
           <div class="tac-coord-row">
             <label for="tac-fd-lat">Lat (°)
@@ -361,7 +361,7 @@
       <details id="tac-sec-weights" class="tac-sec">
         <summary>Domain Weights, Veto &amp; Orbital Blend (Advanced)</summary>
         <div class="tac-sec-body">
-          <p class="tac-sec-desc" id="tac-desc-w">Fine-tune scoring weights, field radius, online queries, and veto logic.</p>
+          <p class="tac-sec-desc" id="tac-desc-w">Scoring weights and limits.</p>
           <label class="check tac-online-row"><input type="checkbox" id="tac-online-toggle">
             <span><b>Online orbital queries</b> <small>(experimental JMARS WMS proxy; off = bundled 100–200 m pre-cuts)</small></span></label>
           <label for="tac-field-radius">Field influence radius <span id="tac-field-radius-v">300 m</span>
@@ -391,7 +391,7 @@
       <details id="eva-legacy-details" class="tac-legacy">
         <summary>Legacy demo (not part of analysis)</summary>
         <div class="tac-legacy-body">
-          <p class="help" id="eva-intro">Legacy demo: post-landing 5-domain surface assimilation (Topography, Geomorphology, Thermal, Radiation, Optical) with simulated AutoNav walkback demo.</p>
+          <p class="help" id="eva-intro">Legacy demo of a post-landing surface survey.</p>
           <div class="control-group">
             <label for="eva-zone-select">Target Landing Zone / Biome
               <select id="eva-zone-select">
@@ -467,7 +467,7 @@
         <button type="button" data-rmode="rover" class="active" aria-pressed="true">Rover Traverse</button>
         <button type="button" data-rmode="marswalk" aria-pressed="false">EVA / Marswalk</button>
       </div>
-      <p class="help">Choose a start and destination on the map/globe, or switch to <b>EVA / Marswalk</b> to compute spacesuit metabolic energy (kcal/h &amp; W), O₂ / cooling water consumption, 6–8 h EVA sortie duration limit, cumulative radiation dose (mSv), and Science Waypoints along the A* path.</p>
+      <p class="help">Pick a start and a destination on the map.</p>
 
       <div class="control-group" id="route-vehicle-group">
         <div class="seg" id="route-vehicle-seg" role="group" aria-label="Vehicle class">
@@ -487,7 +487,7 @@
           <input type="range" id="speed" min="1" max="8" step="0.5" value="4"></label>
         <label class="check">
           <input type="checkbox" id="route-sci-poi" checked>
-          <span><b>Science Waypoints (POI) along A* route</b><br>Target SWIM 2.0 Ice-Consistency Anomaly (Unconfirmed), Boxwork Geological Formation &amp; TES Mineral stops.</span>
+          <span><b>Science stops along the route</b><br>Ice, rock and mineral targets.</span>
         </label>
       </div>
 
@@ -501,7 +501,7 @@
 
     <section id="panel-crisis" class="mode-panel hidden">
       <div class="sec-head"><h2>Dust-Storm Power &amp; Survival</h2></div>
-      <p class="help">Pick a spot on the map or candidate list to test whether your solar panels, batteries, and backup nuclear reactors can keep the base powered and warm during a 2018-style global dust storm.</p>
+      <p class="help">Pick a site, then size the power system for a global dust storm.</p>
 
       <div class="station-lock">
         <span class="station-lbl">Selected site</span>
@@ -532,7 +532,7 @@
 
     <section id="panel-habitability" class="mode-panel hidden">
       <div class="sec-head"><h2>Planetary &amp; Habitability APIs</h2></div>
-      <p class="help">2025–2026 Curiosity REMS &amp; Perseverance MEDA surface meteorology, live NASA DONKI Solar Cycle 25 space weather, and InSight reference climatology.</p>
+      <p class="help">Live Mars weather and space weather from NASA rovers and DONKI.</p>
 
       <div class="api-key-box">
         <label for="nasa-api-key">NASA Open API Key <span class="hint">optional</span></label>
@@ -686,7 +686,7 @@
       <div class="sec-head"><h2>Selected location</h2></div>
       <div id="detail" class="detail">
         <div class="empty-state">
-          <p class="help">Click anywhere on the map or globe, or choose a candidate above, to see what the data says about that place.</p>
+          <p class="help">Click the map or a candidate to see the data for that place.</p>
         </div>
       </div>
     </section>

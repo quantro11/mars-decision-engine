@@ -29,7 +29,7 @@
       ctx.fill();
 
       const tag = `0${rank}`;
-      ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
+      ctx.font = `700 ${Math.round(9.5 * dpr)}px "Source Serif 4", Georgia, serif`;
       const bx = x + r + 5 * dpr, by = y - r - 2 * dpr;
       const bw = 20 * dpr, bh = 13 * dpr;
       ctx.fillStyle = active ? '#7f9bb3' : 'rgba(8, 12, 18, 0.92)';
@@ -74,7 +74,7 @@
       ctx.strokeRect(-r, -r, r * 2, r * 2);
       ctx.restore();
 
-      ctx.font = `700 ${Math.round(9.5 * dpr)}px "JetBrains Mono", monospace`;
+      ctx.font = `700 ${Math.round(9.5 * dpr)}px "Source Serif 4", Georgia, serif`;
       ctx.fillStyle = color;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -94,7 +94,7 @@
       ctx.beginPath();
       ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
       ctx.fill();
-      ctx.font = `700 ${Math.round(9 * dpr)}px "JetBrains Mono", monospace`;
+      ctx.font = `700 ${Math.round(9 * dpr)}px "Source Serif 4", Georgia, serif`;
       ctx.fillText('STA-PWR', x + 14 * dpr, y);
     }
     return { drawCandidateReticle, drawSelectionReticle, drawWaypoint, drawStationBeacon };
