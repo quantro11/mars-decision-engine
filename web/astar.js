@@ -323,7 +323,7 @@
     const effGradePct = Math.tan((effSlopeDeg * 0.55) * Math.PI / 180) * 100 + hazFrac * 18;
     const terrainEta = 1.32 + dustFrac * 0.85 + hazFrac * 0.35;
     const loadWorkW = effLoadKg * 2.8 + 2.5 * effMassMars * Math.pow(effLoadKg / bodyKg, 2);
-    const pandolfW = 1.5 * bodyKg * (MARS_G / 9.81) + loadWorkW + terrainEta * effMassMars * (1.5 * vMps * vMps + 0.35 * vMps * effGradePct) + 115;
+    const pandolfW = 1.5 * bodyKg * (MARS_G / 9.81) + loadWorkW + terrainEta * effMassMars * (1.5 * vMps * vMps + 0.35 * vMps * effGradePct) + 170; // suit overhead, same calibration as SCORING.calcPandolfMars
     const metabolicW = Math.round(Math.max(190, Math.min(680, pandolfW)));
     const metabolicKcalH = Math.round(metabolicW * 0.8598);
     const sortieKcal = Math.round(metabolicKcalH * walkHours);

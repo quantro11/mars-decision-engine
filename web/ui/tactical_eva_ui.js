@@ -616,7 +616,7 @@
       c2d.fillStyle = 'rgba(12, 15, 20, 0.72)';
       c2d.fillRect(6, h - 24, w - 12, 18);
       c2d.fillStyle = '#dfb365';
-      c2d.font = '600 10px "Glacial Indifference", system-ui, sans-serif';
+      c2d.font = '600 10px "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, Consolas, monospace';
       c2d.textAlign = 'center';
       c2d.fillText(labelText, w / 2, h - 11);
       c2d.restore();

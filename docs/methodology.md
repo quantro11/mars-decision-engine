@@ -178,43 +178,47 @@ Every externally fetched value carries one of four labels, shown in the UI next 
 
 No placeholder sol numbers, pressures or CME events are ever generated. Unit tests assert data-honesty and propagation rules (`tests/scoring.test.js`, `tests/ui.test.js`).
 
-## 14. Tactical EVA, 0.38g Pandolf Bioenergetics & Post-Landing 5-Domain Map Assimilation (Phase 2)
+## 14. Tactical EVA (16 km²) and the suit energy model
 
-Orbital maps at ~5 km/px cannot resolve sub-metre boulders, migrated aeolian sand ripples, or local bearing anomalies. Phase 2 (`web/ui/eva.js`, `web/ui/eva_zones.js`, and `SCORING.calcPandolfMars`) models post-landing surface map construction on a `1 km × 1 km` (`100 × 100` cells at `10 m/cell` derived from HiRISE `1.0–2.0 m/post` stereo metadata) local tactical grid with **6 Real-Time Operational Capabilities**:
+**Tactical EVA grid.** For 9 sites (Jezero delta, Gale, Nili Fossae, Arcadia, and the five default Top-5 candidates) the
+app ships pre-cut **4 km × 4 km boxes at 100 m/cell (40 × 40)** taken from the MOLA-HRSC blended DEM (200 m) and the
+THEMIS day-IR mosaic (100 m), plus SIM 3292 geologic units (`tools/precut_16km2.mjs`, `data_pipeline/fetch_eva_cutouts.py`).
+Each cell is scored across eight domains (topography, elevation/slope, thermal, radiation, dust, optics, geology, power) with the HLS-2015 veto rules; user field
+measurements are blended into nearby cells within a configurable radius (`web/tactical_eva_engine.js`). Live JMARS WMS
+queries are optional and off by default. Sub-100 m hazards (boulders, small craters) are still invisible at this scale —
+certifying a traverse needs HiRISE stereo terrain models.
 
-1. **Real-Time Astronaut Route Tracking (`realTimeTracking`):** continuous walked/remaining distance, progress %, active waypoint leg, live ETA, and 600 m micro-rest stops.
-2. **Dynamic Hazard Detection (`hazardsDetected`):** identifies slope > model limit, boulder fields, low-TI sand traps, and dynamic rockfalls/scarps.
-3. **Automatic Alternative Route + Justification (`rerouteExplanation`):** cancels compromised orbital segments and generates a hazard-free A* path with explicit human-readable cause and detour delta.
-4. **Full PLSS Life-Support Budget (`lifeSupport`):** tracks $\text{O}_2$, battery, LCVG cooling water, $\text{CO}_2$ RCA scrubber saturation, and a hard **≥25% + 30 min Return Reserve**. Note: suit parameters derive from **NASA's Lunar xEMU reference architecture** extrapolated to Mars ($0.38g$, $6\text{–}10\text{ mbar }\text{CO}_2$) and are NOT flight-certified Mars suit hardware.
-5. **Environmental Coupling (`envConditions`):** modulates cold battery heater draw, dust optical depth ($\tau$) visibility, pace factor, soil-adjusted slope limit, and MSL-RAD ±18.8% dose uncertainty.
-6. **Mission Completion Report (`completionReport`):** audits elapsed EVA duration, distance walked, total ascent/descent, consumables used, hazards mitigated, sample mass, and return safety status — synced identically across Module III, Visor HUD, and Mission Brief (`brief.js`).
+**Suit energy model** (`SCORING.calcPandolfMars`, Pandolf form scaled to local gravity):
 
-* **Navigation & Localization Stack:**
-  1. **TRN (Terrain Relative Navigation):** shrinks touchdown dispersion from the ~1,200 m orbital ellipse to ~25–32 m.
-  2. **AutoNav Progressive Assimilation (`Step 0..8` + spot-scan probes):** expands the scanned surface mask from the touchdown pad along the traverse corridor, blending the orbital prior ($1 - \alpha$) with in-situ observations ($\alpha \in [0, 1]$) across **5 Domains** (*Topography, Geomorphology, Thermal, Radiation, Optical*).
-  3. **MGL (Mars Global Localization):** correlates horizon skyline tie-points against MOLA/HiRISE rims to bound pose error to `~1.6–2.7 m` vs. `>18 m` uncorrected wheel/foot visual odometry drift.
-* **0.38g Martian Pandolf-Santee Locomotion & Lunar-Extrapolated xEMU PLSS Budgets:**
-  ```
-  M_eff   = (m_body + m_suit + m_load_eff) · (3.71 / 9.81)
-  P_met   = 1.5 · m_body · (3.71 / 9.81) + W_load + η_terrain · M_eff · (1.5 v² + 0.35 v G_eff) + 115 W
-  ```
-  where $m_{\text{body}} = 80\text{ kg}$, $m_{\text{suit}} = 82\text{ kg}$, $115\text{ W}$ represents pressurized suit joint-bending work, and $\eta_{\text{terrain}} = 1.32 + 0.85 \cdot f_{\text{sand}}$. Consumables are tracked against Lunar xEMU reference targets adapted for Mars: **850 g primary $\text{O}_2$**, **960 Wh battery**, **4.2 L LCVG cooling water**, **$\text{CO}_2$ RCA scrubber capacity**, **≥25% return reserve protection**, **8.0 h max EVA duration**, **VHF line-of-sight (LoS)**, and **30-minute SPE emergency shelter return**.
+```
+P_met = 1.5 · m_body · g/g₀ + W_load + η_terrain · M_eff · (1.5 v² + 0.35 v G) + P_suit
+M_eff = (m_body + m_suit + m_load) · g/g₀
+```
 
-## 15. Physics-Informed ML (PIML) Multi-Horizon Dust & Convective Vortex Forecaster (1-Minute Cadence)
+with $m_{\text{body}} = 80$ kg, $m_{\text{suit}} = 82$ kg and $\eta_{\text{terrain}} = 1.32 + 0.85 f_{\text{sand}}$.
+$P_{\text{suit}}$ (pressurised-suit overhead) is the one free constant: it is set to **170 W** so that a lunar-gravity walk
+reproduces the Apollo 14–17 lunar EVA mean of 234 kcal/h ≈ 272 W (per-EVA range 822–1267 kJ/h ≈ 228–352 W; Waligora et al.
+1975, NASA TN D-7883). Mars values are extrapolations — no one has walked on Mars. Consumables (850 g O₂, 960 Wh battery,
+4.2 L cooling water, CO₂ scrubber) are assumed reference budgets with a ≥ 25 % return reserve and an 8 h EVA limit.
 
-Orbital imagers (MARCI/THEMIS) revisit a site on multi-hour to daily timescales and cannot provide minute-scale surface warnings, while purely black-box time-series models overfit when rare perihelion storms occur. Module III and Module IV (`STORM.extractDustMLFeatures`, `STORM.predictDustML`, `STORM.validateDustMLBenchmarks` in `web/storm.js`, trained via `data_pipeline/train_dust_ml.py`) implement a **Physics-Informed Gradient Boosted Decision Tree (GBDT) Ensemble with Platt Probability Calibration** updated every **1 minute (60 s)** across four complementary horizons:
+## 15. Dust-lifting / dust-devil risk index (heuristic, not validated)
 
-1. **7 Physics-Informed Features (`extractDustMLFeatures`):**
-   * **Bagnold Saltation Threshold Ratio ($u_*/u_{*t}$):** computes atmospheric density $\rho = P / (R_{\text{CO}_2} T)$ from MOLA elevation and Seasonal $\text{CO}_2$ cycle, evaluates the Iversen & White (1982) / Kok (2010) saltation threshold friction velocity $u_{*t} = A_N \sqrt{(\rho_p g d + \gamma/d)/\rho}$, and forms $u_*/u_{*t}$.
-   * **Microbarometer Vortex Index (`vortexBaroIndex`):** combines 60-second pressure drop $\Delta P_{1\text{m}}$ ($\text{Pa/min}$) and 5-minute rolling barometric standard deviation $\sigma_{P,5\text{m}}$ ($\text{Pa}$) from 1-Hz MEDA/TWINS pressure sensors (Spiga et al. 2021; Jackson et al. 2021).
-   * **Super-Adiabatic Near-Surface Gradient ($\Delta T_{\text{sa}} = T_{\text{surf}} - T_{\text{air},1.5\text{m}}$) & Bulk Richardson Number ($Ri_B$):** captures midday (11:00–15:30 LMST) Planetary Boundary Layer (PBL) convective plume instability (Banfield et al. 2020; Newman et al. 2022).
-   * **Surface Dust Reservoir Index (`dustSourceIndex`):** couples MGS-TES Dust Cover Index (DCI) and inverse Thermal Inertia ($I < 180\text{ tiu}$ unconsolidated fines).
-   * **Historical MDAD Storm Corridor Index (`stormCorridorIndex`):** spatial Gaussian kernel over the 6 primary storm genesis & flushing corridors cataloged in the **Mars Dust Activity Database (MDAD)** (Battalio & Wang 2021, *Icarus* 354:114059; 22,865 storms across MY 24–MY 31: Acidalia-Chryse, Utopia-Isidis, Hellas Rim, Arcadia-Amazonis, Noachis-Hellespontus, Solis-Valles Marineris) modulated by $L_s$ seasonal window.
-   * **Multi-Annual CDOD Optical Depth Advection ($\nabla \tau_{\text{adv}}$):** couples Montabone et al. (2015, 2020) MY 24–MY 36 Column Dust Optical Depth ($\tau$) climatology with perihelion radiative forcing.
-2. **4-Horizon 1-Minute Cadence Predictions & Temporal Split Holdout Performance (`validateDustMLBenchmarks`):**
-   * **`+1 min` Nowcast (Immediate Vortex & Gust Strike):** **99.2% Accuracy · 0.998 ROC-AUC** (Brier 0.0082) on $N = 120$ out-of-sample 1-Hz microbarometer windows.
-   * **`+6 min` Short-Range (Local Saltation & Dust Lifting):** **97.5% Accuracy · 0.989 ROC-AUC** (Brier 0.0194) on $N = 120$ MEDA saltation bursts.
-   * **`+15 min` Walkback Window (PBL Instability & EVA Return):** **95.8% Accuracy · 0.979 ROC-AUC** (Brier 0.0312) on $N = 120$ convective boundary-layer windows.
-   * **`+1–3 Sol` Regional Forecast (MDAD Corridor Onset & Advection):** **96.7% Accuracy · 0.985 ROC-AUC** (Brier 0.0245) on $N = 120$ Temporal Split holdout records (Train MY 24–32 $\rightarrow$ Test MY 33–35).
+`STORM.predictDustML` returns a **0–100 risk index** for four look-ahead horizons (+1 min, +6 min, +15 min, +1–3 sol). It
+is a set of **hand-written rules** on physically motivated features; the thresholds were set by hand, never fitted to data,
+and **no accuracy, ROC-AUC or Brier score is claimed**. The function name is historical.
 
+Features (`STORM.extractDustMLFeatures`):
 
+* **Bagnold saltation ratio** $u_*/u_{*t}$: air density from MOLA elevation and the seasonal CO₂ cycle; threshold friction
+  speed after Iversen & White (1982) / Kok (2012); $u_*$ from a log-law estimate of near-surface wind.
+* **Bulk Richardson number** and near-surface super-adiabatic gradient: midday convection (strongest ~11:00–15:30 local time).
+* **Pressure-drop index** ($\Delta P$ per minute, 5-min $\sigma_P$): what a 1 Hz barometer (MEDA, InSight APSS) would see.
+  **There is no live sensor feed** — unless the caller supplies them, these values are *modelled* from site, season and
+  time of day, so the index describes a scenario, not a measurement.
+* **Dust supply**: TES dust cover and low thermal inertia.
+* **Storm-season regions**: six approximate ellipses hand-placed after the storm-track maps in MDAD (Battalio & Wang 2021)
+  and Montabone et al. (2015, 2020); positions and weights are rough.
+
+`STORM.dustRiskSanityChecks()` only verifies that the index moves in the expected direction (calm → low, deep pressure drop
+→ high, night < afternoon, perihelion season > aphelion). Testing it properly would need labelled pressure-drop catalogues
+(e.g. MEDA/InSight vortex detections), which we did not have time to assemble.

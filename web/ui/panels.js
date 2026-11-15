@@ -89,7 +89,7 @@
   function createPanels(ctx) {
     const {
       doc = global.document, S, layers, SCORING, STORM, FMT, CHARTS,
-      onRescore, onSelect, onUseRoute, onUseCrisis, onUseEva, onPlanMarswalk, onOpenHud, onGlobeFly,
+      onRescore, onSelect, onUseRoute, onUseCrisis, onUseEva, onPlanMarswalk, onGlobeFly,
     } = ctx;
     const $ = (s) => doc.querySelector(s);
     const { candidateName, trekUrl, fmtLat, fmtLon, escHtml } = FMT;
@@ -230,22 +230,13 @@
         ? SCORING.radDoseBand(v.elev, v.slope || 0)
         : { nominal: radMsv, min: radMsv * 0.812, max: radMsv * 1.188, uncMsvYr: radMsv * 0.188, relUncPct: 18.8 };
       const locTi = v.ti !== null ? v.ti : 215, locDust = v.dust !== null ? v.dust : 0.25;
-      const locWalkH = +(4.2 + v.slope * 0.11 + (v.rough / 180)).toFixed(1);
-      const locBio = SCORING.calcPandolfMars
-        ? SCORING.calcPandolfMars({ slopeDeg: v.slope, ti: locTi, sandFrac: Math.max(0, locDust - 0.2) * 0.6, durationH: locWalkH, loadKg: S.evaSim ? S.evaSim.loadKg : 15, speedKmh: S.evaSim ? S.evaSim.speedKmh : 2.4, buddyMode: S.evaSim ? S.evaSim.buddyMode : 'buddy' })
-        : { metabolicW: 265, metabolicKcalH: 228, o2RemainPct: 72, waterUsedL: 1.35, co2ScrubberUsedPct: 38, returnReserveProtected: true, walkbackRadiusM: 760 };
+      const locWalkH = 6.5; // planned EVA length (assumption: typical ISS/Apollo EVA ≈ 6.5–7.5 h)
+      const locBio = SCORING.calcPandolfMars({ slopeDeg: v.slope, ti: locTi, sandFrac: Math.max(0, locDust - 0.2) * 0.6, durationH: locWalkH, loadKg: 15, speedKmh: 2.4, buddyMode: 'buddy' });
       const locO2Rem = locBio.o2RemainPct;
       const locWaterL = locBio.waterUsedL;
       const locCo2Used = locBio.co2ScrubberUsedPct ?? 38;
       const locRsvOk = locBio.returnReserveProtected !== false;
       const locDoseMsv = (radMsv / (365.25 * 24) * locWalkH).toFixed(3);
-      const evaMatchesLoc = !!(S.evaSim && S.evaSim.zone && Math.hypot((S.evaSim.zone.lat || 0) - v.lat, (S.evaSim.zone.lon || 0) - v.lon) < 5.5);
-      const dispWalkbackM = evaMatchesLoc ? S.evaSim.walkbackRadiusM : locBio.walkbackRadiusM;
-      const dispKcalH = evaMatchesLoc ? S.evaSim.metabolicKcalH : locBio.metabolicKcalH;
-      const dispO2Rem = evaMatchesLoc ? S.evaSim.o2RemainPct : locBio.o2RemainPct;
-      const dispPriorPct = evaMatchesLoc ? S.evaSim.orbitalConfidencePct : 34;
-      const dispAssimPct = evaMatchesLoc ? S.evaSim.assimilatedConfidencePct : 94;
-      const disp5dScore = (evaMatchesLoc && S.evaSim.domainScores) ? S.evaSim.domainScores.composite : +(Math.max(35, Math.min(96, s * 100))).toFixed(1);
       const plainSummary = buildPlainSummary(v, vetoed, passElev, passSlope, passLat, ice, nr, radMsv, tr);
 
       el.innerHTML = `
@@ -281,17 +272,16 @@
           <tr><td>${L(tr, 'pn.designBasisSpeAssumption')}</td><td>${spe.unshieldedDoseMsv} mSv ${L(tr, 'pn.onTheSurface')} · ${spe.requiredRegolithM} m ${L(tr, 'pn.regolithFor100Msv')}</td></tr>
           <tr><td>${L(tr, 'pn.surfaceTempApprox')}</td><td>${L(tr, 'pn.night')} ${sTemp.night.toFixed(0)} °C · ${L(tr, 'pn.mean')} ${sTemp.mean.toFixed(0)} °C</td></tr>
           <tr><td>${L(tr, 'pn.habitatHeatLoss')}</td><td>${pTherm} kW (${L(tr, 'pn.coveredByWasteHeatOf')})</td></tr>
-          <tr><td>${L(tr, 'pn.xemuRefLunarMarsWalkback')}</td><td><b>${dispWalkbackM} m</b> · ${dispKcalH} kcal/h · O₂ ${dispO2Rem}% · CO₂ RCA ${locCo2Used}% · RSV ${locRsvOk ? '✓ %25' : '⚠'}</td></tr>
-          <tr><td>${L(tr, 'pn.orbitalPriorVsTrnAutonav')}</td><td>Prior <b>${dispPriorPct}%</b> → In-Situ <b>${dispAssimPct}%</b> · 5-Domain <b>${disp5dScore}/100</b></td></tr>
+          <tr><td>${L(tr, 'pn.xemuRefLunarMarsWalkback')}</td><td><b>${locBio.walkbackRadiusM} m</b> · ${locBio.metabolicKcalH} kcal/h · O₂ ${locO2Rem}% · CO₂ RCA ${locCo2Used}% · RSV ${locRsvOk ? '✓ %25' : '⚠'}</td></tr>
           ${typeof STORM.predictDustML === 'function' ? (() => {
             const mp = STORM.predictDustML({ lat: v.lat, lon: v.lon, elev: v.elev, slope: v.slope, ti: v.ti, dust: v.dust, ls: S.crisis.ls });
-            return `<tr><td>${L(tr, 'pn.pimlDustVortexForecast1')}</td><td>+1m <b>${mp.horizons[0].probPct}%</b> · +6m <b>${mp.horizons[1].probPct}%</b> · +1Sol <b class="${mp.horizons[3].cls}">${mp.horizons[3].probPct}%</b></td></tr>`;
+            return `<tr><td>${L(tr, 'pn.pimlDustVortexForecast1')}</td><td>+1m <b>${Math.round(mp.horizons[0].probPct)}</b> · +6m <b>${Math.round(mp.horizons[1].probPct)}</b> · +1 sol <b class="${mp.horizons[3].cls}">${Math.round(mp.horizons[3].probPct)}</b> /100</td></tr>`;
           })() : ''}
         </table>
         <div class="marswalk-micro-card">
           <div class="marswalk-micro-head">
             <b>${L(tr, 'pn.localHiriseMarswalkMicroPlanning')}</b>
-            <span class="badge-mode badge-live">1.0–2.0 m/post · ≤ 8h EVA</span>
+            <span class="badge-mode badge-model">≤ 8 h EVA</span>
           </div>
           <div class="help note-sm">${L(tr, 'pn.footAstronautWalkCard', [escHtml(nr.region.name), v.ice === null ? L(tr, 'pn.noDataIceAnomaly') : v.ice.toFixed(2), v.ti === null ? '—' : v.ti.toFixed(0)])}</div>
           <div class="kv"><span>${L(tr, 'pn.estMarswalkDurationLimit')}</span><b class="${locWalkH <= 8.0 ? 'ok' : 'warn'}">${locWalkH} h / 8.0 h max EVA ${locWalkH <= 8.0 ? '✓' : '⚠'}</b></div>
@@ -359,18 +349,12 @@
       const sols = (km) => (km / r.speed).toFixed(0);
       const cls = (s) => s > r.maxSlope ? 'bad' : s > 10 ? 'warn' : 'ok';
       const havens = b.safeHavens || [];
-      const evaSim = S.evaSim || { o2UsedPct: 28, o2RemainPct: 72, battUsedPct: 24, battRemainPct: 76, co2ScrubberUsedPct: 36, returnReserveProtected: true, loadKg: 15, metabolicKcalH: 278, metabolicW: 323, walkbackRadiusM: 1380, effSpeedKmh: 2.4 };
-      const ev = b.evaStats || {
-        sortieKm: 12.0, walkHours: 6.2, maxEvaLimitH: 8.0, withinEvaLimit: true, evaSorties: Math.max(1, Math.ceil(b.km / 14)),
-        metabolicW: 318, metabolicKcalH: 273, sortieKcal: 1692, o2UsedG: 503, o2UsedPct: 59, o2RemainPct: 41,
-        waterUsedL: 2.11, waterUsedPct: 56, waterRemainPct: 44, co2ScrubberUsedPct: 46, returnReserveProtected: true,
-        evaRestIntervalKm: 1.5, evaRestCount: 8, radDoseMsv: 0.168, radUncMsvYr: 44, corridorRadDoseMsv: 1.42
-      };
-      const evDir = (a && a.evaStats) || { walkHours: 6.8, metabolicKcalH: 312, o2UsedPct: 68, radDoseMsv: 0.195 };
+      const ev = b.evaStats;
+      const evDir = a.evaStats;
       const sciWps = b.scienceWaypoints || [];
       const sciScore = b.scienceScore || 92;
       const isMarswalk = r.travelMode === 'marswalk';
-      const evaSpeedKmh = +(evaSim.effSpeedKmh || 2.4);
+      const evaSpeedKmh = +(ev.effWalkSpeedKmh || 2.4);
       const havenStr = !isMarswalk && havens.length
         ? havens.map(h => `${h.name} (${h.km} km · Sol ${Math.round(h.km / r.speed)} · ${L(tr, 'pn.rover200km')})`).join(', ')
         : isMarswalk
@@ -380,7 +364,7 @@
       const retInfo = b.returnRoute || { returnKm: b.km, returnAscentM: b.totalDescentM || 0, returnDescentM: b.totalAscentM || 0, roundTripKm: b.km * 2 };
 
       const sciRowsHtml = sciWps.map((wp, idx) => `
-        <div class="eva-wp-card route-poi-card" data-poi-idx="${idx}" role="button" tabindex="0">
+        <div class="eva-wp-card route-poi-card" data-poi-idx="${idx}">
           <div class="eva-wp-head">
             <b>${escHtml(wp.id)} · ${escHtml(tr ? wp.nameTr : wp.name)}</b>
             <span class="badge-mode badge-live">+${wp.sciGain} SCI · km ${wp.km}</span>
@@ -395,7 +379,7 @@
       const crewRows = hideCrew ? '' : `
         <tr><td>${L(tr, 'pn.evaSortieTimeTurnaround')}</td><td>${evDir.walkHours} h/sortie</td><td class="${ev.withinEvaLimit ? 'ok' : 'warn'}"><b>${ev.walkHours} h / ${ev.maxEvaLimitH.toFixed(1)} h</b> (${ev.evaRestCount || 8} ${L(tr, 'pn.microRests')})</td></tr>
         <tr><td>${L(tr, 'pn.plssLifeSupportO2H2o')}</td><td>O₂ ${evDir.o2UsedPct}%</td><td class="${ev.returnReserveProtected !== false ? 'ok' : 'warn'}"><b>O₂ ${ev.o2UsedG}g (${ev.o2UsedPct}%) · ${ev.waterUsedL}L H₂O · CO₂ RCA ${ev.co2ScrubberUsedPct ?? 46}%</b> · RSV ${ev.returnReserveProtected !== false ? '✓ ≥25%' : '⚠'}</td></tr>
-        <tr><td>${L(tr, 'pn.metabolicLoadWalkback')}</td><td>${evDir.metabolicKcalH} kcal/h</td><td class="ok"><b>${ev.metabolicKcalH} kcal/h</b> (${ev.metabolicW} W) · Walkback <b>${evaSim.walkbackRadiusM} m</b></td></tr>
+        <tr><td>${L(tr, 'pn.metabolicLoadWalkback')}</td><td>${evDir.metabolicKcalH} kcal/h</td><td class="ok"><b>${ev.metabolicKcalH} kcal/h</b> (${ev.metabolicW} W)</td></tr>
         <tr><td>${L(tr, 'pn.radiationDoseMslRad18')}</td><td>${evDir.radDoseMsv} mSv</td><td class="ok"><b>${ev.radDoseMsv} ± ${(ev.radDoseMsv * 0.188).toFixed(3)} mSv</b>/sortie (${ev.corridorRadDoseMsv} mSv tol)</td></tr>`;
       el.innerHTML = `
         <div class="marswalk-mode-banner ${isMarswalk ? 'active' : ''}">
@@ -414,17 +398,11 @@
         <tr><td>${L(tr, 'pn.rvSlopeCheck')}</td><td>—</td><td class="${est.exceedsSlopeLimit ? 'bad' : 'ok'}"><b>${est.exceedsSlopeLimit ? L(tr, 'pn.rvSlopeBad', [b.maxSlope.toFixed(1), est.slopeLimitDeg]) : L(tr, 'pn.rvSlopeOk', [b.maxSlope.toFixed(1), est.slopeLimitDeg])}</b>${est.isConcept ? ` · <small>${L(tr, 'pn.rvConcept')}</small>` : ''}</td></tr>` : ''}
         ${crewRows}
         <tr><td>${L(tr, 'pn.returnRouteSafetyCorridor')}</td><td>—</td><td class="ok"><b>${retInfo.returnKm.toFixed(0)} km</b> (+${retInfo.returnAscentM} / -${retInfo.returnDescentM} m${hideCrew ? '' : ' · ≥25% RSV'})</td></tr>
-        <tr><td>${L(tr, 'pn.trnAutonavMglXgds5')}</td><td>Prior ${evaSim.orbitalConfidencePct ?? 34}% (${evaSim.orbitalHazardHits ?? 0} risk)</td><td class="ok"><b>${evaSim.assimilatedConfidencePct ?? 95}%</b> · 5D ${evaSim.domainScores ? evaSim.domainScores.composite : 78}/100 · MGL ±${evaSim.navStack && evaSim.navStack.mgl ? evaSim.navStack.mgl.mglCorrectedErrorM : 1.8}m</td></tr>
         <tr><td>${L(tr, 'pn.routeScienceGainScore')}</td><td>—</td><td class="ok"><b>${sciScore} / 100 pts</b> (${sciWps.length} POI)</td></tr></table>
         <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (L(tr, 'pn.directPathCrossesTerrainModel', [a.maxSlope.toFixed(1), r.maxSlope, (b.km - a.km).toFixed(0)])) : (L(tr, 'pn.directPathSatisfiesModelMaximum'))}</div>
         ${sciWps.length ? `<div class="sec-head mt-sm"><h2>${L(tr, 'pn.scienceWaypointsAlongRouteCoord')}</h2></div><div class="eva-wp-list">${sciRowsHtml}</div>` : ''}
         ${hideCrew ? '' : `<div class="help haven-note"><b>${isMarswalk ? (L(tr, 'pn.footEvaRestTurnaroundPlan')) : (L(tr, 'pn.rover200KmRestStops'))}: </b>${escHtml(havenStr)}</div>`}
         <div class="hint mt-sm">${L(tr, 'pn.elevationProfileAlongTheSafe')} · ${(r.ms || 0).toFixed(0)} ms, ${r.safe.path.length} ${L(tr, 'pn.cells')}</div>${CHARTS.profileSVG(b.profile)}`;
-      el.querySelectorAll('.route-poi-card').forEach(card => {
-        const openPoi = () => { if (onOpenHud) onOpenHud(+card.dataset.poiIdx); };
-        card.onclick = openPoi;
-        card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPoi(); } };
-      });
       announce(L(tr, 'pn.safeTraverseRouteComputedKilometers', [b.km.toFixed(0), b.maxSlope.toFixed(1)]), doc);
     }
 
@@ -517,8 +495,8 @@
             <span class="badge-mode badge-model">${escHtml(tr ? 'Fizik-Temelli İndeks' : 'Physics Risk Index')}</span>
           </div>
           <div class="help note-sm">${tr
-            ? `<b>MDAD koridorları</b>, <b>Montabone klimatolojisi</b> ve <b>MEDA/TWINS sınır katmanı denklemlerine</b> dayalı sezgisel risk modeli. Koridor: <b>${escHtml(mlPred.features.corridorNameTr)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/dk</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`
-            : `Heuristic dust-lifting risk model informed by <b>MDAD storm corridors</b>, <b>Montabone climatology</b>, and <b>MEDA/TWINS boundary-layer physics</b>. Corridor: <b>${escHtml(mlPred.features.corridorName)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/m</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`}</div>
+            ? `Elle ayarlanmış kurallar, doğrulanmamış; girdiler saha, mevsim ve saatten modellenir (canlı sensör yok). Koridor: <b>${escHtml(mlPred.features.corridorNameTr)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/dk</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`
+            : `Hand-tuned rules, not validated; inputs are modelled from site, season and time of day (no live sensor). Corridor: <b>${escHtml(mlPred.features.corridorName)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/min</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`}</div>
           <div class="eva-sim-btns">
             <button type="button" class="ghost ml-regime-btn ${activeRegime === 'auto' ? 'btn-spec' : ''}" data-ml-regime="auto">${L(tr, 'pn.siteSeasonAuto')}</button>
             <button type="button" class="ghost ml-regime-btn ${activeRegime === 'vortex_imminent' ? 'btn-spec' : ''}" data-ml-regime="vortex_imminent">${L(tr, 'pn.1mVortexStrike')}</button>
@@ -528,7 +506,7 @@
           ${mlPred.horizons.map(h => `
             <div class="kv">
               <span><b>${escHtml(tr ? h.horizonTr : h.horizonEn)}</b> <small>(${escHtml(h.keyMetric)})</small></span>
-              <b class="${h.cls}">${h.probPct}% · ${escHtml(tr ? h.statusTr : h.statusEn)}</b>
+              <b class="${h.cls}">${Math.round(h.probPct)}/100 · ${escHtml(tr ? h.statusTr : h.statusEn)}</b>
             </div>`).join('')}
           <div class="help note-sm">${escHtml(tr ? mlPred.peakHorizon.actionTr : mlPred.peakHorizon.actionEn)}</div>
         </div>` : '';

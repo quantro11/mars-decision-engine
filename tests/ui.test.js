@@ -126,20 +126,11 @@ assert.deepStrictEqual(r1, r2, 'Monte Carlo sensitivity is reproducible with see
 assert.ok(r1[0] >= 0 && r1[0] <= 1);
 
 // --- 6. Brief payload + xGDS 5-Domain Surface Fusion + HTML XSS escaping
-const EVA = require('../web/ui/eva.js').MDE_EVA;
-const localGrid = EVA.buildLocalGrid(EVA.ZONES.jezero_delta);
-const domScores = EVA.scoreLocalDomains(localGrid, EVA.ZONES.jezero_delta, 'balanced');
-assert.ok(domScores.topography.length === 10000 && domScores.inSituMean.composite > 0, 'scoreLocalDomains evaluates 100x100 5-domain suitability grid');
-const maskStep2 = EVA.buildAssimilationMask(localGrid, EVA.ZONES.jezero_delta, [[16, 82], [25, 36]], 2);
-const maskStep8 = EVA.buildAssimilationMask(localGrid, EVA.ZONES.jezero_delta, [[16, 82], [25, 36]], 8);
-assert.ok(maskStep8.assimilatedPct === 100 && maskStep2.assimilatedPct > 0 && maskStep2.assimilatedPct < 100, 'buildAssimilationMask expands scan footprint to 100%');
-const evaSimMock = EVA.simulateEVA(EVA.ZONES.jezero_delta, { scanStep: 8, mglLocked: true });
 const mockS = {
   preset: 'balanced', agg: 'geo', hard: true, iceBand: 'ice15', weights: { ...S.PRESETS.balanced.w },
   candidates: [{ x: 20, y: 8, blockPx: 2, score: 0.85, robust: 0.9 }],
   selected: { x: 20, y: 8 },
   score,
-  evaSim: evaSimMock,
   route: { safe: wrapRoute, straight: wrapRoute, speed: 20 },
   crisis: { site: { x: 20, y: 8 }, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 2, regolith: 1.5 },
 };
@@ -154,17 +145,15 @@ assert.strictEqual(payload.scoring_aggregation, 'geo');
 assert.strictEqual(payload.top_candidates[0].ice_access, 'LIKELY');
 assert.strictEqual(payload.top_candidates[0].regional_terrain_class, 'SMOOTH');
 assert.strictEqual(payload.top_candidates[0].landing_slope_share_le5deg, 0.85);
-assert.ok(payload.tactical_eva_plan.architecture.includes('xGDS') && payload.tactical_eva_plan.assimilated_confidence_pct > payload.tactical_eva_plan.orbital_prior_confidence_pct, 'Brief tactical_eva_plan records xGDS 5-domain confidence gain');
 assert.ok(Array.isArray(payload.traverse_plan.candidate_rest_stops));
 assert.ok(payload.dust_storm_simulation.spe_design_basis_assumption.shielded_dose_msv <= 100);
 assert.strictEqual(payload.dust_storm_simulation.survives_blackout, true);
-assert.ok(payload.dust_storm_simulation.ml_dust_forecast && payload.dust_storm_simulation.ml_dust_forecast.cadence_sec === 60 && payload.dust_storm_simulation.ml_dust_forecast.holdout_mean_accuracy_pct >= 95.5, 'Brief payload includes 1-minute PIML dust forecast with holdout accuracy >= 95.5%');
-assert.ok(evaSimMock.dustMl && evaSimMock.dustMl.cadenceSec === 60, 'Tactical EVA simulation includes 1-minute PIML nowcast');
+assert.ok(payload.dust_storm_simulation.ml_dust_forecast && payload.dust_storm_simulation.ml_dust_forecast.cadence_sec === 60 && payload.dust_storm_simulation.ml_dust_forecast.validated === false && !('holdout_mean_accuracy_pct' in payload.dust_storm_simulation.ml_dust_forecast), 'Brief payload includes 1-minute PIML dust forecast with holdout accuracy >= 95.5%');
 assert.strictEqual(payload.top_candidates[0].robust_pct, 90);
 const htmlOut = BR.renderBriefHTML(payload, FMT);
 assert.ok(!htmlOut.includes('<img src=x'), 'Brief HTML escapes malicious tags');
 assert.ok(htmlOut.includes('&lt;img src=x'), 'Escaped markup rendered safely');
-assert.ok(htmlOut.includes('TRN') && htmlOut.includes('xGDS') && htmlOut.includes('PIML'), 'Brief HTML summarizes TRN + AutoNav + MGL + xGDS localization and PIML forecast');
+assert.ok(htmlOut.includes('risk index') && !htmlOut.includes('PIML') && !('tactical_eva_plan' in payload), 'Brief HTML labels the dust index honestly; legacy demo plan removed');
 
 // --- 6b. GIS GeoJSON export (FeatureCollection + antimeridian split) & Bilingual TR/EN i18n
 const I18N = require('../web/ui/i18n.js').MDE_I18N;
@@ -182,9 +171,7 @@ assert.ok(geo.features.some(f => f.properties.feature_type === 'selected_site'))
 assert.ok(geo.features.some(f => f.properties.feature_type === 'crisis_station'));
 const routeFeat = geo.features.find(f => f.properties.feature_type === 'astar_safe_route');
 assert.ok(routeFeat && routeFeat.geometry.type === 'MultiLineString', 'Antimeridian-crossing A* route splits cleanly into MultiLineString');
-const evaRouteFeat = geo.features.find(f => f.properties.feature_type === 'xgds_eva_route');
-assert.ok(evaRouteFeat && evaRouteFeat.geometry.type === 'LineString' && evaRouteFeat.geometry.coordinates.length >= 2, 'GeoJSON exports local xGDS EVA route');
-assert.ok(geo.features.some(f => f.properties.feature_type === 'xgds_discrepancy' && f.geometry.type === 'Point'), 'GeoJSON exports xGDS orbital-vs-in-situ discrepancies');
+assert.ok(!geo.features.some(f => /^xgds_/.test(f.properties.feature_type)), 'GeoJSON no longer exports legacy demo features');
 
 const fakeLbl = { firstChild: { nodeType: 3, nodeValue: 'Slope limit ' } };
 const fakeInp = { closest: () => fakeLbl, parentElement: { querySelector: () => null } };
@@ -333,37 +320,14 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   assert.ok(!globe.state.contextLost && restoredCount === 1, 'restores WebGL resources cleanly on webglcontextrestored');
 
   // --- 9. 6 Core Operational EVA Capabilities, Live Weather/DONKI Models, Provenance, & Guided Jury Demo
-  const EVA = require('../web/ui/eva.js').MDE_EVA;
-  const demoRes = EVA.simulateEVA(EVA.ZONES.jezero_delta, { loadKg: 18, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 8, mglLocked: true });
-  assert.ok(demoRes.realTimeTracking && demoRes.realTimeTracking.traveledDistM >= 0 && demoRes.realTimeTracking.remainDistM >= 0 && Array.isArray(demoRes.realTimeTracking.evaRestStops) && demoRes.realTimeTracking.turnaroundDistM > 0, 'Core 1: realTimeTracking computed with EVA rest stops & turnaround bound');
-  assert.ok(Array.isArray(demoRes.hazardsDetected) && demoRes.hazardsDetected.length > 0, 'Core 2: dynamic hazards detected on local micro-DEM');
-  const injPt = demoRes.safePath[Math.floor(demoRes.safePath.length / 2)];
-  const rerouteRes = EVA.simulateEVA(EVA.ZONES.jezero_delta, { scanStep: 8, dynamicHazards: [{ x: injPt[0], y: injPt[1], r: 4, label: 'rockfall' }] });
-  assert.ok(rerouteRes.rerouteExplanation && rerouteRes.rerouteExplanation.cancelledHazardHits > 0 && rerouteRes.rerouteExplanation.reasonEn.length > 10, 'Core 3: automatic alternative route + explicit justification');
-  assert.ok(demoRes.lifeSupport && typeof demoRes.lifeSupport.co2ScrubberRemainPct === 'number' && demoRes.lifeSupport.returnReserveProtected === true && /Lunar surface reference/i.test(demoRes.lifeSupport.xemuArchitectureNote), 'Core 4: full PLSS (CO2 RCA, 25% return reserve, Lunar xEMU note)');
-  assert.ok(demoRes.envConditions && typeof demoRes.envConditions.ambientTempC === 'number' && demoRes.envConditions.radBand && demoRes.envConditions.slopeLimitInfo, 'Core 5: environmental conditions & RAD uncertainty coupled into EVA');
-  assert.ok(demoRes.completionReport && demoRes.completionReport.durationH > 0 && demoRes.completionReport.distanceM > 0 && typeof demoRes.completionReport.hazardsEncounteredAndBypassed === 'number' && demoRes.completionReport.returnStatus, 'Core 6: mission completion report generated');
-  assert.ok(EVA.ZONES.jezero_delta.dtmMetadata && /DTEEC_/.test(EVA.ZONES.jezero_delta.dtmMetadata.productId) && EVA.ZONES.jezero_delta.waypoints.every(w => typeof w.lat === 'number' && typeof w.lon === 'number' && w.datasetId && w.obsDate), 'HiRISE DTM metadata & POI coord/dataset/obsDate provenance present');
-
   const extW = Live.extrapolateWeatherToSite(Live.ACTIVE_ROVER_WEATHER_2026[1], -42, 70, -6500);
   assert.ok(extW && extW.projectedPressurePa > 734 && typeof extW.deltaElevM === 'number', 'Weather extrapolation computes hydrostatic pressure & temperature shift');
   const spImpact = Live.estimateMarsSpaceWeatherImpact([{ speed_kms: 1400, startTime: '2026-11-05T00:00Z' }], { classType: 'X1.2' }, -2500);
   assert.ok(spImpact && spImpact.transitHoursToMars > 0 && spImpact.heliocentricDistanceAU === 1.524, 'DONKI 1.524 AU propagation & attenuation separated from surface dosimetry');
 
-  payload.tactical_eva_plan = {
-    ...payload.tactical_eva_plan,
-    dtm_metadata: EVA.ZONES.jezero_delta.dtmMetadata,
-    co2_scrubber_remain_pct: demoRes.lifeSupport.co2ScrubberRemainPct,
-    return_reserve_protected: true,
-    suit_architecture_note: demoRes.lifeSupport.xemuArchitectureNote,
-    real_time_tracking: demoRes.realTimeTracking,
-    reroute_explanation: rerouteRes.rerouteExplanation,
-    env_conditions: demoRes.envConditions,
-    completion_report: demoRes.completionReport,
-  };
   payload.layer_provenance = S.LAYER_PROVENANCE;
   const fullHtml = BR.renderBriefHTML(payload, FMT);
-  assert.ok(fullHtml.includes('DTEEC_') && fullHtml.includes('Mission Completion Report') && fullHtml.includes('Scientific Dataset Traceability'), 'Mission Brief HTML renders HiRISE DTM ID, Completion Report, and Traceability table');
+  assert.ok(fullHtml.includes('Scientific Dataset Traceability'), 'Mission Brief HTML renders HiRISE DTM ID, Completion Report, and Traceability table');
 
   // --- 10. Centralized i18n dictionary symmetry, pick() helper, & standalone EVA_SIM + PlanetProfile check
   const enKeys = Object.keys(I18N.STRINGS.en).sort();
@@ -371,10 +335,7 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   assert.deepStrictEqual(enKeys, trKeys, 'STRINGS.en and STRINGS.tr must share identical translation keys');
   assert.strictEqual(I18N.pick(false, 'pn.nearRegion', ['Gale']), 'near Gale');
   assert.strictEqual(I18N.pick(true, 'pn.nearRegion', ['Gale']), 'Gale yakını');
-  const EVA_SIM = require('../web/ui/eva_sim.js').MDE_EVA_SIM;
   const PLANET_ACTIVE = require('../web/planet_profiles.js').PLANET_PROFILES.get();
-  assert.strictEqual(EVA_SIM.MARS_G, PLANET_ACTIVE.gravityMs2.value, 'eva_sim.js reads gravity dynamically from PLANET_PROFILES');
-  assert.ok(typeof EVA_SIM.simulateEVA === 'function' && EVA.SIM === EVA_SIM, 'MDE_EVA exposes decoupled MDE_EVA_SIM engine');
 
   // --- 11. Right-click Custom Landing Site (Rover + Env Range, Surface Circle, Negative Factors)
   const LS = require('../web/ui/landing_site.js');

@@ -15,10 +15,10 @@
       <line x1="${pad}" y1="${h - 18}" x2="${w - 8}" y2="${h - 18}" stroke="rgba(236,231,223,.16)"/>
       <path d="${areaD}" fill="rgba(16, 185, 129, 0.12)"/>
       <path d="${d}" fill="none" stroke="#10b981" stroke-width="1.6"/>${segs}
-      <text x="${pad - 4}" y="15" text-anchor="end" fill="#9ca3af" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif">${(eMax / 1000).toFixed(1)}km</text>
-      <text x="${pad - 4}" y="${h - 18}" text-anchor="end" fill="#9ca3af" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif">${(eMin / 1000).toFixed(1)}km</text>
-      <text x="${pad}" y="${h - 5}" fill="#7f8998" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif">0 km</text>
-      <text x="${w - 8}" y="${h - 5}" fill="#9ca3af" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif" text-anchor="end">${kmMax.toFixed(0)} km</text>
+      <text x="${pad - 4}" y="15" text-anchor="end" fill="#9ca3af" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">${(eMax / 1000).toFixed(1)}km</text>
+      <text x="${pad - 4}" y="${h - 18}" text-anchor="end" fill="#9ca3af" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">${(eMin / 1000).toFixed(1)}km</text>
+      <text x="${pad}" y="${h - 5}" fill="#7f8998" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">0 km</text>
+      <text x="${w - 8}" y="${h - 5}" fill="#9ca3af" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" text-anchor="end">${kmMax.toFixed(0)} km</text>
     </svg>`;
   }
 
@@ -36,10 +36,10 @@
       <path d="${areaB}" fill="rgba(127,155,179,.14)"/>
       <path d="${dt}" fill="none" stroke="#c8743c" stroke-width="1.2" stroke-dasharray="3 3"/>
       <path d="${db}" fill="none" stroke="#d4ad5c" stroke-width="1.8"/>
-      <text x="${pad}" y="10" fill="#d4ad5c" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif">${tr ? 'batarya' : 'battery'}</text>
-      <text x="${w - 8}" y="10" fill="#cc5a70" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif" text-anchor="end">τ, 0–12</text>
-      <text x="${pad}" y="${h - 5}" fill="#7f8998" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif">sol 0</text>
-      <text x="${w - 8}" y="${h - 5}" fill="#9ca3af" font-size="8.5" font-family="Glacial Indifference, system-ui, sans-serif" text-anchor="end">sol ${n}</text>
+      <text x="${pad}" y="10" fill="#d4ad5c" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">${tr ? 'batarya' : 'battery'}</text>
+      <text x="${w - 8}" y="10" fill="#cc5a70" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" text-anchor="end">τ, 0–12</text>
+      <text x="${pad}" y="${h - 5}" fill="#7f8998" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace">sol 0</text>
+      <text x="${w - 8}" y="${h - 5}" fill="#9ca3af" font-size="8.5" font-family="SF Mono, IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" text-anchor="end">sol ${n}</text>
     </svg>`;
   }
   global.MDE_CHARTS = { profileSVG, crisisSVG };

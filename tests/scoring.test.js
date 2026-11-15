@@ -163,52 +163,12 @@ assert.strictEqual(S.F.cave(20), 1); assert.strictEqual(S.F.cave(600), 0); asser
 assert.ok(S.scoreCell({ ...ideal, cave: 30 }, { ...w, cave: 0.3 }, true) > S.scoreCell({ ...ideal, cave: 900 }, { ...w, cave: 0.3 }, true));
 
 // --- data honesty & verified LIVE ARCHIVE fallback + xGDS + Perseverance (TRN + AutoNav + MGL) 5-Domain Surface Assimilation
-const EVA = require('../web/ui/eva.js').MDE_EVA;
-assert.strictEqual(EVA.DOMAINS.length, 5, '5 core surface assimilation domains (Topography, Geomorphology, Thermal, Radiation, Optical)');
-assert.ok(EVA.SYSTEM_ARCH.TRN && EVA.SYSTEM_ARCH.AUTONAV && EVA.SYSTEM_ARCH.MGL && EVA.SYSTEM_ARCH.XGDS, 'TRN + AutoNav + MGL + xGDS architecture defined');
-const simStep0 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 15, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 0, mglLocked: false });
-const sim15 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 15, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 8, mglLocked: true });
-const sim30 = EVA.simulateEVA(EVA.ZONES.gale_boxwork, { loadKg: 30, speedKmh: 2.4, maxSlope: 15, buddyMode: 'buddy', scanStep: 8, mglLocked: true });
-assert.ok(sim15.maxSafeSlope <= 15 && sim15.directBoulderHits > 0, 'Local 1m/px AutoNav A* routes around boulders and steep scarps');
-assert.ok(sim15.navStack.autonav.assimilatedPct > simStep0.navStack.autonav.assimilatedPct, 'Progressive AutoNav scan increases assimilated biome percentage');
-assert.ok(sim15.assimilatedConfidencePct > simStep0.assimilatedConfidencePct, 'In-situ 5-domain assimilation raises confidence above coarse orbital prior');
-assert.ok(sim15.orbitalHazardHits > 0 && sim15.orbitalSandM > sim15.safeSandM, 'Naive orbital-only route hits temporal-drift sand traps and sub-grid boulders avoided by AutoNav');
-assert.ok(sim15.navStack.mgl.mglCorrectedErrorM < simStep0.navStack.mgl.mglCorrectedErrorM, 'MGL horizon correlation lock eliminates wheel/foot odometry drift');
-assert.ok(sim15.domainScores.composite > 0 && sim15.domainScores.topography > 0 && sim15.domainScores.thermal > 0 && sim15.domainScores.radiation > 0 && sim15.domainScores.optical > 0 && sim15.domainScores.geomorphology > 0, 'All 5 domain scores computed');
-assert.ok(sim30.metabolicKcalH > sim15.metabolicKcalH && sim30.o2UsedG > sim15.o2UsedG, 'Heavier sample load increases metabolic kcal/h and O2 consumption');
-assert.ok(sim15.walkbackRadiusM > 300 && sim15.withinWalkback, 'Walkback safety radius computed and satisfied');
-assert.ok(sim15.meanUphillGradePct >= 0 && sim15.meanDownhillGradePct >= 0, 'Signed uphill/downhill grade computed along EVA footpath');
-assert.ok(EVA.ZONES.gale_boxwork.waypoints[0].x !== EVA.ZONES.jezero_delta.waypoints[0].x && EVA.ZONES.jezero_delta.waypoints[0].x !== EVA.ZONES.nili_fossae.waypoints[0].x, 'Distinct waypoint topologies across biomes');
-const customZ1 = EVA.zoneFromCoords(-14.5, 175.4, { elev: -1900, slope: 6, rough: 42, ti: 210, ice: 0.1, rad: 255 }, 'Gusev');
-const customZ2 = EVA.zoneFromCoords(22.3, -47.9, { elev: -3600, slope: 3, rough: 20, ti: 260, ice: 0.1, rad: 238 }, 'Chryse');
-assert.ok(customZ1.base.x !== customZ2.base.x || customZ1.base.y !== customZ2.base.y, 'Coordinate-seeded custom EVA zones synthesize distinct geometries');
 assert.ok(S.radDose(-2000, 14) < S.radDose(-2000, 0), 'Topographic horizon sky-view factor reduces GCR dose on sloped walls');
 assert.ok(S.scoreCell({ ...flat, elev: -1000, slope: 12 }, { rad: 1 }, false) > S.scoreCell({ ...flat, elev: -1000, slope: 0 }, { rad: 1 }, false), 'scoreCell couples slope sky-view shielding into radiation suitability');
 const tDust = T.surfaceTempC(0, 180, 55, -2000), tRock = T.surfaceTempC(0, 180, 500, -2000);
 assert.ok((tDust.day - tDust.night) > (tRock.day - tRock.night) + 25, 'Low-TI dust exhibits larger diurnal temperature swing than high-TI bedrock');
 assert.strictEqual(typeof A.smoothCellElev, 'function', 'Sub-pixel 3x3 Gaussian elevation smoothing exported on ASTAR');
 
-// --- Interactive map-building: spot scans, dynamic hazards, SPE escape, VHF LoS, custom weights, honest chemistry
-const zg = EVA.ZONES.gale_boxwork;
-const simScan0 = EVA.simulateEVA(zg, { scanStep: 2 });
-const simScan1 = EVA.simulateEVA(zg, { scanStep: 2, customScanPts: [{ x: 80, y: 15, r: 11 }, { x: 85, y: 80, r: 11 }], spotProbe: { x: 80, y: 15 } });
-assert.ok(simScan1.navStack.autonav.assimilatedPct > simScan0.navStack.autonav.assimilatedPct, 'User spot scans expand AutoNav assimilated area');
-assert.ok(simScan1.spotProbe && simScan1.spotProbe.xMeters === 800 && typeof simScan1.spotProbe.compositeScore === 'number', 'Spot probe returns local 5-domain cell readings');
-const hzPt = sim15.safePath[Math.floor(sim15.safePath.length / 3)];
-const simHz = EVA.simulateEVA(zg, { scanStep: 8, dynamicHazards: [{ x: hzPt[0], y: hzPt[1], r: 4 }] });
-assert.ok(!simHz.safePath.some(([x, y]) => Math.hypot(x - hzPt[0], y - hzPt[1]) < 3), 'A* re-routes around injected dynamic hazard');
-assert.ok(simHz.discrepancies.some(d => String(d.id).startsWith('DISC-DYN')), 'Dynamic hazard logged as xGDS discrepancy');
-const simSpe = EVA.simulateEVA(zg, { scanStep: 4, speAlert: true });
-assert.ok(simSpe.speAlert && simSpe.spePath.length > 1 && simSpe.speTimeToShelterMin > 0 && typeof simSpe.speWithin30Min === 'boolean', 'SPE emergency escape path + time-to-shelter computed');
-assert.ok(simSpe.commsLos && typeof simSpe.commsLos.losClear === 'boolean' && typeof simSpe.commsLos.linkMarginDb === 'number', 'VHF line-of-sight terrain check computed');
-const simCw = EVA.simulateEVA(zg, { scanStep: 8, scoreMode: 'custom', customWeights: { topography: 0, geomorphology: 0, thermal: 0, radiation: 0, optical: 100 } });
-assert.ok(Math.abs(simCw.domainScores.composite - simCw.domainScores.optical) < 0.2, 'Custom 5-domain weights drive the composite score');
-const zIce = EVA.zoneFromCoords(62, -30, { elev: -4000, slope: 2, ti: 240, ice: 0.6, rad: 240 }, 'Ice Plain');
-const zBas = EVA.zoneFromCoords(-20, 20, { elev: 1000, slope: 5, ti: 420, ice: 0, rad: 270 }, 'Basalt Plain');
-assert.ok(zIce.waypoints[0].chem.H2O > 20 && zBas.waypoints[0].chem.H2O < 6, 'Custom-site chemistry is conditioned on orbital ice/TI, not copied from Gale');
-assert.ok(!/Boxwork/i.test(zBas.waypoints.map(w => w.rockType).join(' ')), 'Custom-site lithology does not inherit Gale boxwork labels');
-const simIce = EVA.simulateEVA(zIce, { scanStep: 8 });
-assert.ok(simIce.orbitalHazardHits > 0 && simIce.orbitalSandM > simIce.safeSandM, 'Custom zones still show orbital-vs-AutoNav discrepancy');
 
 // --- Cross-module physics unification checks (GCR radiation, thermal elevation/TI, Pandolf bioenergetics, Great-Circle & A* evaStats)
 assert.strictEqual(Math.round(S.radDose(safe.stats.profile[0].elev, safe.stats.profile[0].slope)), Math.round(safe.stats.profile[0].radMsvYr), 'ASTAR and SCORING use identical MSL-RAD + sky-view GCR radiation formula');
@@ -247,11 +207,11 @@ const rUp = A.plan(Lgrade, 2, 7, 20, 7, { maxSlope: 15, slopePenalty: 0.3 });
 const rDn = A.plan(Lgrade, 20, 7, 2, 7, { maxSlope: 15, slopePenalty: 0.3 });
 assert.ok(rUp.ok && rDn.ok && rUp.stats.totalAscentM > 5000 && rDn.stats.totalDescentM > 5000, 'ASTAR.plan reports directional totalAscentM and totalDescentM');
 
-// 4. Phase 2 buildLocalGrid couples to orbital rasters & validatePhase2Benchmarks passes all rover/Apollo checks
-const gCoupled = EVA.buildLocalGrid(EVA.ZONES.jezero_delta, L);
-assert.ok(gCoupled.N === 100 && gCoupled.slope.length === 10000 && gCoupled.elev[0] !== 0, 'EVA.buildLocalGrid couples 1 km micro-DEM to orbital rasters and 2D finite-difference slopes');
-const p2Bench = EVA.validatePhase2Benchmarks(L, S);
-assert.ok(p2Bench.allPass && p2Bench.checks.length === 5, 'EVA.validatePhase2Benchmarks passes 4 biome traverses (Perseverance, Curiosity, Nili Fossae, Arcadia Planitia) + Apollo/xEMU bioenergetics & CO2/reserve checks');
+
+// Suit metabolic model is calibrated to the Apollo 14-17 lunar EVA mean (234 kcal/h = 272 W; NASA TN D-7883)
+const bioMoon = S.calcPandolfMars({ speedKmh: 2.4, loadKg: 15, gradePct: 2.0, terrainEta: 1.25, gravityMps2: 1.62 });
+assert.ok(bioMoon.metabolicW >= 228 && bioMoon.metabolicW <= 352, 'lunar-gravity walk falls inside the Apollo per-EVA range (228-352 W)');
+assert.ok(S.calcPandolfMars({ loadKg: 30 }).metabolicW > S.calcPandolfMars({ loadKg: 15 }).metabolicW, 'heavier load costs more energy');
 
 // --- Monte Carlo 100-run Wilson CI, RAD uncertainty band, soil-adjusted slope limit, & Layer Provenance
 const mcOut = S.sensitivity(L, S.PRESETS.balanced.w, true, [{ x: 10, y: 16 }], { mode: 'sum', runs: 100, spread: 0.2, n: 5, blockPx: 4, minSepPx: 10, matchPx: 6 }, S.mulberry32(2026));
@@ -265,17 +225,18 @@ assert.ok(typeof safe.stats.totalAscentM === 'number' && safe.stats.hazardZones 
 assert.ok(safe.stats.evaStats && typeof safe.stats.evaStats.co2ScrubberUsedPct === 'number' && safe.stats.evaStats.returnReserveProtected === true, 'ASTAR.plan evaStats includes CO2 RCA scrubber and return reserve protection');
 assert.ok(safe.stats.safeHavens.every(h => h.vehicleScope === 'pressurized_rover_only'), '200 km rest stops explicitly restricted to pressurized rover traverses');
 
-// 5. Physics-Informed ML (PIML) 1-minute Cadence Multi-Horizon Dust & Vortex Forecaster
+// 5. Heuristic dust-lifting risk index (hand-tuned, not a trained model)
 assert.ok(Array.isArray(T.MDAD_CORRIDORS) && T.MDAD_CORRIDORS.length === 6, 'MDAD 6 historical storm corridors exported');
 const mlVortex = T.predictDustML({ lat: 18.4, lon: 77.5, elev: -2500, slope: 3.5, ti: 160, dust: 0.72, ls: 255, tauPeak: 7.5, telemetryRegime: 'vortex_imminent' });
 const mlCalm = T.predictDustML({ lat: 18.4, lon: 77.5, elev: -2500, slope: 3.5, ti: 320, dust: 0.25, ls: 70, tauPeak: 0.5, telemetryRegime: 'clear_calm' });
-assert.strictEqual(mlVortex.cadenceSec, 60, 'PIML runs at 1-minute (60 s) cadence');
-assert.ok(mlVortex.horizons.h1m.prob > 0.85 && mlVortex.horizons.h6m.prob > 0.80, 'Imminent vortex telemetry regime triggers >85% +1 min and >80% +6 min probability');
-assert.ok(mlCalm.horizons.h1m.prob < 0.20 && mlCalm.horizons.h6m.prob < 0.20, 'Clear calm telemetry regime keeps +1 min and +6 min probability <20%');
-assert.ok(mlVortex.horizons.h1sol.prob > mlCalm.horizons.h1sol.prob + 0.40, 'Perihelion storm corridor raises +1-3 Sol regional probability well above aphelion calm');
-assert.ok(sim15.dustMl && sim15.dustMl.cadenceSec === 60 && typeof sim15.dustMl.horizons.h1m.probPct === 'number', 'EVA.simulateEVA couples 1-minute PIML nowcast to tactical EVA telemetry');
-const mlBench = T.validateDustMLBenchmarks(L);
-assert.ok(mlBench.allPass && mlBench.meanAccuracyPct >= 95.5 && mlBench.meanRocAuc >= 0.98, 'Out-of-sample Temporal Split holdout benchmarks achieve >=95.5% accuracy and >=0.98 ROC-AUC across all 4 horizons');
+assert.strictEqual(mlVortex.cadenceSec, 60, 'risk index is evaluated on a 1-minute cadence');
+assert.ok(mlVortex.horizons.h1m.prob > 0.85 && mlVortex.horizons.h6m.prob > 0.80, 'deep pressure-drop scenario gives a high +1 min and +6 min index');
+assert.ok(mlCalm.horizons.h1m.prob < 0.20 && mlCalm.horizons.h6m.prob < 0.20, 'calm scenario keeps the +1 min and +6 min index low');
+assert.ok(mlVortex.horizons.h1sol.prob > mlCalm.horizons.h1sol.prob + 0.40, 'perihelion storm corridor raises the +1-3 sol index above aphelion calm');
+assert.strictEqual(mlVortex.validated, false, 'dust risk index is flagged as not validated');
+assert.ok(!('overallAccuracyPct' in mlVortex) && !('overallRocAuc' in mlVortex), 'no accuracy claims are attached to the heuristic index');
+assert.strictEqual(typeof T.validateDustMLBenchmarks, 'undefined', 'synthetic ML benchmark generator removed');
+assert.ok(T.dustRiskSanityChecks().allPass, 'dust risk index responds in the physically expected direction');
 
 (async () => {
   const fail = async () => { throw new Error('net down'); };
@@ -288,5 +249,5 @@ assert.ok(mlBench.allPass && mlBench.meanAccuracyPct >= 95.5 && mlBench.meanRocA
   assert.strictEqual(arch.mode, 'archive'); assert.strictEqual(arch.data.sol, 675); assert.strictEqual(arch.data.pressure_pa, 750);
   const live = await Live.fetchSpaceWeather('k', ok([{ activityID: 'A', startTime: '2026-11-01T00:00Z' }, { activityID: 'B', startTime: '2026-11-05T00:00Z' }]));
   assert.strictEqual(live.mode, 'live'); assert.strictEqual(live.events[0].id, 'B', 'newest CME first');
-  console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation / EVA / live-API tests passed.');
+  console.log('All scoring / A* / storm / radiation / seasonal / ice-access / heating / SPE / terrain-class / aggregation / live-API tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

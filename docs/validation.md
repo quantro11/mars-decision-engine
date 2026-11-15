@@ -73,33 +73,33 @@ A random cell has an expected percentile of 50. p-values come from 200 random-lo
 | 1 — landers | 90 | 88 |
 | 2 — HLS-2015 sites | 71 | 71 |
 
-## Test 3 — Independent Phase 2 EVA Multi-Biome & Partial-Gravity Bioenergetics Validation
+## Test 3 — Spacesuit metabolic model vs Apollo lunar EVA data
 
-Note: Tests 1 & 2 evaluate orbital landing suitability (~5 km/px) and **do not** prove astronaut EVA path safety. Test 3 validates local EVA routing, hazard avoidance, slope constraints, and Lunar-adapted xEMU PLSS (CO₂ scrubber + ≥25% return reserve) independently across all **4 biomes** (`Jezero Delta`, `Gale Boxwork`, `Nili Fossae`, `Arcadia Planitia`) plus Pandolf-Santee bioenergetics:
+Tests 1 and 2 check orbital landing suitability (~5 km/px); they say nothing about walking safety. The only measured
+partial-gravity walking-EVA energy data are from Apollo: per-EVA crew averages of 822–1267 kJ/h (≈228–352 W) and an overall
+mean of 234 kcal/h (≈272 W) (Waligora et al. 1975, NASA TN D-7883). The model's one free constant (suit overhead) is
+calibrated to that mean, so this is a consistency check, not an independent test. Mars numbers cannot be
+validated (no one has walked on Mars), so for Mars we only check that more gravity, slope and sand cost more energy.
 
-| Surface Traverse Benchmark | Published Reference | Direct Chord | AutoNav Safe Route | Detour Ratio | Safe Hits vs Naive Orbital Hits | MGL Pose Error (vs VO Drift) | Status |
-|---|---|---|---|---|---|---|---|
-| NASA Mars 2020 Perseverance (Sol 0–420 Octavia E. Butler -> Seitah -> Three Forks) | Farley et al. (2022) Science 377; Verma et al. (2023) IEEE RA-L / JFR AutoNav | 1908 m | 2099 m | 1.10× | 0 vs 13 hits | ±1.6 m (VO 1.55%) | PASS |
-| NASA MSL Curiosity (Sol 4100–4450 Gediz Vallis & Mount Sharp Boxwork) | MSL Mastcam/Navcam Surface Operations Telemetry (2024–2026) | 1899 m | 2053 m | 1.08× | 0 vs 16 hits | ±1.6 m (VO 1.55%) | PASS |
-| Nili Fossae Noachian Fault Scarp & Olivine Dune Bypass Scenario | Ehlmann & Edwards (2014) Annu. Rev. Earth Planet. Sci. 42; HiRISE DTEEC_002888_2015 | 1846 m | 2028 m | 1.10× | 0 vs 21 hits | ±1.6 m (VO 1.55%) | PASS |
-| Arcadia Planitia Permafrost Polygon & Low-TI Dust Pocket EVA Scenario | Morgan et al. (2021) Nat. Astron. 5 (SWIM 2.0); HiRISE DTEEC_054821_2195 | 1705 m | 1939 m | 1.14× | 0 vs 21 hits | ±1.6 m (VO 1.55%) | PASS |
+| Case | Model metabolic rate | Check |
+|---|---|---|
+| Moon, 1.62 m/s², 2.4 km/h, gentle grade | 271 W | PASS (Apollo per-EVA range 228–352 W) |
+| Mars, 3.71 m/s², 2.4 km/h, 3.8 % grade | 397 W | extrapolation, not validated |
+| Mars, 9 % grade in loose sand | 656 W | PASS (Moon < Mars < Mars + sand) |
 
-| Bioenergetics & PLSS Benchmark (Waligora & Horrigan (1975) NASA SP-368; NASA SP-2010-3407 Sec. 6.2) | Lunar 1/6g (1.62 m/s²) | Martian 0.38g Nominal (3.71 m/s², η=1.15) | Martian 0.38g +10% Sand Grade (η=1.65) | CO₂ Scrubber & ≥25% Return Reserve | Status |
-|---|---|---|---|---|---|
-| Apollo 15–17 Lunar PLSS & NASA HIDH SP-2010-3407 Martian 0.38g Extrapolation | 216 W (ref 195–290 W) | 342 W (ref 290–390 W) | 601 W (ref 430–650 W) | 78% rem · PROTECTED | PASS |
+## Dust-lifting risk index — behaviour checks (not an accuracy test)
 
-## Test 4 — Physics-Informed ML (PIML) Multi-Horizon Dust & Vortex Forecasting (1-min Cadence)
+The dust-devil / dust-lifting index is a **hand-tuned heuristic**. Its thresholds were set by hand and it has never been
+fitted to or scored against labelled Mars data, so **no accuracy, ROC-AUC or Brier score is claimed**. Its pressure and wind
+inputs are modelled from site, season and time of day (there is no live sensor feed). We only check that it moves in the
+physically expected direction:
 
-Out-of-sample Temporal Split validation (Temporal Split: Train MY 24–32 / Holdout MY 33–35 + InSight/MEDA 1-Hz Microbarometer Catalog) across 240 benchmark windows combining Perseverance MEDA / InSight TWINS 1-Hz microbarometer & wind telemetry with the Mars Dust Activity Database (MDAD, 22,865 storms, MY 24–31) and Montabone et al. (MY 24–36 CDOD $\tau$):
-
-| Forecast Horizon | Reference Dataset | Holdout N | TP / TN / FP / FN | Accuracy (%) | ROC-AUC | F1 Score | Brier Score | Status |
-|---|---|---|---|---|---|---|---|---|
-| +1 min Nowcast (Vortex & Gust) | Jackson et al. (2021) / Spiga et al. (2021) InSight & MEDA 1-Hz Vortex Catalog | 120 | 59/60/0/1 | **99.2%** | **1.000** | 0.992 | 0.0071 | PASS |
-| +6 min Short-Range (Saltation) | Newman et al. (2022) Science Advances 8 — MEDA Saltation & Dust Lifting | 120 | 58/59/1/2 | **97.5%** | **0.999** | 0.975 | 0.0206 | PASS |
-| +15 min Walkback Window (PBL) | Banfield et al. (2020) Nature Geosci. 13 — PBL Convective Plume Instability | 120 | 57/58/2/3 | **95.8%** | **0.998** | 0.958 | 0.0349 | PASS |
-| +1–3 Sol Regional Storm (MDAD) | Battalio & Wang (2021) MDAD MY33–35 + Montabone et al. (2020) CDOD Holdout | 120 | 58/58/2/2 | **96.7%** | **0.994** | 0.967 | 0.0330 | PASS |
-
-**Multi-Horizon Holdout Mean: Accuracy 97.3% · ROC-AUC 0.998 · Brier Score 0.0239 (ALL PASS)**
+| Check | Result |
+|---|---|
+| Calm air gives a low +1 min index | PASS |
+| A deep pressure drop raises the +1 min index above calm | PASS |
+| Night (stable air) gives a lower +15 min index than early afternoon | PASS |
+| Regional index is higher in the perihelion dust season than at aphelion | PASS |
 
 ## How to read this
 

@@ -403,7 +403,7 @@
       ? opts.gradePct
       : Math.tan((slopeDeg * 0.48) * Math.PI / 180) * 100;
     const terrainEta = opts.terrainEta !== undefined ? opts.terrainEta : (1.32 + sandFrac * 0.85);
-    const suitJointWorkW = 115;
+    const suitJointWorkW = 170; // calibrated so a lunar-gravity walk matches the Apollo 14-17 EVA mean (234 kcal/h ≈ 272 W; NASA TN D-7883)
     const climbWorkW = ascentM > 0 ? ((bodyKg + suitKg + effLoadKg) * gLocal * ascentM) / (durationH * 3600 * 0.25) : 0;
     const loadWorkW = effLoadKg * 2.8 + 2.5 * effMassLocal * Math.pow(effLoadKg / bodyKg, 2);
     const pandolfW = 1.5 * bodyKg * (gLocal / 9.81) +

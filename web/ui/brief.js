@@ -76,7 +76,6 @@
       ls: S.crisis.ls, tauPeak: S.crisis.tauPeak, telemetryRegime: S.crisis.mlRegime || 'auto',
     }) : null;
 
-    const evaSim = S.evaSim || null;
     return {
       generated_at: new Date().toISOString(),
       system: 'Martiap (MDE-3.0)',
@@ -87,43 +86,6 @@
       normalized_weights: Object.fromEntries(Object.entries(wn).map(([k, v]) => [k, +v.toFixed(3)])),
       top_candidates: cands,
       selected_site: selCell,
-      tactical_eva_plan: evaSim ? {
-        architecture: 'NASA xGDS + Perseverance (TRN + AutoNav + MGL)',
-        zone_name: evaSim.zone.name,
-        dtm_metadata: evaSim.zone && evaSim.zone.dtmMetadata ? evaSim.zone.dtmMetadata : null,
-        resolution: '1 km x 1 km (10 m/cell micro-DEM, 1 m AutoNav)',
-        orbital_prior_confidence_pct: evaSim.orbitalConfidencePct,
-        assimilated_confidence_pct: evaSim.assimilatedConfidencePct,
-        domain_scores_5d: evaSim.domainScores,
-        trn_touchdown_error_m: evaSim.navStack && evaSim.navStack.trn ? evaSim.navStack.trn.touchdownErrorM : 28,
-        mgl_pose_error_m: evaSim.navStack && evaSim.navStack.mgl ? evaSim.navStack.mgl.mglCorrectedErrorM : 1.8,
-        vhf_los_clear: evaSim.commsLos ? evaSim.commsLos.losClear : true,
-        vhf_link_margin_db: evaSim.commsLos ? evaSim.commsLos.linkMarginDb : 18.0,
-        spe_time_to_shelter_min: evaSim.speAlert ? evaSim.speTimeToShelterMin : evaSim.speWorstCaseMin,
-        spe_within_30min: evaSim.speWithin30Min,
-        discrepancies_detected: Array.isArray(evaSim.discrepancies) ? evaSim.discrepancies.length : 0,
-        naive_orbital_route_m: evaSim.orbitalDistM,
-        naive_orbital_hazard_hits: evaSim.orbitalHazardHits,
-        crew_mode: evaSim.buddyMode,
-        sample_load_kg: evaSim.loadKg,
-        metabolic_rate_kcal_h: evaSim.metabolicKcalH,
-        metabolic_power_w: evaSim.metabolicW,
-        o2_reserve_remain_pct: evaSim.o2RemainPct,
-        suit_battery_remain_pct: evaSim.battRemainPct,
-        cooling_water_used_l: evaSim.waterUsedL,
-        co2_scrubber_remain_pct: evaSim.lifeSupport ? evaSim.lifeSupport.co2ScrubberRemainPct : null,
-        return_reserve_protected: evaSim.lifeSupport ? evaSim.lifeSupport.returnReserveProtected : true,
-        suit_architecture_note: evaSim.lifeSupport ? evaSim.lifeSupport.xemuArchitectureNote : 'Lunar xEMU ref adapted to Mars 0.38g / 6-10 mbar CO2',
-        walkback_safety_limit_m: evaSim.walkbackRadiusM,
-        astar_safe_footpath_m: evaSim.safeDistM,
-        direct_footpath_m: evaSim.directDistM,
-        within_walkback_limit: evaSim.withinWalkback,
-        real_time_tracking: evaSim.realTimeTracking || null,
-        hazards_detected: evaSim.hazardsDetected || [],
-        reroute_explanation: evaSim.rerouteExplanation || null,
-        env_conditions: evaSim.envConditions || null,
-        completion_report: evaSim.completionReport || null,
-      } : null,
       tactical_16km2_analysis: (S.tacticalAnalysis && S.tacticalAnalysis.ok && global.MDE_TACTICAL_EVA_ENGINE)
         ? global.MDE_TACTICAL_EVA_ENGINE.exportAnalysisJSON(S.tacticalAnalysis)
         : null,
@@ -143,7 +105,7 @@
         speed_km_per_sol: S.route.speed,
         vehicle_class: S.route.vehicle || null,
         driving_hours_per_sol: S.route.driveH != null ? S.route.driveH : null,
-        foot_eva_pace_km_h: evaSim && evaSim.envConditions ? evaSim.envConditions.effSpeedKmh : 2.4,
+        foot_eva_pace_km_h: 2.4,
         eva_stats: S.route.safe.stats.evaStats || null,
       } : null,
       layer_provenance: SCORING.LAYER_PROVENANCE || [],
@@ -173,8 +135,8 @@
         ml_dust_forecast: mlDust ? {
           model: mlDust.modelVersion,
           cadence_sec: mlDust.cadenceSec,
-          holdout_mean_accuracy_pct: mlDust.overallAccuracyPct,
-          holdout_mean_roc_auc: mlDust.overallRocAuc,
+          validated: false,
+          note: 'Hand-tuned heuristic risk index (0-100), not a trained or validated model.',
           primary_corridor: mlDust.features.primaryCorridor,
           bagnold_ratio: mlDust.features.bagnoldRatio,
           p_vortex_1m_pct: mlDust.horizons.h1m.probPct,
@@ -290,45 +252,6 @@
       }
     }
 
-    if (S.evaSim && S.evaSim.zone) {
-      const z = S.evaSim.zone;
-      const mPerDegLat = 59200;
-      const mPerDegLon = Math.max(12000, mPerDegLat * Math.cos((z.lat || 0) * Math.PI / 180));
-      const toLonLat = (gx, gy) => [
-        +(z.lon + ((gx - z.base.x) * 10) / mPerDegLon).toFixed(5),
-        +(z.lat + ((z.base.y - gy) * 10) / mPerDegLat).toFixed(5),
-      ];
-      if (Array.isArray(S.evaSim.safePath) && S.evaSim.safePath.length >= 2) {
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: S.evaSim.safePath.map(([px, py]) => toLonLat(px, py)) },
-          properties: {
-            feature_type: 'xgds_eva_route',
-            zone_id: z.id,
-            zone_name: z.name,
-            assimilated_pct: S.evaSim.navStack && S.evaSim.navStack.autonav ? S.evaSim.navStack.autonav.assimilatedPct : 100,
-            domain_composite_score: S.evaSim.domainScores ? S.evaSim.domainScores.composite : null,
-            spe_time_to_shelter_min: S.evaSim.speAlert ? S.evaSim.speTimeToShelterMin : S.evaSim.speWorstCaseMin,
-            vhf_los_clear: S.evaSim.commsLos ? S.evaSim.commsLos.losClear : true,
-            safe_footpath_m: S.evaSim.safeDistM,
-          },
-        });
-      }
-      (S.evaSim.discrepancies || []).forEach(d => {
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: toLonLat(d.x, d.y) },
-          properties: {
-            feature_type: 'xgds_discrepancy',
-            id: d.id,
-            domain: d.domain,
-            title: d.title,
-            delta: d.delta,
-          },
-        });
-      });
-    }
-
     if (S.tacticalAnalysis && S.tacticalAnalysis.ok && global.MDE_TACTICAL_EVA_ENGINE) {
       const tacGeo = global.MDE_TACTICAL_EVA_ENGINE.exportAnalysisGeoJSON(S.tacticalAnalysis);
       if (tacGeo && Array.isArray(tacGeo.features)) {
@@ -356,10 +279,6 @@
     const tr = lang === 'tr';
     const trDom = (v) => (tr && i18n && i18n.trDomain ? i18n.trDomain(v, lang) : v);
     const top = p.top_candidates[0], ds = p.dust_storm_simulation;
-    const eva = p.tactical_eva_plan;
-    const cr = eva && eva.completion_report;
-    const rt = eva && eva.real_time_tracking;
-    const env = eva && eva.env_conditions;
     const prov = Array.isArray(p.layer_provenance) ? p.layer_provenance : [];
     const robStr = (c) => {
       if (c.robust_pct === null) return '—';
@@ -402,27 +321,19 @@
             const v16 = t16.vehicle || {};
             return `<p><b>16 km² Tactical EVA (${esc(t16.dataMode)})</b> — Center <code>${t16.location.latDeg}°, ${t16.location.lon180}°</code> · Vehicle <code>${esc(v16.name || v16.classId)}</code> (limit <code>${v16.slopeLimitDeg ? v16.slopeLimitDeg.value : ''}°</code>) · Score Mean/Min/Max <code>${s16.meanScore}/${s16.minScore}/${s16.maxScore}</code> · Power mean <code>${s16.domainMeans ? Math.round(s16.domainMeans.power) : '—'}</code>${s16.powerDeficit ? ' (DEFICIT VETO)' : ''} · Impassable <code>${s16.impassablePct}%</code> · Limiting factor: <b>${esc(s16.limitingFactorLabel || '')}</b>${t16.fieldMeasurements && t16.fieldMeasurements.length ? ` · Field pts: <code>${t16.fieldMeasurements.length}</code>` : ''}.</p>`;
           })() : ''}
-          ${eva ? (tr
-            ? `<p><b>${esc(eva.zone_name)}</b> (${eva.dtm_metadata ? `HiRISE <code>${esc(eva.dtm_metadata.productId)}</code> · ${esc(eva.dtm_metadata.trueResolution)}` : esc(eva.architecture)}) — Uydu Öncülü <code>%${eva.orbital_prior_confidence_pct ?? 34}</code> → Canlı xGDS Güveni <code>%${eva.assimilated_confidence_pct ?? 95}</code> (5-Alan: <code>${eva.domain_scores_5d ? eva.domain_scores_5d.composite : 78}/100</code>, TRN ±${eva.trn_touchdown_error_m ?? 28} m, MGL ±${eva.mgl_pose_error_m ?? 1.8} m). Rotada <b>${eva.discrepancies_detected} dinamik anomali</b> tespit edildi; ${eva.reroute_explanation && eva.reroute_explanation.cancelledHazardHits > 0 ? `otomatik alternatif rota seçildi (${esc(eva.reroute_explanation.reasonTr || eva.reroute_explanation.newRouteStatusTr)}).` : 'mevcut güvenli A* rotası doğrulandı.'}</p>
-            <p><b>PLSS &amp; Çevre Senkronu (HUD ile Birebir):</b> Yürüyüş <code>${eva.astar_safe_footpath_m} m</code> (Kalan: <code>${rt ? rt.remainDistM : 0} m</code> · ETA <code>${rt ? rt.etaReturnBaseMin : 0} dk</code>), Walkback <b>${eva.walkback_safety_limit_m} m</b>, O₂ <code>%${eva.o2_reserve_remain_pct}</code>, Batarya <code>%${eva.suit_battery_remain_pct}</code>, CO₂ RCA Kalan <code>%${eva.co2_scrubber_remain_pct ?? 64}</code>, Dönüş Rezervi <code>${eva.return_reserve_protected !== false ? '%25+ KORUNDU' : 'DAR'}</code>${env ? `, Çevre <code>${env.ambientTempC}°C · τ=${env.tau} · Hız ${env.effSpeedKmh} km/sa</code>` : ''}. <i>Not: ${esc(eva.suit_architecture_note)}</i>.</p>
-            ${cr ? `<p><b>Görev Tamamlama Raporu:</b> Süre <code>${cr.durationH} sa</code> · Mesafe <code>${cr.distanceM} m</code> · Tırmanış/İniş <code>+${cr.ascentM}/-${cr.descentM} m</code> · Atlatılan Engel <code>${cr.hazardsEncounteredAndBypassed ?? 0}</code> (${cr.reroutesExecuted ?? 1} yeniden yönlendirme) · Numune <code>${cr.samplesCollectedKg} kg</code> · Dönüş Durumu <b>${esc(cr.returnStatusTr || cr.returnStatus)}</b>.</p>` : ''}`
-            : `<p><b>${esc(eva.zone_name)}</b> (${eva.dtm_metadata ? `HiRISE <code>${esc(eva.dtm_metadata.productId)}</code> · ${esc(eva.dtm_metadata.trueResolution)}` : esc(eva.architecture)}) — Orbital Prior <code>${eva.orbital_prior_confidence_pct ?? 34}%</code> → Live xGDS Confidence <code>${eva.assimilated_confidence_pct ?? 95}%</code> (5-Domain: <code>${eva.domain_scores_5d ? eva.domain_scores_5d.composite : 78}/100</code>, TRN ±${eva.trn_touchdown_error_m ?? 28} m, MGL ±${eva.mgl_pose_error_m ?? 1.8} m). Detected <b>${eva.discrepancies_detected} dynamic hazards</b>; ${eva.reroute_explanation && eva.reroute_explanation.cancelledHazardHits > 0 ? `automatic A* reroute triggered (${esc(eva.reroute_explanation.reasonEn || eva.reroute_explanation.newRouteStatus)}).` : 'active safe A* corridor verified.'}</p>
-            <p><b>PLSS &amp; Env Sync (Matches Helmet HUD):</b> Safe Walk <code>${eva.astar_safe_footpath_m} m</code> (Rem: <code>${rt ? rt.remainDistM : 0} m</code> · ETA <code>${rt ? rt.etaReturnBaseMin : 0} min</code>), Walkback <b>${eva.walkback_safety_limit_m} m</b>, O₂ <code>${eva.o2_reserve_remain_pct}%</code>, Battery <code>${eva.suit_battery_remain_pct}%</code>, CO₂ RCA Rem <code>${eva.co2_scrubber_remain_pct ?? 64}%</code>, Return Reserve <code>${eva.return_reserve_protected !== false ? '≥25% PROTECTED' : 'TIGHT'}</code>${env ? `, Env <code>${env.ambientTempC}°C · τ=${env.tau} · Pace ${env.effSpeedKmh} km/h</code>` : ''}. <i>Note: ${esc(eva.suit_architecture_note)}</i>.</p>
-            ${cr ? `<p><b>Mission Completion Report:</b> Duration <code>${cr.durationH} h</code> · Distance <code>${cr.distanceM} m</code> · Ascent/Descent <code>+${cr.ascentM}/-${cr.descentM} m</code> · Hazards Bypassed <code>${cr.hazardsEncounteredAndBypassed ?? 0}</code> (${cr.reroutesExecuted ?? 1} reroutes) · Samples <code>${cr.samplesCollectedKg} kg</code> · Return Status <b>${esc(cr.returnStatus)}</b>.</p>` : ''}`)
-          : ''}
           ${p.traverse_plan ? (tr
             ? `<p><b>Mod: ${p.traverse_plan.travel_mode === 'marswalk' ? 'Yaya EVA (2.4 km/sa)' : `${VEHICLE_LABEL_TR[p.traverse_plan.vehicle_class] || 'Basınçlı Rover'} (${p.traverse_plan.speed_km_per_sol} km/sol)`}:</b> A* çoklu-tehlike koridoru <b>${p.traverse_plan.astar_safe_km} km</b> (+${p.traverse_plan.ascent_m}/-${p.traverse_plan.descent_m} m, azami eğim <code>${p.traverse_plan.astar_max_slope_deg}°</code>${p.traverse_plan.hazard_zones ? `, ${esc(p.traverse_plan.hazard_zones.summary)}` : ''}, dönüş rotası <code>${p.traverse_plan.return_route ? p.traverse_plan.return_route.returnKm + ' km' : '—'}</code>) vs. kuş uçuşu <b>${p.traverse_plan.direct_km} km</b> (azami eğim <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`
             : `<p><b>Mode: ${p.traverse_plan.travel_mode === 'marswalk' ? 'Foot EVA (2.4 km/h)' : `${VEHICLE_LABEL_EN[p.traverse_plan.vehicle_class] || 'Pressurized Rover'} (${p.traverse_plan.speed_km_per_sol} km/sol)`}:</b> A* multi-hazard corridor <b>${p.traverse_plan.astar_safe_km} km</b> (+${p.traverse_plan.ascent_m}/-${p.traverse_plan.descent_m} m, max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>${p.traverse_plan.hazard_zones ? `, ${esc(p.traverse_plan.hazard_zones.summary)}` : ''}, return route <code>${p.traverse_plan.return_route ? p.traverse_plan.return_route.returnKm + ' km' : '—'}</code>) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`)
           : `<p class="help">${tr ? 'Etkin rota seçilmedi. Rota telemetrisi eklemek için Modül II (Rover rotası) sekmesini kullanın.' : 'No active traverse waypoints designated. Switch to Module II (Rover Route) to include path telemetry.'}</p>`}
         </div>
         <div>
-          <h3>${tr ? '3. Küresel Toz Fırtınası, PIML Tahmini (1-dk) ve SPE Siperleme' : '3. Global Dust-Storm, PIML Forecast (1-min) &amp; SPE Shielding'}</h3>
+          <h3>${tr ? '3. Küresel Toz Fırtınası, Toz Riski İndeksi ve SPE Siperleme' : '3. Global Dust-Storm, Dust-Risk Index &amp; SPE Shielding'}</h3>
           <p>${tr
             ? `<b>${esc(ds.station_region)}</b> (<code>${esc(FMT.fmtLat(ds.lat_deg))}</code>) istasyonunda <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${esc(trDom(ds.season_name))}), tepe <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² güneş paneli + ${ds.kilopower_units} Kilopower (10 kWe): <b>${ds.survives_blackout ? 'Üs hayatta kalır (min rezerv ' + ds.min_battery_kwh + ' kWh, min iç sıcaklık ' + ds.min_hab_interior_c + '°C)' : 'Sol ' + ds.blackout_sol + ' gününde kesinti' + (ds.thermal_freeze_sol !== null ? ' · 0°C altı Sol ' + ds.thermal_freeze_sol : '')}</b>. ${ds.spe_design_basis_assumption.regolith_cover_m} m regolit altında tasarım SPE dozu: <code>${ds.spe_design_basis_assumption.shielded_dose_msv} mSv</code> (${esc(trDom(ds.spe_design_basis_assumption.survival_status))}).`
             : `Simulated at <b>${esc(ds.station_region)}</b> (<code>${esc(FMT.fmtLat(ds.lat_deg))}</code>) during <b>L<sub>s</sub> = ${ds.season_ls_deg}°</b> (${esc(ds.season_name)}), peak <code>τ = ${ds.tau_peak}</code>, ${ds.panel_area_m2} m² array + ${ds.kilopower_units} Kilopower unit(s, 10 kWe design target): <b>${ds.survives_blackout ? 'Base survives (min reserve ' + ds.min_battery_kwh + ' kWh, min habitat temp ' + ds.min_hab_interior_c + '°C)' : 'Blackout on Sol ' + ds.blackout_sol + (ds.thermal_freeze_sol !== null ? ' · below 0°C Sol ' + ds.thermal_freeze_sol : '')}</b>. Design-basis SPE assumption behind ${ds.spe_design_basis_assumption.regolith_cover_m} m regolith: <code>${ds.spe_design_basis_assumption.shielded_dose_msv} mSv</code> (${esc(ds.spe_design_basis_assumption.survival_status)}).`}</p>
           ${ds.ml_dust_forecast ? (tr
-            ? `<p><b>PIML Çoklu-Ufuk Tahmini (1-dk Kadans, Doğruluk %${ds.ml_dust_forecast.holdout_mean_accuracy_pct} · AUC ${ds.ml_dust_forecast.holdout_mean_roc_auc}):</b> +1 dk Vorteks <code>%${ds.ml_dust_forecast.p_vortex_1m_pct}</code> · +6 dk Saltasyon <code>%${ds.ml_dust_forecast.p_saltation_6m_pct}</code> · +15 dk PBL <code>%${ds.ml_dust_forecast.p_pbl_15m_pct}</code> · +1–3 Sol Bölgesel (MDAD) <code>%${ds.ml_dust_forecast.p_regional_1sol_pct}</code> (Koridor: ${esc(ds.ml_dust_forecast.primary_corridor)}, u<sub>*</sub>/u<sub>*t</sub>=${ds.ml_dust_forecast.bagnold_ratio}).</p>`
-            : `<p><b>PIML Multi-Horizon Forecast (1-min Cadence, Acc ${ds.ml_dust_forecast.holdout_mean_accuracy_pct}% · AUC ${ds.ml_dust_forecast.holdout_mean_roc_auc}):</b> +1 min Vortex <code>${ds.ml_dust_forecast.p_vortex_1m_pct}%</code> · +6 min Saltation <code>${ds.ml_dust_forecast.p_saltation_6m_pct}%</code> · +15 min PBL <code>${ds.ml_dust_forecast.p_pbl_15m_pct}%</code> · +1–3 Sol Regional (MDAD) <code>${ds.ml_dust_forecast.p_regional_1sol_pct}%</code> (Corridor: ${esc(ds.ml_dust_forecast.primary_corridor)}, u<sub>*</sub>/u<sub>*t</sub>=${ds.ml_dust_forecast.bagnold_ratio}).</p>`) : ''}
+            ? `<p><b>Toz kalkışı risk indeksi (sezgisel, doğrulanmamış; 0–100):</b> +1 dk Vorteks <code>${ds.ml_dust_forecast.p_vortex_1m_pct}</code> · +6 dk Saltasyon <code>${ds.ml_dust_forecast.p_saltation_6m_pct}</code> · +15 dk PBL <code>${ds.ml_dust_forecast.p_pbl_15m_pct}</code> · +1–3 Sol Bölgesel (MDAD) <code>${ds.ml_dust_forecast.p_regional_1sol_pct}</code> (Koridor: ${esc(ds.ml_dust_forecast.primary_corridor)}, u<sub>*</sub>/u<sub>*t</sub>=${ds.ml_dust_forecast.bagnold_ratio}).</p>`
+            : `<p><b>Dust-lifting risk index (heuristic, not validated; 0–100):</b> +1 min Vortex <code>${ds.ml_dust_forecast.p_vortex_1m_pct}</code> · +6 min Saltation <code>${ds.ml_dust_forecast.p_saltation_6m_pct}</code> · +15 min PBL <code>${ds.ml_dust_forecast.p_pbl_15m_pct}</code> · +1–3 Sol Regional (MDAD) <code>${ds.ml_dust_forecast.p_regional_1sol_pct}</code> (Corridor: ${esc(ds.ml_dust_forecast.primary_corridor)}, u<sub>*</sub>/u<sub>*t</sub>=${ds.ml_dust_forecast.bagnold_ratio}).</p>`) : ''}
         </div>
       </div>
       ${prov.length ? `

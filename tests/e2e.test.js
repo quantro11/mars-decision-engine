@@ -394,42 +394,17 @@ async function runHttpE2E(browserPath, securityHeaders) {
     assert(kbState.summary.includes('Plain summary') && kbState.summary.includes('mSv/yr'), `Plain summary card missing or incomplete: ${kbState.summary}`);
     assert(kbState.checksText.includes('✓') || kbState.checksText.includes('✕'), 'Constraint check badges must include non-color ✓/✕ indicator');
 
-    // Verify TES Dust Abundance never shows "no data" and xGDS + TRN + AutoNav + MGL Live Surface Assimilation + Helmet Visor HUD work end-to-end
+    // TES dust is interpolated (never 'no data'); the removed legacy demo leaves no fabricated confidence rows behind
     const detailText = await evalJS(`document.getElementById('detail').textContent`);
     assert(!/TES Dust Abundance\s*no data/i.test(detailText), `TES Dust Abundance should be interpolated, not 'no data': ${detailText}`);
-    assert(detailText.includes('TRN+AutoNav+MGL') && detailText.includes('xGDS'), `Detail panel should show Orbital Prior vs TRN+AutoNav+MGL confidence: ${detailText}`);
+    assert(!detailText.includes('TRN+AutoNav+MGL') && !detailText.includes('xGDS') && !detailText.includes('PIML'), `Detail panel must not show legacy demo / fake-ML rows: ${detailText}`);
     await evalJS(`document.getElementById('use-eva').click()`);
-    const evaCheck = await waitFor(() => evalJS(`(() => {
-      const p = document.getElementById('panel-eva');
-      const c = document.getElementById('eva-local-canvas');
-      if (!p || p.classList.contains('hidden') || !c) return null;
-      return { text: p.textContent, w: c.width, h: c.height };
-    })()`), 'xGDS + TRN + AutoNav + MGL 1m/px panel & local canvas');
-    assert(evaCheck.w > 0 && evaCheck.text.includes('Walkback') && evaCheck.text.includes('kcal/h') && evaCheck.text.includes('TRN') && evaCheck.text.includes('AutoNav') && evaCheck.text.includes('MGL'), 'EVA panel renders TRN + AutoNav + MGL + xGDS 5-domain & Walkback telemetry');
-    await evalJS(`document.getElementById('btn-eva-reset').click()`);
-    const step0Label = await evalJS(`document.getElementById('eva-scan-step-v').textContent`);
-    assert(step0Label.includes('Step 0/8'), `Reset button should set Orbital Prior Step 0/8, got: ${step0Label}`);
-    await evalJS(`document.getElementById('btn-eva-scan').click()`);
-    const step8Label = await evalJS(`document.getElementById('eva-scan-step-v').textContent`);
-    assert(step8Label.includes('Step 8/8') && step8Label.includes('100%'), `100% Verified button should complete 5-domain assimilation, got: ${step8Label}`);
-    const demoBtnExists = await evalJS(`!!document.getElementById('btn-eva-demo')`);
-    assert(demoBtnExists, 'Guided Jury Demo button #btn-eva-demo should be present in EVA panel');
-    await evalJS(`document.getElementById('btn-eva-demo').click()`);
-    const demoPanelTxt = await evalJS(`document.getElementById('eva-results').textContent`);
-    assert(demoPanelTxt.includes('DTEEC_') && /MISSION COMPLETION/i.test(demoPanelTxt), 'Guided Jury Demo populates HiRISE DTM ID & Mission Completion Report');
-    await evalJS(`document.getElementById('btn-open-hud').click()`);
-    const hudCheck = await waitFor(() => evalJS(`(() => {
-      const m = document.getElementById('hud-modal');
-      const c = document.getElementById('hud-pov-canvas');
-      if (!m || m.classList.contains('hidden') || !c) return null;
-      return { text: m.textContent, w: c.width };
-    })()`), 'Helmet Visor HUD modal & Ground POV canvas');
-    assert(hudCheck.w > 0 && hudCheck.text.includes('SiO2') && hudCheck.text.includes('WALKBACK LIMIT') && hudCheck.text.includes('MGL POSE') && hudCheck.text.includes('CO2 RCA:') && hudCheck.text.includes('RETURN RSV:'), 'Helmet Visor HUD renders Ground POV, MGL lock, LIBS oxides, CO2 RCA, and Return Reserve');
-    await evalJS(`document.getElementById('hud-close').click()`);
+    await waitFor(() => evalJS(`(() => { const p = document.getElementById('panel-eva'); return p && !p.classList.contains('hidden') ? true : null; })()`), 'Tactical EVA panel opens from the candidate card');
+    const legacyGone = await evalJS(`!document.getElementById('eva-legacy-details') && !document.getElementById('hud-modal') && !window.MDE_EVA`);
+    assert(legacyGone, 'Legacy 1 km demo, HUD modal and MDE_EVA module are removed');
 
     // Verify rebuilt Tactical EVA 16 km2 UI & local analysis workflow (Sections A/B/C, 50% square map, 11 layers, popup, persistence)
     const tacInit = await evalJS(`(() => {
-      const leg = document.getElementById('eva-legacy-details');
       const secField = document.getElementById('tac-sec-field');
       const secWeights = document.getElementById('tac-sec-weights');
       const ws = document.getElementById('tac-workspace');
@@ -437,7 +412,6 @@ async function runHttpE2E(browserPath, securityHeaders) {
       const box = document.getElementById('tac-map-box').getBoundingClientRect();
       const wrap = document.querySelector('.map-wrap').getBoundingClientRect();
       return {
-        legacyOpen: !!(leg && leg.open),
         fieldOpen: !!(secField && secField.open),
         weightsOpen: !!(secWeights && secWeights.open),
         wsVisible: !!(ws && !ws.classList.contains('hidden')),
@@ -450,7 +424,6 @@ async function runHttpE2E(browserPath, securityHeaders) {
         resLabel: document.getElementById('tac-res-label').textContent,
       };
     })()`);
-    assert.strictEqual(tacInit.legacyOpen, false, 'Legacy demo accordion must start collapsed by default');
     assert.strictEqual(tacInit.fieldOpen, false, 'Section D Field Data must start collapsed by default');
     assert.strictEqual(tacInit.weightsOpen, false, 'Advanced weights must start collapsed by default');
     assert.strictEqual(tacInit.closeBtn, true, 'Red X close button must replace Compact button');

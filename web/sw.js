@@ -1,13 +1,11 @@
 // Offline Cache-First Service Worker for Martiap (Planetary Layers & Core UI)
 (function (sw) {
   'use strict';
-  const CACHE_NAME = 'mde-planetary-cache-v4';
+  const CACHE_NAME = 'mde-planetary-cache-v5';
   const CORE_ASSETS = [
     './',
     './index.html',
     './style.css',
-    './fonts/GlacialIndifference-Regular.woff2',
-    './fonts/GlacialIndifference-Bold.woff2',
     './layers/meta.js',
     './caves.js',
     './planet_profiles.js',
@@ -17,16 +15,18 @@
     './storm.js',
     './globe3d.js',
     './live_api.js',
+    './mars_time.js',
+    './vehicles_data.js',
+    './tactical_config_data.js',
+    './eva_cutouts_data.js',
+    './tactical_eva_engine.js',
+    './ui/tactical_eva_ui.js',
     './ui/format.js',
     './ui/charts.js',
     './ui/markers.js',
     './ui/overlays.js',
     './ui/layers.js',
     './ui/i18n.js',
-    './ui/eva_zones.js',
-    './ui/eva_sim.js',
-    './ui/eva_render.js',
-    './ui/eva.js',
     './ui/panels.js',
     './ui/landing_site.js',
     './ui/map2d.js',
@@ -43,7 +43,8 @@
     './layers/ti.png',
     './layers/dust.png',
     './layers/cave.png',
-    './layers/basemap.png'
+    './layers/base.jpg',
+    './layers/viking_4k.jpg'
   ];
 
   sw.addEventListener('install', (event) => {
