@@ -2,6 +2,9 @@
 (function (global) {
   'use strict';
 
+  const VEHICLE_LABEL_EN = { mini_rover: 'Mini rover', lab_rover: 'Lab rover', manned_rover: 'Manned rover' };
+  const VEHICLE_LABEL_TR = { mini_rover: 'Mini gezgin', lab_rover: 'Lab gezgini', manned_rover: 'İnsanlı gezgin' };
+
   function buildBriefPayload(ctx) {
     const { S, W, flatShare, cellValues, blockValues, nearestRegion } = ctx;
     const SCORING = ctx.SCORING || global.SCORING;
@@ -76,7 +79,7 @@
     const evaSim = S.evaSim || null;
     return {
       generated_at: new Date().toISOString(),
-      system: 'Mars EVA & Base Decision Engine (MDE-3.0)',
+      system: 'Martiap (MDE-3.0)',
       architecture_preset: S.preset || 'custom',
       scoring_aggregation: S.agg || 'sum',
       hard_constraints_hls2015: S.hard,
@@ -138,6 +141,8 @@
         astar_mean_roughness_m: Math.round(S.route.safe.stats.meanRough || 0),
         candidate_rest_stops: S.route.safe.stats.safeHavens || [],
         speed_km_per_sol: S.route.speed,
+        vehicle_class: S.route.vehicle || null,
+        driving_hours_per_sol: S.route.driveH != null ? S.route.driveH : null,
         foot_eva_pace_km_h: evaSim && evaSim.envConditions ? evaSim.envConditions.effSpeedKmh : 2.4,
         eva_stats: S.route.safe.stats.evaStats || null,
       } : null,
@@ -279,6 +284,7 @@
             direct_km: dir ? +dir.km.toFixed(1) : null,
             direct_max_slope_deg: dir ? +dir.maxSlope.toFixed(1) : null,
             speed_km_per_sol: S.route.speed,
+            vehicle_class: S.route.vehicle || null,
           },
         });
       }
@@ -333,7 +339,7 @@
     return {
       type: 'FeatureCollection',
       metadata: {
-        system: 'Mars EVA & Base Decision Engine (MDE-3.0)',
+        system: 'Martiap (MDE-3.0)',
         crs_note: 'IAU Mars 2000 planetocentric lon/lat mapped to RFC 7946 [lon, lat]',
         generated_at: new Date().toISOString(),
         preset: S.preset || 'custom',
@@ -405,8 +411,8 @@
             ${cr ? `<p><b>Mission Completion Report:</b> Duration <code>${cr.durationH} h</code> · Distance <code>${cr.distanceM} m</code> · Ascent/Descent <code>+${cr.ascentM}/-${cr.descentM} m</code> · Hazards Bypassed <code>${cr.hazardsEncounteredAndBypassed ?? 0}</code> (${cr.reroutesExecuted ?? 1} reroutes) · Samples <code>${cr.samplesCollectedKg} kg</code> · Return Status <b>${esc(cr.returnStatus)}</b>.</p>` : ''}`)
           : ''}
           ${p.traverse_plan ? (tr
-            ? `<p><b>Mod: ${p.traverse_plan.travel_mode === 'marswalk' ? 'Yaya EVA (2.4 km/sa)' : `Basınçlı Rover (${p.traverse_plan.speed_km_per_sol} km/sol)`}:</b> A* çoklu-tehlike koridoru <b>${p.traverse_plan.astar_safe_km} km</b> (+${p.traverse_plan.ascent_m}/-${p.traverse_plan.descent_m} m, azami eğim <code>${p.traverse_plan.astar_max_slope_deg}°</code>${p.traverse_plan.hazard_zones ? `, ${esc(p.traverse_plan.hazard_zones.summary)}` : ''}, dönüş rotası <code>${p.traverse_plan.return_route ? p.traverse_plan.return_route.returnKm + ' km' : '—'}</code>) vs. kuş uçuşu <b>${p.traverse_plan.direct_km} km</b> (azami eğim <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`
-            : `<p><b>Mode: ${p.traverse_plan.travel_mode === 'marswalk' ? 'Foot EVA (2.4 km/h)' : `Pressurized Rover (${p.traverse_plan.speed_km_per_sol} km/sol)`}:</b> A* multi-hazard corridor <b>${p.traverse_plan.astar_safe_km} km</b> (+${p.traverse_plan.ascent_m}/-${p.traverse_plan.descent_m} m, max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>${p.traverse_plan.hazard_zones ? `, ${esc(p.traverse_plan.hazard_zones.summary)}` : ''}, return route <code>${p.traverse_plan.return_route ? p.traverse_plan.return_route.returnKm + ' km' : '—'}</code>) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`)
+            ? `<p><b>Mod: ${p.traverse_plan.travel_mode === 'marswalk' ? 'Yaya EVA (2.4 km/sa)' : `${VEHICLE_LABEL_TR[p.traverse_plan.vehicle_class] || 'Basınçlı Rover'} (${p.traverse_plan.speed_km_per_sol} km/sol)`}:</b> A* çoklu-tehlike koridoru <b>${p.traverse_plan.astar_safe_km} km</b> (+${p.traverse_plan.ascent_m}/-${p.traverse_plan.descent_m} m, azami eğim <code>${p.traverse_plan.astar_max_slope_deg}°</code>${p.traverse_plan.hazard_zones ? `, ${esc(p.traverse_plan.hazard_zones.summary)}` : ''}, dönüş rotası <code>${p.traverse_plan.return_route ? p.traverse_plan.return_route.returnKm + ' km' : '—'}</code>) vs. kuş uçuşu <b>${p.traverse_plan.direct_km} km</b> (azami eğim <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`
+            : `<p><b>Mode: ${p.traverse_plan.travel_mode === 'marswalk' ? 'Foot EVA (2.4 km/h)' : `${VEHICLE_LABEL_EN[p.traverse_plan.vehicle_class] || 'Pressurized Rover'} (${p.traverse_plan.speed_km_per_sol} km/sol)`}:</b> A* multi-hazard corridor <b>${p.traverse_plan.astar_safe_km} km</b> (+${p.traverse_plan.ascent_m}/-${p.traverse_plan.descent_m} m, max grade <code>${p.traverse_plan.astar_max_slope_deg}°</code>${p.traverse_plan.hazard_zones ? `, ${esc(p.traverse_plan.hazard_zones.summary)}` : ''}, return route <code>${p.traverse_plan.return_route ? p.traverse_plan.return_route.returnKm + ' km' : '—'}</code>) vs. direct great-circle <b>${p.traverse_plan.direct_km} km</b> (max grade <code>${p.traverse_plan.direct_max_slope_deg}°</code>).</p>`)
           : `<p class="help">${tr ? 'Etkin rota seçilmedi. Rota telemetrisi eklemek için Modül II (Rover rotası) sekmesini kullanın.' : 'No active traverse waypoints designated. Switch to Module II (Rover Route) to include path telemetry.'}</p>`}
         </div>
         <div>

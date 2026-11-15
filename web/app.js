@@ -1,4 +1,4 @@
-// Coordinator for Mars Base Decision Engine.
+// Coordinator for Martiap.
 // Delegates layer I/O (ui/layers.js), panel rendering (ui/panels.js), 2D/3D canvas control (ui/map2d.js),
 // and offloads heavy compute to worker.js on HTTP(S) with transparent synchronous fallback on file://.
 (function () {
@@ -53,7 +53,7 @@
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
     view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null, customLanding: null,
     sensSpread: 0.2, agg: 'sum',
-    route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20, ms: 0, travelMode: 'rover', viaSciencePoi: true },
+    route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20, ms: 0, travelMode: 'rover', viaSciencePoi: true, vehicle: 'manned_rover', driveH: 4 },
     crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0, regolith: 1.5 },
   };
 
@@ -178,8 +178,29 @@
   function setRouteMode(rm) {
     S.route.travelMode = rm;
     document.querySelectorAll('#route-mode-seg button').forEach(b => { const a = b.dataset.rmode === rm; b.classList.toggle('active', a); b.setAttribute('aria-pressed', String(a)); });
-    const si = $('#speed'), sv = $('#speed-v'); if (si) si.disabled = rm === 'marswalk'; if (sv) sv.textContent = rm === 'marswalk' ? '2.4 km/h (Foot EVA)' : S.route.speed + ' km/sol';
+    const si = $('#speed'); if (si) si.disabled = rm === 'marswalk';
+    const vg = $('#route-vehicle-group'); if (vg) vg.classList.toggle('hidden', rm === 'marswalk');
+    syncRouteSpeedLabel();
     panels.renderRoute(); if (viewport) viewport.draw();
+  }
+  function syncRouteSpeedLabel() {
+    const sv = $('#speed-v'); if (!sv) return;
+    sv.textContent = S.route.travelMode === 'marswalk' ? '2.4 km/h (Foot EVA)' : S.route.driveH + ' h/sol';
+  }
+  // Vehicle class for the rover traverse: sets slope limit and driving-time range from vehicles.json.
+  function setRouteVehicle(id) {
+    const VEH = window.MDE_VEHICLES, cls = VEH && VEH.classes && VEH.classes[id];
+    if (!cls) return;
+    S.route.vehicle = id;
+    document.querySelectorAll('#route-vehicle-seg button').forEach(b => { const a = b.dataset.rveh === id; b.classList.toggle('active', a); b.setAttribute('aria-pressed', String(a)); });
+    const dh = cls.driveHoursPerSol || { min: 1, max: 8, default: 4, step: 0.5 };
+    const sp = $('#speed');
+    if (sp) { sp.min = dh.min; sp.max = dh.max; sp.step = dh.step || 0.5; sp.value = dh.default; }
+    S.route.driveH = dh.default; syncRouteSpeedLabel();
+    // The A* slope ceiling follows the vehicle (user can still tighten it afterwards).
+    const ms = $('#maxslope');
+    if (ms) { const lim = Math.max(+ms.min, Math.min(+ms.max, Math.round(cls.slopeLimitDeg ? cls.slopeLimitDeg.value : 15))); ms.value = lim; S.route.maxSlope = lim; const mv = $('#maxslope-v'); if (mv) mv.textContent = lim + '°'; }
+    if (S.route.start && S.route.goal) computeRoute(); else panels.renderRoute();
   }
   const panelCbs = {
     onRescore: rescore, onSelect: select, onUseCrisis: setCrisisSite,
@@ -307,7 +328,9 @@
   bindRange('sens', v => '±' + v + '%', v => { S.sensSpread = v / 100; });
   bindRange('maxslope', v => v + '°', v => { S.route.maxSlope = v; computeRoute(); });
   bindRange('kslope', v => (v / 100).toFixed(2), v => { S.route.k = v / 100; computeRoute(); });
-  bindRange('speed', v => (S.route.travelMode === 'marswalk' ? '2.4 km/h (Foot EVA)' : v + ' km/sol'), v => { S.route.speed = v; panels.renderRoute(); });
+  bindRange('speed', v => (S.route.travelMode === 'marswalk' ? '2.4 km/h (Foot EVA)' : v + ' h/sol'), v => { S.route.driveH = v; panels.renderRoute(); });
+  document.querySelectorAll('#route-vehicle-seg button').forEach(b => b.onclick = () => setRouteVehicle(b.dataset.rveh));
+  setRouteVehicle(S.route.vehicle);
   document.querySelectorAll('#route-mode-seg button').forEach(b => b.onclick = () => setRouteMode(b.dataset.rmode));
   on('#route-sci-poi', 'onchange', (e) => { S.route.viaSciencePoi = e.target.checked; computeRoute(); });
   on('#route-clear', 'onclick', () => { S.route.start = S.route.goal = S.route.safe = S.route.straight = null; panels.renderRoute(); viewport.draw(); });

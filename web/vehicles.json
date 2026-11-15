@@ -106,6 +106,15 @@
         "verified": true,
         "source": "NASA/JPL Pathfinder Sojourner documentation (~0.7-1.0 cm/s = 0.025-0.036 km/h top nominal ground speed)"
       },
+      "driveHoursPerSol": {
+        "min": 1,
+        "max": 4,
+        "default": 2,
+        "step": 0.5,
+        "unit": "h/sol",
+        "verified": false,
+        "source": "Assumption (solar-window limited): 2 h of driving per sol. Sojourner covered only ~100 m in its 83-sol mission (NASA/JPL) because it stayed near the lander, so this is a capability ceiling, not a flown rate."
+      },
       "extraLoadKg": {
         "min": 0,
         "max": 5,
@@ -173,6 +182,15 @@
         "unit": "km/h",
         "verified": true,
         "source": "NASA MSL/Perseverance maximum flat hard-ground speed ~4.2 cm/s (0.151 km/h)"
+      },
+      "driveHoursPerSol": {
+        "min": 1,
+        "max": 6,
+        "default": 2,
+        "step": 0.5,
+        "unit": "h/sol",
+        "verified": false,
+        "source": "Assumption calibrated to flight records: Perseverance averaged ~22.5 m/sol over 2,006 sols (45.22 km, NASA/JPL Oct 2026) and drove at most 411.7 m in one sol (Sol 1540); Curiosity averaged 28.9 m per drive over its first 7 years (Rankin et al. 2020, JPL). 2 h/sol at ~0.09 km/h is ~0.18 km/sol: between the long-run average and the single-sol record."
       },
       "extraLoadKg": {
         "min": 0,
@@ -244,6 +262,15 @@
         "verified": false,
         "concept": true,
         "source": "CONCEPT - not flight data: pressurized rover concept speed range 2-15 km/h (NASA LER/SEV nominal field testing ~5-10 km/h)"
+      },
+      "driveHoursPerSol": {
+        "min": 1,
+        "max": 8,
+        "default": 4,
+        "step": 0.5,
+        "unit": "h/sol",
+        "verified": false,
+        "source": "CONCEPT assumption: 4 h of driving inside a crew day. Not flight data; no crewed Mars rover exists."
       },
       "extraLoadKg": {
         "min": 0,

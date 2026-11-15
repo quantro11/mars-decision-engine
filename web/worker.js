@@ -1,4 +1,4 @@
-// Background Web Worker for Mars Base Decision Engine heavy compute:
+// Background Web Worker for Martiap heavy compute:
 // map suitability scoring, Top-5 block extraction, Monte Carlo sensitivity, and A* traverse.
 (function (global) {
   'use strict';

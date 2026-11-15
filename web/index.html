@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mars EVA &amp; Base Decision Engine</title>
+<title>Martiap — Mars EVA &amp; Base Decision Engine</title>
 <meta name="description" content="Where should humans land, live, and walk on Mars? Phase 1 orbital base selection and Phase 2 hyper-local 1m/px EVA &amp; suit HUD planner built on real NASA data.">
 <link rel="canonical" href="https://mars-decision-engine.vercel.app/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Mars EVA &amp; Base Decision Engine">
+<meta property="og:title" content="Martiap — Mars EVA &amp; Base Decision Engine">
 <meta property="og:description" content="Where should humans land and live on Mars? Landing-site, rover traverse, and dust-storm survival planning built on MOLA, SWIM 2.0, TES and Viking datasets.">
 <meta property="og:url" content="https://mars-decision-engine.vercel.app/">
 <meta name="twitter:card" content="summary">
@@ -33,7 +33,7 @@
       </svg>
     </span>
     <span class="brand-text">
-      <span class="brand-name">Mars EVA &amp; Base Decision Engine</span>
+      <span class="brand-name">Martiap</span>
       <span class="brand-sub">Landing-site, Marswalk (EVA) route &amp; science planning on real orbital data</span>
     </span>
   </div>
@@ -469,13 +469,22 @@
       </div>
       <p class="help">Choose a start and destination on the map/globe, or switch to <b>EVA / Marswalk</b> to compute spacesuit metabolic energy (kcal/h &amp; W), O₂ / cooling water consumption, 6–8 h EVA sortie duration limit, cumulative radiation dose (mSv), and Science Waypoints along the A* path.</p>
 
+      <div class="control-group" id="route-vehicle-group">
+        <div class="seg" id="route-vehicle-seg" role="group" aria-label="Vehicle class">
+          <button type="button" data-rveh="mini_rover" aria-pressed="false">Mini rover</button>
+          <button type="button" data-rveh="lab_rover" aria-pressed="false">Lab rover</button>
+          <button type="button" data-rveh="manned_rover" class="active" aria-pressed="true">Manned rover</button>
+        </div>
+        <div class="help note-sm" id="route-vehicle-note"></div>
+      </div>
+
       <div class="control-group">
         <label>Model slope limit (soil-adjusted) <span id="maxslope-v">15°</span>
           <input type="range" id="maxslope" min="5" max="30" value="15"></label>
         <label>Slope penalty <span id="kslope-v">0.30</span>
           <input type="range" id="kslope" min="0" max="100" value="30"></label>
-        <label>Rover speed (Foot EVA: 2.4 km/h) <span id="speed-v">20 km/sol</span>
-          <input type="range" id="speed" min="5" max="100" value="20"></label>
+        <label>Driving time per sol <span id="speed-v">4 h/sol</span>
+          <input type="range" id="speed" min="1" max="8" step="0.5" value="4"></label>
         <label class="check">
           <input type="checkbox" id="route-sci-poi" checked>
           <span><b>Science Waypoints (POI) along A* route</b><br>Target SWIM 2.0 Ice-Consistency Anomaly (Unconfirmed), Boxwork Geological Formation &amp; TES Mineral stops.</span>
@@ -515,6 +524,8 @@
         <label>Soil shielding cover (regolith depth) <span id="rego-v">1.5 m</span>
           <input type="range" id="rego" min="0" max="35" step="1" value="15"></label>
       </div>
+
+      <div id="crisis-verdict" class="crisis-verdict" role="status" aria-live="polite">Pick a site on the map to run the survival test.</div>
 
       <div id="crisis-summary"></div>
     </section>
@@ -604,7 +615,7 @@
 
     <div id="loading" class="loading" role="status" aria-live="polite">
       <div class="spinner"></div>
-      <div class="loading-title">Mars Decision Engine</div>
+      <div class="loading-title">Martiap</div>
       <div class="loading-sub" id="loading-sub">Loading NASA elevation, ice, and thermal layers…</div>
     </div>
 

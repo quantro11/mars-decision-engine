@@ -188,7 +188,7 @@ assert.ok(geo.features.some(f => f.properties.feature_type === 'xgds_discrepancy
 
 const fakeLbl = { firstChild: { nodeType: 3, nodeValue: 'Slope limit ' } };
 const fakeInp = { closest: () => fakeLbl, parentElement: { querySelector: () => null } };
-const fakeBrand = { textContent: 'Mars EVA & Base Decision Engine' };
+const fakeBrand = { textContent: 'Martiap' };
 const fakeAbout = { innerHTML: '<h3>English</h3>' };
 const fakeLangBtn = { textContent: 'TR', title: '', setAttribute() {} };
 const fakeDoc = {
@@ -202,12 +202,12 @@ assert.strictEqual(I18N.t('mode.eva'), 'Taktik EVA · 16 km²');
 assert.strictEqual(I18N.trDomain('LIKELY'), 'YÜKSEK OLASILIK');
 assert.ok(fakeAbout.innerHTML.includes('Veri Seti') && !fakeAbout.innerHTML.includes('style='), '#about-content swaps cleanly to Turkish');
 assert.ok(OV.renderLegendHTML('score', 'tr').includes('ELENDİ/ZAYIF'), 'Map legend renders Turkish scale labels');
-assert.strictEqual(fakeBrand.textContent, 'Mars EVA & Üs Karar Motoru');
+assert.strictEqual(fakeBrand.textContent, 'Martiap');
 assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Model eğim sınırı (zemin uyarlamalı) ');
 I18N.setLang('en', fakeDoc);
 assert.strictEqual(I18N.t('mode.score'), 'Site selection');
 assert.strictEqual(fakeAbout.innerHTML, '<h3>English</h3>', 'Reverting to English restores original #about-content cleanly');
-assert.strictEqual(fakeBrand.textContent, 'Mars EVA & Base Decision Engine');
+assert.strictEqual(fakeBrand.textContent, 'Martiap');
 assert.strictEqual(fakeLbl.firstChild.nodeValue, 'Slope limit ');
 
 // --- 6c. Neighbor ring interpolation for TES nodata (0) pixels in layers.js
@@ -400,6 +400,23 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   const ptsLarge = LS.circleLatLons(18.4, 77.5, 100, PLANET_ACTIVE.radiusKm.value, 36);
   assert.strictEqual(ptsSmall.length, 37, 'spherical boundary closes loop');
   assert.ok(Math.abs((ptsLarge[0][0] - 18.4) / (ptsSmall[0][0] - 18.4) - 4) < 0.05, 'circle geometry scales strictly in Martian surface degrees/km');
+
+  // --- 12. Rover classes on the route + storm survival chips (Martiap)
+  const routeStat = { km: 50, ascent: 300, descent: 300, meanSlope: 4, hazardKm: 2, dustKm: 5 };
+  const estFor = (id, o = {}) => LS.traverseEstimate(VEHICLES.classes[id], routeStat, { VEHICLES, STORM: T, PLANET: PLANET_ACTIVE, lat: 18, tau: 0.6, ls: 251, driveHoursPerSol: VEHICLES.classes[id].driveHoursPerSol.default, ...o });
+  const estMini = estFor('mini_rover'), estLab = estFor('lab_rover'), estMan = estFor('manned_rover');
+  assert.ok(estMan.kmPerSol > estLab.kmPerSol && estLab.kmPerSol > estMini.kmPerSol, 'route pace differs per rover class');
+  assert.ok(estMini.sols > estMan.sols && estMan.sols >= 1, 'a slow rover needs more sols than the crewed rover for the same route');
+  assert.ok(estMan.chargesRequired >= 1, 'battery rover needs recharge stops on a 50 km route');
+  assert.ok(estFor('manned_rover', { driveHoursPerSol: 8 }).kmPerSol > estMan.kmPerSol, 'more driving hours per sol means more km per sol');
+  assert.ok(LS.traverseEstimate(VEHICLES.classes.manned_rover, { ...routeStat, hazardKm: 20, meanSlope: 9 }, { VEHICLES, STORM: T, PLANET: PLANET_ACTIVE, lat: 18, tau: 0.6, ls: 251, driveHoursPerSol: 4 }).terrainMobility < estMan.terrainMobility, 'steeper, more hazardous routes lower mobility');
+  const stormEnv = (tau) => ({ VEHICLES, STORM: T, PLANET: PLANET_ACTIVE, lat: 18.4, ls: 251, tauPeak: tau });
+  const rpMiniClear = LS.roverStormPower(VEHICLES.classes.mini_rover, stormEnv(0.5));
+  const rpMiniStorm = LS.roverStormPower(VEHICLES.classes.mini_rover, stormEnv(8));
+  assert.ok(rpMiniStorm.genWhSol < rpMiniClear.genWhSol * 0.2 && !rpMiniStorm.survives, 'solar rover loses power in a global storm');
+  assert.ok(LS.roverStormPower(VEHICLES.classes.lab_rover, stormEnv(10.8)).survives, 'MMRTG rover is independent of dust');
+  const rpMan = LS.roverStormPower(VEHICLES.classes.manned_rover, stormEnv(8));
+  assert.ok(rpMan.autonomySols < rpMan.stormSols && !rpMan.survives, 'battery-only crewed rover cannot outlast an 80-sol storm');
 
   console.log('All UI module / A* window / brief / habitability XSS / markers / WebGL 3D / landing site tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

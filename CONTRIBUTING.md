@@ -1,4 +1,4 @@
-# Contributing to Mars Decision Engine
+# Contributing to Martiap
 
 ## Architecture Overview
 

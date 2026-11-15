@@ -1,4 +1,4 @@
-// Hardware-accelerated WebGL 3D Planetary Globe Engine for Mars Base Decision Engine.
+// Hardware-accelerated WebGL 3D Planetary Globe Engine for Martiap.
 // Uses real NASA MGS MOLA DEM (grid size from layers/meta.js, currently 4096x2048) for 3D vertex displacement & per-pixel normal mapping,
 // composites live decision overlays (Score, SWIM 2.0 Ice, Slope, Elev, TES TI, Dust),
 // and provides exact 3D-to-2D projection & raycast unprojection for full interactive parity.

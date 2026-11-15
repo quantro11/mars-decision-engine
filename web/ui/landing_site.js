@@ -48,14 +48,38 @@
     return pts;
   }
 
+  // Shared vehicle helpers (used by the range circle AND the Rover-route traverse estimate so the
+  // two always agree).
+  const DEFAULT_SOL_H = 24.66;
+
+  function solHoursOf(PLANET) {
+    return PLANET && PLANET.solHours && PLANET.solHours.value > 0 ? PLANET.solHours.value : DEFAULT_SOL_H;
+  }
+
+  // Heavier vehicles sink deeper into loose regolith. Same sub-linear mass law the Tactical EVA
+  // engine uses: (totalMass / refMass)^exponent, parameters from vehicles.json (unverified assumption).
+  function sinkageMassRatio(totalMassKg, eff) {
+    const ref = eff.sinkageMassRefKg ? eff.sinkageMassRefKg.value : 1000;
+    const ex = eff.sinkageMassExponent ? eff.sinkageMassExponent.value : 0.35;
+    return Math.pow(Math.max(1, totalMassKg) / ref, ex);
+  }
+
+  function driveHoursOf(rover, override) {
+    const dflt = rover.driveHoursPerSol && rover.driveHoursPerSol.default > 0 ? rover.driveHoursPerSol.default : 2;
+    const h = override != null && override > 0 ? override : dflt;
+    return Math.max(0.5, Math.min(12, h));
+  }
+
   function computeRoverRange(cellValues, rover, opts) {
     const { VEHICLES, STORM, PLANET, ls = 251, tr = false } = opts;
     const eff = VEHICLES.effects || {};
     const gravity = PLANET && PLANET.gravityMs2 && PLANET.gravityMs2.value > 0 ? PLANET.gravityMs2.value : DEFAULT_MARS_G;
+    const solH = solHoursOf(PLANET);
     const baseMass = rover.baseMassKg ? rover.baseMassKg.value : 1000;
     const extraMass = rover.extraLoadKg ? (rover.extraLoadKg.default || 0) : 0;
     const totalMassKg = baseMass + extraMass;
     const speedKmh = rover.speedKmh ? rover.speedKmh.default : 0.1;
+    const driveH = driveHoursOf(rover);
     const slopeLimitDeg = rover.slopeLimitDeg ? rover.slopeLimitDeg.value : 15;
     const pwr = rover.power || {};
     const powerMode = pwr.defaultMode || (pwr.mode && pwr.mode.value) || 'battery';
@@ -75,7 +99,11 @@
 
     // Terrain and environmental resistance factors
     const tiLooseThresh = eff.tiLooseThreshold ? eff.tiLooseThreshold.value : 200;
-    const tiMult = tiVal < 100 ? 1.9 : tiVal < tiLooseThresh ? 1.4 : tiVal > 450 ? 1.15 : 1.0;
+    const looseBase = tiVal < 100 ? 1.9 : tiVal < tiLooseThresh ? 1.4 : 1.0;
+    const massRatio = sinkageMassRatio(totalMassKg, eff);
+    // Loose-soil drag scales with vehicle mass (a 11 kg micro-rover does not bog like a 5 t crew rover);
+    // hard rock adds a small vibration/scuffing cost independent of mass.
+    const tiMult = tiVal > 450 ? 1.15 : 1 + (looseBase - 1) * massRatio;
     const tiTag = tiVal < 100
       ? pick(tr, 'ls.tiDust')
       : tiVal < tiLooseThresh
@@ -105,6 +133,7 @@
     const heaterW = coldDelta * heaterCoeff * totalMassKg;
 
     const tractionWhKm = (totalMassKg * massCoeff * tiMult + climbWhKm) * roughFactor;
+    // Hotel + heater power is burned for as long as the vehicle is moving: Wh/km = W / (km/h).
     const hotelWhKm = (hotelW + heaterW) / Math.max(0.003, effectiveSpeedKmh);
     const effWhKm = tractionWhKm + hotelWhKm;
 
@@ -112,40 +141,49 @@
     let rangeKm = 0;
     let basisLabel = '';
     let energyDetail = '';
+    let kmPerSol = null;
+    let limitedBy = null;
+    let roundTripRadiusKm = null;
 
     if (!slopeBlocked) {
       if (powerMode === 'battery') {
         const capWh = (pwr.batteryCapacityKwh ? pwr.batteryCapacityKwh.value : 60) * 1000;
         rangeKm = +(capWh / Math.max(1, effWhKm)).toFixed(1);
+        // A battery sortie has to come back: the return-capable radius is half the one-way distance.
+        roundTripRadiusKm = +(rangeKm / 2).toFixed(1);
         basisLabel = pick(tr, 'ls.basisBattery', [(capWh / 1000).toFixed(0)]);
-        energyDetail = `${Math.round(effWhKm)} Wh/km`;
+        energyDetail = `${Math.round(effWhKm)} Wh/km · ${pick(tr, 'ls.returnRadius', [roundTripRadiusKm.toFixed(1)])}`;
       } else if (powerMode === 'nuclear') {
         const genW = pwr.ratedPowerW ? pwr.ratedPowerW.value : 110;
         const campaignSols = 30;
-        // Daily MMRTG energy budget minus cold-survival margin, coupled with terrain-degraded speed
-        const dailyGrossWh = genW * 24.65;
+        // Daily MMRTG energy minus the hotel load that keeps running while parked; the hotel load while
+        // driving is already inside effWhKm, so it is not subtracted twice.
+        const dailyGrossWh = genW * solH;
+        const idleHotelWh = hotelW * Math.max(0, solH - driveH);
         const coldOverhead = Math.max(0, heaterW - hotelW * 0.5);
         const thermalDriveFactor = Math.max(0.40, 1 - coldOverhead / Math.max(120, genW * 3.5));
-        const kinematicKmSol = effectiveSpeedKmh * 8.0 * thermalDriveFactor;
-        const energyKmSol = dailyGrossWh / Math.max(1, effWhKm);
-        const dailyDistKm = Math.min(energyKmSol, kinematicKmSol);
-        rangeKm = +(dailyDistKm * campaignSols).toFixed(1);
+        const kinematicKmSol = effectiveSpeedKmh * driveH * thermalDriveFactor;
+        const energyKmSol = Math.max(0, dailyGrossWh - idleHotelWh) / Math.max(1, effWhKm);
+        kmPerSol = Math.min(energyKmSol, kinematicKmSol);
+        limitedBy = energyKmSol < kinematicKmSol ? 'power' : 'drive';
+        rangeKm = +(kmPerSol * campaignSols).toFixed(1);
         basisLabel = pick(tr, 'ls.basisNuclear', [campaignSols]);
-        energyDetail = `${dailyDistKm.toFixed(2)} km/sol · ${Math.round(effWhKm)} Wh/km`;
+        energyDetail = `${kmPerSol.toFixed(2)} km/sol (${pick(tr, limitedBy === 'power' ? 'ls.limPower' : 'ls.limDrive')}) · ${Math.round(effWhKm)} Wh/km`;
       } else {
         const solarArea = pwr.solarAreaM2 ? pwr.solarAreaM2.value : 0.22;
         const solarEta = eff.solarPanelEfficiency ? eff.solarPanelEfficiency.value : 0.26;
         const campaignSols = 30;
         const dailySolarWh = dailySolarKwhM2 * 1000 * solarArea * solarEta;
-        const daytimeHotelWh = (hotelW + heaterW * 0.5) * 4.5;
-        const netDriveWhSol = Math.max(0, dailySolarWh - daytimeHotelWh);
         const solarWindowFactor = Math.max(0.15, Math.min(1.15, dailySolarKwhM2 / 2.5));
-        const kinematicKmSol = effectiveSpeedKmh * 5.0 * solarWindowFactor;
-        const energyKmSol = netDriveWhSol / Math.max(1, effWhKm);
-        const dailyDistKm = Math.min(energyKmSol, kinematicKmSol);
-        rangeKm = +(dailyDistKm * campaignSols).toFixed(1);
+        const kinematicKmSol = effectiveSpeedKmh * driveH * solarWindowFactor;
+        // Hotel power while driving is part of effWhKm; the former extra "daytime hotel" deduction
+        // counted the same watts twice and understated the energy-limited distance.
+        const energyKmSol = dailySolarWh / Math.max(1, effWhKm);
+        kmPerSol = Math.min(energyKmSol, kinematicKmSol);
+        limitedBy = energyKmSol < kinematicKmSol ? 'power' : 'drive';
+        rangeKm = +(kmPerSol * campaignSols).toFixed(1);
         basisLabel = pick(tr, 'ls.basisSolar', [campaignSols]);
-        energyDetail = `${Math.round(dailySolarWh)} Wh/sol (τ ${localTau})`;
+        energyDetail = `${Math.round(dailySolarWh)} Wh/sol (τ ${localTau} · Ls ${Math.round(ls)}°) · ${kmPerSol.toFixed(2)} km/sol (${pick(tr, limitedBy === 'power' ? 'ls.limPower' : 'ls.limDrive')})`;
       }
     } else {
       basisLabel = pick(tr, 'ls.basisBlocked', [slopeDeg.toFixed(1), effSlopeLimit]);
@@ -182,6 +220,11 @@
       slopeBlocked,
       slopeLimitDeg: effSlopeLimit,
       rangeKm,
+      roundTripRadiusKm,
+      kmPerSol: kmPerSol == null ? null : +kmPerSol.toFixed(3),
+      limitedBy,
+      driveHoursPerSol: driveH,
+      lsDeg: Math.round(ls),
       basisLabel,
       energyDetail,
       effWhKm: +effWhKm.toFixed(1),
@@ -191,6 +234,152 @@
       tiMult,
       roughFactor: +roughFactor.toFixed(2),
       envPenalties,
+    };
+  }
+
+  /**
+   * Whole-route traverse estimate for one vehicle class (Rover route tab).
+   * Uses the same per-km energy model as computeRoverRange, but fed with the A* route statistics
+   * (distance, total ascent, mean slope, km on loose dust) instead of one map cell.
+   * route: { km, totalAscentM, meanSlope, maxSlope, dustKm, meanElevM?, meanTi? }
+   */
+  function traverseEstimate(rover, route, opts) {
+    const { VEHICLES, STORM, PLANET, ls = 251, lat = 0, tau = 0.6, driveHoursPerSol, tr = false } = opts;
+    const eff = (VEHICLES && VEHICLES.effects) || {};
+    const gravity = PLANET && PLANET.gravityMs2 && PLANET.gravityMs2.value > 0 ? PLANET.gravityMs2.value : DEFAULT_MARS_G;
+    const solH = solHoursOf(PLANET);
+    const km = Math.max(0, +route.km || 0);
+    const totalMassKg = (rover.baseMassKg ? rover.baseMassKg.value : 1000) + (rover.extraLoadKg ? (rover.extraLoadKg.default || 0) : 0);
+    const speedKmh = rover.speedKmh ? rover.speedKmh.default : 0.1;
+    const driveH = driveHoursOf(rover, driveHoursPerSol);
+    const slopeLimitDeg = rover.slopeLimitDeg ? rover.slopeLimitDeg.value : 15;
+    const pwr = rover.power || {};
+    const powerMode = pwr.defaultMode || (pwr.mode && pwr.mode.value) || 'battery';
+    const hotelW = pwr.hotelPowerW ? pwr.hotelPowerW.value : 60;
+
+    const looseFrac = km > 0 ? Math.max(0, Math.min(1, (route.dustKm || 0) / km)) : 0;
+    const tiMult = 1 + 0.9 * sinkageMassRatio(totalMassKg, eff) * looseFrac; // 0.9 = loose-dust drag (1.9x) at full mass ratio
+    const effSlopeLimit = Math.max(5, slopeLimitDeg - 2.5 * looseFrac);
+    const meanSlope = Math.max(0, +route.meanSlope || 0);
+    const slopeFactor = Math.max(0.25, 1 - 0.65 * (meanSlope / effSlopeLimit));
+    const terrainMobility = Math.max(0.18, Math.min(1, slopeFactor / Math.sqrt(tiMult)));
+    const effSpeedKmh = speedKmh * terrainMobility;
+
+    const massCoeff = eff.massEnergyCoeffWhPerKgKm ? eff.massEnergyCoeffWhPerKgKm.value : 0.28;
+    const gradeEta = eff.gradeWorkEfficiency ? eff.gradeWorkEfficiency.value : 0.65;
+    // Exact climb work from the profile (m*g*dh/eta), not mean-slope * distance. Descent regeneration is ignored.
+    const climbWhTotal = (totalMassKg * gravity * Math.max(0, route.totalAscentM || 0)) / (3600 * gradeEta);
+    const climbWhKm = km > 0 ? climbWhTotal / km : 0;
+
+    const temp = STORM && STORM.surfaceTempC
+      ? STORM.surfaceTempC(lat, ls, route.meanTi != null ? route.meanTi : 215, route.meanElevM != null ? route.meanElevM : 0, tau)
+      : { mean: -60 };
+    const heaterBase = eff.heaterBaseTempC ? eff.heaterBaseTempC.value : 0;
+    const heaterCoeff = eff.nuclearHeaterWPerKgDegC ? eff.nuclearHeaterWPerKgDegC.value : 0.0018;
+    const heaterW = Math.max(0, heaterBase - temp.mean) * heaterCoeff * totalMassKg;
+
+    const tractionWhKm = totalMassKg * massCoeff * tiMult + climbWhKm;
+    const hotelWhKm = (hotelW + heaterW) / Math.max(0.003, effSpeedKmh);
+    const effWhKm = tractionWhKm + hotelWhKm;
+    const totalKwh = (effWhKm * km) / 1000;
+
+    let kmPerSol = effSpeedKmh * driveH;
+    let limitedBy = 'drive';
+    let chargesRequired = null;
+    const dailySolarKwhM2 = STORM && STORM.dailySolar ? STORM.dailySolar(lat, tau, ls) : 2.2;
+    if (powerMode === 'nuclear') {
+      const genW = pwr.ratedPowerW ? pwr.ratedPowerW.value : 110;
+      const coldOverhead = Math.max(0, heaterW - hotelW * 0.5);
+      const thermalDriveFactor = Math.max(0.40, 1 - coldOverhead / Math.max(120, genW * 3.5));
+      const kin = effSpeedKmh * driveH * thermalDriveFactor;
+      const energy = Math.max(0, genW * solH - hotelW * Math.max(0, solH - driveH)) / Math.max(1, effWhKm);
+      kmPerSol = Math.min(kin, energy);
+      limitedBy = energy < kin ? 'power' : 'drive';
+    } else if (powerMode === 'solar') {
+      const solarWh = dailySolarKwhM2 * 1000 * (pwr.solarAreaM2 ? pwr.solarAreaM2.value : 0.22) * (eff.solarPanelEfficiency ? eff.solarPanelEfficiency.value : 0.26);
+      const kin = effSpeedKmh * driveH * Math.max(0.15, Math.min(1.15, dailySolarKwhM2 / 2.5));
+      const energy = solarWh / Math.max(1, effWhKm);
+      kmPerSol = Math.min(kin, energy);
+      limitedBy = energy < kin ? 'power' : 'drive';
+    } else {
+      const capKwh = pwr.batteryCapacityKwh ? pwr.batteryCapacityKwh.value : 60;
+      chargesRequired = km > 0 ? Math.max(1, Math.ceil(totalKwh / capKwh)) : 0;
+    }
+    kmPerSol = Math.max(1e-4, kmPerSol);
+    const sols = km > 0 ? Math.max(1, Math.ceil(km / kmPerSol)) : 0;
+
+    return {
+      roverId: rover.id,
+      roverName: tr ? (rover.name_tr || rover.name) : rover.name,
+      isConcept: !!rover.concept,
+      powerMode,
+      driveHoursPerSol: driveH,
+      kmPerSol: +kmPerSol.toFixed(3),
+      sols,
+      limitedBy,
+      totalKwh: +totalKwh.toFixed(1),
+      tractionKwh: +((totalMassKg * massCoeff * tiMult * km) / 1000).toFixed(1),
+      climbKwh: +(climbWhTotal / 1000).toFixed(1),
+      hotelKwh: +(((hotelW + heaterW) / Math.max(0.003, effSpeedKmh)) * km / 1000).toFixed(1),
+      chargesRequired,
+      batteryKwh: pwr.batteryCapacityKwh ? pwr.batteryCapacityKwh.value : null,
+      terrainMobility: +terrainMobility.toFixed(2),
+      effSpeedKmh: +effSpeedKmh.toFixed(3),
+      slopeLimitDeg: +effSlopeLimit.toFixed(1),
+      exceedsSlopeLimit: (+route.maxSlope || 0) > effSlopeLimit,
+      lsDeg: Math.round(ls),
+    };
+  }
+
+  /**
+   * Simple survival power balance for one vehicle class during a dust storm (Dust-storm tab).
+   * Survival load = hotel + survival heater, around the clock. Solar: clean panels at storm-peak tau
+   * (optimistic: no dust-on-panel loss, no battery model). Nuclear: MMRTG output, independent of dust.
+   * Battery-only: how many sols the pack lasts versus the storm length.
+   * env: { lat, ls, tauPeak, storm: {riseSols, holdSols, decaySols}, VEHICLES, STORM, PLANET }
+   */
+  function roverStormPower(rover, env) {
+    const { VEHICLES, STORM, PLANET, lat = 0, ls = 251, tauPeak = 8 } = env;
+    const eff = (VEHICLES && VEHICLES.effects) || {};
+    const solH = solHoursOf(PLANET);
+    const pwr = rover.power || {};
+    const mode = pwr.defaultMode || (pwr.mode && pwr.mode.value) || 'battery';
+    const mass = (rover.baseMassKg ? rover.baseMassKg.value : 1000) + (rover.extraLoadKg ? (rover.extraLoadKg.default || 0) : 0);
+    const hotelW = pwr.hotelPowerW ? pwr.hotelPowerW.value : 60;
+    const st = env.storm || { riseSols: 10, holdSols: 40, decaySols: 30 };
+    const stormSols = st.riseSols + st.holdSols + st.decaySols;
+    const temp = STORM && STORM.surfaceTempC ? STORM.surfaceTempC(lat, ls, 215, 0, tauPeak) : { mean: -60 };
+    const heaterBase = eff.heaterBaseTempC ? eff.heaterBaseTempC.value : 0;
+    const heaterCoeff = eff.nuclearHeaterWPerKgDegC ? eff.nuclearHeaterWPerKgDegC.value : 0.0018;
+    // An MMRTG rejects ~2 kW of heat that keeps the rover warm for free, so no electrical survival
+    // heating is charged to it; solar and battery vehicles must pay for survival heat from their own power.
+    const heaterW = mode === 'nuclear' ? 0 : Math.max(0, heaterBase - temp.mean) * heaterCoeff * mass;
+    const loadW = hotelW + heaterW;
+    const loadWhSol = loadW * solH;
+    let genWhSol = 0;
+    let autonomySols = null;
+    if (mode === 'nuclear') {
+      genWhSol = (pwr.ratedPowerW ? pwr.ratedPowerW.value : 110) * solH;
+    } else if (mode === 'solar') {
+      const area = pwr.solarAreaM2 ? pwr.solarAreaM2.value : 0.22;
+      const eta = eff.solarPanelEfficiency ? eff.solarPanelEfficiency.value : 0.26;
+      genWhSol = (STORM && STORM.dailySolar ? STORM.dailySolar(lat, tauPeak, ls) : 0) * 1000 * area * eta;
+    } else {
+      const capWh = (pwr.batteryCapacityKwh ? pwr.batteryCapacityKwh.value : 60) * 1000;
+      autonomySols = loadWhSol > 0 ? capWh / loadWhSol : Infinity;
+    }
+    const survives = mode === 'battery' ? autonomySols >= stormSols : genWhSol >= loadWhSol;
+    return {
+      roverId: rover.id,
+      roverName: rover.name,
+      roverNameTr: rover.name_tr || rover.name,
+      isConcept: !!rover.concept,
+      mode,
+      genWhSol: Math.round(genWhSol),
+      loadWhSol: Math.round(loadWhSol),
+      autonomySols: autonomySols == null ? null : +autonomySols.toFixed(1),
+      stormSols,
+      survives,
     };
   }
 
@@ -579,6 +768,8 @@
   const api = {
     circleLatLons,
     computeRoverRange,
+    traverseEstimate,
+    roverStormPower,
     analyzeSite,
     createController,
   };

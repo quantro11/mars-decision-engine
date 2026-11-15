@@ -314,6 +314,14 @@
       const r = S.route, el = $('#route-stats');
       if (!el) return;
       const tr = isTr();
+      const VEH = global.MDE_VEHICLES;
+      const vehCls = VEH && VEH.classes ? VEH.classes[r.vehicle || 'manned_rover'] : null;
+      const noteEl = $('#route-vehicle-note');
+      if (noteEl) {
+        noteEl.textContent = vehCls
+          ? `${tr ? (vehCls.reference_tr || vehCls.reference) : vehCls.reference} · ${vehCls.baseMassKg.value} kg · ${vehCls.power && vehCls.power.defaultMode} · ${vehCls.speedKmh.default} km/h${vehCls.concept ? ' · ' + L(tr, 'pn.rvConcept') : ''}`
+          : '';
+      }
       if (!r.start) { el.innerHTML = `<div class="verdict">${escHtml(t('routeChooseStart', 'Choose a start point on the map.'))}</div>`; return; }
       if (!r.goal) { el.innerHTML = `<div class="verdict">${escHtml(t('routeChooseGoal', 'Now choose the destination.'))}</div>`; return; }
       if (!r.safe || !r.safe.ok) {
@@ -322,7 +330,33 @@
         announce(L(tr, 'pn.noSlopeSafeRoverRoute'), doc);
         return;
       }
-      const a = r.straight.stats, b = r.safe.stats, sols = (km) => (km / r.speed).toFixed(0);
+      const a = r.straight.stats, b = r.safe.stats;
+      // Vehicle-specific traverse estimate (distance, climb work, hotel/heater energy, km per sol).
+      const rvMode = r.travelMode !== 'marswalk';
+      const LSITE = global.MDE_LANDING_SITE;
+      let est = null;
+      if (rvMode && vehCls && LSITE && typeof LSITE.traverseEstimate === 'function') {
+        const prof = b.profile || [];
+        const mid = prof[Math.floor(prof.length / 2)] || prof[0];
+        const cv = mid ? layers.cellValues(mid.x, mid.y) : null;
+        const meanElevM = prof.length ? prof.reduce((acc, q) => acc + q.elev, 0) / prof.length : 0;
+        const tiList = prof.filter((q) => q.ti != null);
+        const meanTi = tiList.length ? tiList.reduce((acc, q) => acc + q.ti, 0) / tiList.length : 215;
+        est = LSITE.traverseEstimate(vehCls, {
+          km: b.km, totalAscentM: b.totalAscentM, meanSlope: b.meanSlope, maxSlope: b.maxSlope, dustKm: b.dustKm, meanElevM, meanTi,
+        }, {
+          VEHICLES: VEH, STORM, PLANET: global.PLANET_PROFILES && global.PLANET_PROFILES.get ? global.PLANET_PROFILES.get() : null,
+          ls: S.crisis && S.crisis.ls != null ? S.crisis.ls : 251, lat: cv ? cv.lat : 0,
+          tau: cv && cv.dust != null ? 0.5 + cv.dust * 1.4 : 0.6, driveHoursPerSol: r.driveH, tr,
+        });
+        r.speed = est.kmPerSol; // km per sol for the selected class (also used by the brief export)
+      }
+      const fmtTransit = (km, solsOverride) => {
+        const n = solsOverride != null ? solsOverride : Math.max(1, Math.ceil(km / Math.max(1e-4, r.speed)));
+        const yr = n > 668 ? ` (~${(n / 668.6).toFixed(1)} ${L(tr, 'pn.rvMarsYr')})` : '';
+        return `${n.toLocaleString('en-US')} sols${yr} @ ${r.speed} km/sol`;
+      };
+      const sols = (km) => (km / r.speed).toFixed(0);
       const cls = (s) => s > r.maxSlope ? 'bad' : s > 10 ? 'warn' : 'ok';
       const havens = b.safeHavens || [];
       const evaSim = S.evaSim || { o2UsedPct: 28, o2RemainPct: 72, battUsedPct: 24, battRemainPct: 76, co2ScrubberUsedPct: 36, returnReserveProtected: true, loadKg: 15, metabolicKcalH: 278, metabolicW: 323, walkbackRadiusM: 1380, effSpeedKmh: 2.4 };
@@ -356,9 +390,16 @@
           ${wp.dataset ? `<div class="help note-sm"><b>${escHtml(wp.dataset)}</b>${wp.obsDate ? ` · ${escHtml(wp.obsDate)}` : ''}</div>` : ''}
         </div>`).join('');
 
+      // Spacesuit / crew rows make no sense for a robotic rover (no astronaut aboard): hide them there.
+      const hideCrew = !isMarswalk && !!vehCls && vehCls.id !== 'manned_rover';
+      const crewRows = hideCrew ? '' : `
+        <tr><td>${L(tr, 'pn.evaSortieTimeTurnaround')}</td><td>${evDir.walkHours} h/sortie</td><td class="${ev.withinEvaLimit ? 'ok' : 'warn'}"><b>${ev.walkHours} h / ${ev.maxEvaLimitH.toFixed(1)} h</b> (${ev.evaRestCount || 8} ${L(tr, 'pn.microRests')})</td></tr>
+        <tr><td>${L(tr, 'pn.plssLifeSupportO2H2o')}</td><td>O₂ ${evDir.o2UsedPct}%</td><td class="${ev.returnReserveProtected !== false ? 'ok' : 'warn'}"><b>O₂ ${ev.o2UsedG}g (${ev.o2UsedPct}%) · ${ev.waterUsedL}L H₂O · CO₂ RCA ${ev.co2ScrubberUsedPct ?? 46}%</b> · RSV ${ev.returnReserveProtected !== false ? '✓ ≥25%' : '⚠'}</td></tr>
+        <tr><td>${L(tr, 'pn.metabolicLoadWalkback')}</td><td>${evDir.metabolicKcalH} kcal/h</td><td class="ok"><b>${ev.metabolicKcalH} kcal/h</b> (${ev.metabolicW} W) · Walkback <b>${evaSim.walkbackRadiusM} m</b></td></tr>
+        <tr><td>${L(tr, 'pn.radiationDoseMslRad18')}</td><td>${evDir.radDoseMsv} mSv</td><td class="ok"><b>${ev.radDoseMsv} ± ${(ev.radDoseMsv * 0.188).toFixed(3)} mSv</b>/sortie (${ev.corridorRadDoseMsv} mSv tol)</td></tr>`;
       el.innerHTML = `
         <div class="marswalk-mode-banner ${isMarswalk ? 'active' : ''}">
-          <b>${isMarswalk ? (L(tr, 'pn.activeModeAstronautFootEva', [evaSpeedKmh.toFixed(1)])) : (L(tr, 'pn.activeModePressurizedRoverKm', [r.speed]))}</b>
+          <b>${isMarswalk ? (L(tr, 'pn.activeModeAstronautFootEva', [evaSpeedKmh.toFixed(1)])) : (est ? L(tr, 'pn.rvBanner', [est.roverName, est.kmPerSol, est.driveHoursPerSol, L(tr, est.limitedBy === 'power' ? 'pn.rvLimPower' : est.limitedBy === 'drive' ? 'pn.rvLimDrive' : 'pn.rvLimBattery')]) : (L(tr, 'pn.activeModePressurizedRoverKm', [r.speed])))}</b>
           <span class="badge-mode badge-live">${L(tr, 'pn.scienceGain100', [sciScore])}</span>
         </div>
         <div class="help note-sm">${L(tr, 'pn.globalARunsOnThe')}</div>
@@ -368,17 +409,16 @@
         <tr><td>${L(tr, 'pn.peakSlopeModelLimit', [r.maxSlope])}</td><td class="${cls(a.maxSlope)}">${a.maxSlope.toFixed(1)}°</td><td class="${cls(b.maxSlope)}">${b.maxSlope.toFixed(1)}°</td></tr>
         <tr><td>${L(tr, 'pn.meanSlopeHazardSummary')}</td><td>${a.meanSlope.toFixed(1)}°</td><td>${b.meanSlope.toFixed(1)}° <small>(${escHtml(hzSummary)})</small></td></tr>
         <tr><td>${L(tr, 'pn.slope10LooseDust100')}</td><td>${a.hazardKm.toFixed(0)} / ${(a.dustKm || 0).toFixed(0)} km</td><td>${b.hazardKm.toFixed(0)} / ${(b.dustKm || 0).toFixed(0)} km</td></tr>
-        <tr><td>${isMarswalk ? L(tr, 'pn.footEvaPaceTotalTime') : L(tr, 'pn.pressurizedRoverTransit')}</td><td>${isMarswalk ? `${(a.km / evaSpeedKmh).toFixed(1)} h @ ${evaSpeedKmh.toFixed(1)} km/h` : `${sols(a.km)} sols @ ${r.speed} km/sol`}</td><td><b>${isMarswalk ? `${(b.km / evaSpeedKmh).toFixed(1)} h (${ev.evaSorties}×≤8h EVA)` : `${sols(b.km)} sols @ ${r.speed} km/sol`}</b></td></tr>
-        <tr><td>${L(tr, 'pn.evaSortieTimeTurnaround')}</td><td>${evDir.walkHours} h/sortie</td><td class="${ev.withinEvaLimit ? 'ok' : 'warn'}"><b>${ev.walkHours} h / ${ev.maxEvaLimitH.toFixed(1)} h</b> (${ev.evaRestCount || 8} ${L(tr, 'pn.microRests')})</td></tr>
-        <tr><td>${L(tr, 'pn.plssLifeSupportO2H2o')}</td><td>O₂ ${evDir.o2UsedPct}%</td><td class="${ev.returnReserveProtected !== false ? 'ok' : 'warn'}"><b>O₂ ${ev.o2UsedG}g (${ev.o2UsedPct}%) · ${ev.waterUsedL}L H₂O · CO₂ RCA ${ev.co2ScrubberUsedPct ?? 46}%</b> · RSV ${ev.returnReserveProtected !== false ? '✓ ≥25%' : '⚠'}</td></tr>
-        <tr><td>${L(tr, 'pn.metabolicLoadWalkback')}</td><td>${evDir.metabolicKcalH} kcal/h</td><td class="ok"><b>${ev.metabolicKcalH} kcal/h</b> (${ev.metabolicW} W) · Walkback <b>${evaSim.walkbackRadiusM} m</b></td></tr>
-        <tr><td>${L(tr, 'pn.returnRouteSafetyCorridor')}</td><td>—</td><td class="ok"><b>${retInfo.returnKm.toFixed(0)} km</b> (+${retInfo.returnAscentM} / -${retInfo.returnDescentM} m · ≥25% RSV)</td></tr>
-        <tr><td>${L(tr, 'pn.radiationDoseMslRad18')}</td><td>${evDir.radDoseMsv} mSv</td><td class="ok"><b>${ev.radDoseMsv} ± ${(ev.radDoseMsv * 0.188).toFixed(3)} mSv</b>/sortie (${ev.corridorRadDoseMsv} mSv tol)</td></tr>
+        <tr><td>${isMarswalk ? L(tr, 'pn.footEvaPaceTotalTime') : (est ? L(tr, 'pn.rvTransit', [est.roverName]) : L(tr, 'pn.pressurizedRoverTransit'))}</td><td>${isMarswalk ? `${(a.km / evaSpeedKmh).toFixed(1)} h @ ${evaSpeedKmh.toFixed(1)} km/h` : (est ? fmtTransit(a.km) : `${sols(a.km)} sols @ ${r.speed} km/sol`)}</td><td><b>${isMarswalk ? `${(b.km / evaSpeedKmh).toFixed(1)} h (${ev.evaSorties}×≤8h EVA)` : (est ? fmtTransit(b.km, est.sols) : `${sols(b.km)} sols @ ${r.speed} km/sol`)}</b></td></tr>
+        ${est ? `<tr><td>${L(tr, 'pn.rvEnergy')}</td><td>—</td><td><b>${est.totalKwh} kWh</b> <small>(${L(tr, 'pn.rvEnergySplit', [est.tractionKwh, est.climbKwh, est.hotelKwh])}${est.chargesRequired != null ? L(tr, 'pn.rvCharges', [est.chargesRequired, est.batteryKwh]) : ''})</small></td></tr>
+        <tr><td>${L(tr, 'pn.rvSlopeCheck')}</td><td>—</td><td class="${est.exceedsSlopeLimit ? 'bad' : 'ok'}"><b>${est.exceedsSlopeLimit ? L(tr, 'pn.rvSlopeBad', [b.maxSlope.toFixed(1), est.slopeLimitDeg]) : L(tr, 'pn.rvSlopeOk', [b.maxSlope.toFixed(1), est.slopeLimitDeg])}</b>${est.isConcept ? ` · <small>${L(tr, 'pn.rvConcept')}</small>` : ''}</td></tr>` : ''}
+        ${crewRows}
+        <tr><td>${L(tr, 'pn.returnRouteSafetyCorridor')}</td><td>—</td><td class="ok"><b>${retInfo.returnKm.toFixed(0)} km</b> (+${retInfo.returnAscentM} / -${retInfo.returnDescentM} m${hideCrew ? '' : ' · ≥25% RSV'})</td></tr>
         <tr><td>${L(tr, 'pn.trnAutonavMglXgds5')}</td><td>Prior ${evaSim.orbitalConfidencePct ?? 34}% (${evaSim.orbitalHazardHits ?? 0} risk)</td><td class="ok"><b>${evaSim.assimilatedConfidencePct ?? 95}%</b> · 5D ${evaSim.domainScores ? evaSim.domainScores.composite : 78}/100 · MGL ±${evaSim.navStack && evaSim.navStack.mgl ? evaSim.navStack.mgl.mglCorrectedErrorM : 1.8}m</td></tr>
         <tr><td>${L(tr, 'pn.routeScienceGainScore')}</td><td>—</td><td class="ok"><b>${sciScore} / 100 pts</b> (${sciWps.length} POI)</td></tr></table>
         <div class="verdict ${a.maxSlope > r.maxSlope ? 'bad' : 'ok'}">${a.maxSlope > r.maxSlope ? (L(tr, 'pn.directPathCrossesTerrainModel', [a.maxSlope.toFixed(1), r.maxSlope, (b.km - a.km).toFixed(0)])) : (L(tr, 'pn.directPathSatisfiesModelMaximum'))}</div>
         ${sciWps.length ? `<div class="sec-head mt-sm"><h2>${L(tr, 'pn.scienceWaypointsAlongRouteCoord')}</h2></div><div class="eva-wp-list">${sciRowsHtml}</div>` : ''}
-        <div class="help haven-note"><b>${isMarswalk ? (L(tr, 'pn.footEvaRestTurnaroundPlan')) : (L(tr, 'pn.rover200KmRestStops'))}: </b>${escHtml(havenStr)}</div>
+        ${hideCrew ? '' : `<div class="help haven-note"><b>${isMarswalk ? (L(tr, 'pn.footEvaRestTurnaroundPlan')) : (L(tr, 'pn.rover200KmRestStops'))}: </b>${escHtml(havenStr)}</div>`}
         <div class="hint mt-sm">${L(tr, 'pn.elevationProfileAlongTheSafe')} · ${(r.ms || 0).toFixed(0)} ms, ${r.safe.path.length} ${L(tr, 'pn.cells')}</div>${CHARTS.profileSVG(b.profile)}`;
       el.querySelectorAll('.route-poi-card').forEach(card => {
         const openPoi = () => { if (onOpenHud) onOpenHud(+card.dataset.poiIdx); };
@@ -395,17 +435,26 @@
       if (!c.site) {
         if ($('#crisis-site')) $('#crisis-site').textContent = t('crisisChooseSite', 'Choose a site on the map');
         el.innerHTML = '';
+        const cvEmpty = $('#crisis-verdict');
+        if (cvEmpty) { cvEmpty.className = 'crisis-verdict'; cvEmpty.textContent = L(tr, 'pn.cvPrompt'); }
         return;
       }
       const v = layers.cellValues(c.site.x, c.site.y), nr = layers.nearestRegion(v.lat, v.lon);
       if ($('#crisis-site')) $('#crisis-site').textContent = `${nr.distDeg < 6 ? nr.region.name : L(tr, 'pn.nearRegion', [nr.region.name])} · ${fmtLat(v.lat)}, ${fmtLon(v.lon)}`;
+      const stormCfg = { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 };
       const res = STORM.simulate({
         lat: v.lat, ls: c.ls, ti: v.ti, elev: v.elev, panelArea: c.area, efficiency: 0.2, consumption: c.cons, capacity: c.batt, kilopower: c.kp, sols: 120,
-        storm: { tau0: 0.5, tauPeak: c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
+        storm: stormCfg,
       });
       const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, c.ls);
-      const peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak, c.ls);
       const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
+      // Every "peak storm" number below comes from the simulated sol with the weakest solar output at full
+      // storm haze, so it includes the season at that sol, dust on the panels and the heaters, i.e. exactly
+      // what decides survival (the old text re-derived it from the start season and clean panels).
+      const peakRows = res.rows.filter((row) => row.tau >= c.tauPeak - 1e-9);
+      const pk = (peakRows.length ? peakRows : res.rows).reduce((lo, row) => (row.solar < lo.solar ? row : lo));
+      const peakSolar = pk.solar;
+      const stormNightC = Math.min(...res.rows.map((row) => row.tempNight));
       const sTemp = STORM.surfaceTempC(v.lat, c.ls, v.ti, v.elev, 0.5);
       const pTherm = STORM.thermalDemandKw(v.lat, c.ls, v.ti, v.elev, 0.5);
       const spe = SCORING.calcSPE(v.elev, c.regolith ?? 1.5);
@@ -421,7 +470,7 @@
       const simWith = (over) => STORM.simulate({
         lat: v.lat, ls: c.ls, ti: v.ti, elev: v.elev, panelArea: over.area ?? c.area, efficiency: 0.2,
         consumption: over.cons ?? c.cons, capacity: over.batt ?? c.batt, kilopower: over.kp ?? c.kp, sols: 120,
-        storm: { tau0: 0.5, tauPeak: over.tauPeak ?? c.tauPeak, startSol: 20, riseSols: 10, holdSols: 40, decaySols: 30 },
+        storm: { ...stormCfg, tauPeak: over.tauPeak ?? c.tauPeak },
       }).blackoutSol;
       const bo = (sol) => (sol === null ? L(tr, 'pn.sensSurvives') : `sol ${sol}`);
       const sensRows = [
@@ -440,12 +489,14 @@
         </div>`;
 
       const verdict = res.blackoutSol !== null
-        ? `<div class="summary-big bad">${escHtml(t('stormBlackout', 'Power blackout on sol'))} ${res.blackoutSol}</div><div class="help">${L(tr, 'pn.batteryReserveExhaustedSolsAfter', [res.blackoutSol - 20, (peakSolar + nuc).toFixed(0), c.cons])}</div>`
-        : `<div class="summary-big ok">${escHtml(t('stormSurvives', 'Base survives the storm'))}</div><div class="help">${L(tr, 'pn.minimumBatteryReserveKwhNet', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0), (peakSolar + nuc - c.cons).toFixed(0)])}</div>`;
+        ? `<div class="summary-big bad">${escHtml(t('stormBlackout', 'Power blackout on sol'))} ${res.blackoutSol}</div><div class="help">${res.blackoutSol < stormCfg.startSol
+            ? L(tr, 'pn.blackoutBeforeStorm', [res.blackoutSol, (clearSolar + nuc).toFixed(0), c.cons])
+            : L(tr, 'pn.batteryReserveExhaustedSolsAfter', [res.blackoutSol - stormCfg.startSol, (peakSolar + nuc).toFixed(0), c.cons])}</div>`
+        : `<div class="summary-big ok">${escHtml(t('stormSurvives', 'Base survives the storm'))}</div><div class="help">${L(tr, 'pn.minimumBatteryReserveKwhNet', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0), pk.net.toFixed(0)])}</div>`;
 
       const thermVerdict = res.freezeSol !== null
         ? `<div class="summary-big bad mt-sm">${L(tr, 'pn.habitatInteriorBelow0C', [res.freezeSol])}</div><div class="help">${L(tr, 'pn.notEnoughHeatOncePower', [res.minHabTemp])}</div>`
-        : `<div class="summary-big ok mt-sm">${L(tr, 'pn.thermalLifeSupportMaintained')}</div><div class="help">${L(tr, 'pn.internalHabitatComfort20C', [sTemp.night])}</div>`;
+        : `<div class="summary-big ok mt-sm">${L(tr, 'pn.thermalLifeSupportMaintained')}</div><div class="help">${L(tr, 'pn.internalHabitatComfort20C', [stormNightC])}</div>`;
 
       const liveSpace = global.MDE_LIVE_STATE && global.MDE_LIVE_STATE.space;
       const liveCmeRow = liveSpace && liveSpace.mode === 'live'
@@ -482,6 +533,38 @@
           <div class="help note-sm">${escHtml(tr ? mlPred.peakHorizon.actionTr : mlPred.peakHorizon.actionEn)}</div>
         </div>` : '';
 
+      // Always-visible survive / not-survive strip directly under the sliders (sticky while scrolling).
+      const cvEl = $('#crisis-verdict');
+      if (cvEl) {
+        const powerOk = res.blackoutSol === null, heatOk = res.freezeSol === null, baseOk = powerOk && heatOk;
+        const doseCls = spe.shieldedDoseMsv <= 100 ? 'ok' : spe.shieldedDoseMsv <= 250 ? 'warn' : 'bad';
+        const mark = (ok) => (ok ? '✓' : '✕');
+        const LSITE = global.MDE_LANDING_SITE, VEHS = global.MDE_VEHICLES;
+        let roverHtml = '';
+        if (LSITE && typeof LSITE.roverStormPower === 'function' && VEHS && VEHS.classes) {
+          const planet = global.PLANET_PROFILES && global.PLANET_PROFILES.get ? global.PLANET_PROFILES.get() : null;
+          roverHtml = Object.values(VEHS.classes).map((cls) => {
+            const rp = LSITE.roverStormPower(cls, { VEHICLES: VEHS, STORM, PLANET: planet, lat: v.lat, ls: c.ls, tauPeak: c.tauPeak, storm: stormCfg });
+            const detail = rp.mode === 'nuclear'
+              ? L(tr, 'pn.cvRvNuclear', [rp.genWhSol, rp.loadWhSol])
+              : rp.mode === 'solar'
+                ? L(tr, 'pn.cvRvSolar', [rp.genWhSol, rp.loadWhSol])
+                : L(tr, 'pn.cvRvBattery', [rp.autonomySols, rp.stormSols]);
+            const nm = tr ? rp.roverNameTr : rp.roverName;
+            return `<span class="cv-chip ${rp.survives ? 'ok' : 'bad'}"><b>${mark(rp.survives)} ${escHtml(nm)}</b> ${escHtml(detail)}${rp.isConcept ? ' *' : ''}</span>`;
+          }).join('');
+        }
+        cvEl.className = `crisis-verdict ${baseOk ? 'ok' : 'bad'}`;
+        cvEl.innerHTML = `
+          <div class="cv-head">${mark(baseOk)} ${L(tr, baseOk ? 'pn.cvSurvives' : 'pn.cvFails')}</div>
+          <div class="cv-row">
+            <span class="cv-chip ${powerOk ? 'ok' : 'bad'}"><b>${mark(powerOk)} ${L(tr, 'pn.cvPower')}</b> ${powerOk ? L(tr, 'pn.cvPowerOk', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0)]) : L(tr, 'pn.cvPowerFail', [res.blackoutSol])}</span>
+            <span class="cv-chip ${heatOk ? 'ok' : 'bad'}"><b>${mark(heatOk)} ${L(tr, 'pn.cvHeat')}</b> ${heatOk ? L(tr, 'pn.cvHeatOk') : L(tr, 'pn.cvHeatFail', [res.freezeSol])}</span>
+            <span class="cv-chip ${doseCls}"><b>${mark(doseCls !== 'bad')} ${L(tr, 'pn.cvShelter')}</b> ${L(tr, 'pn.cvShelterTxt', [spe.shieldedDoseMsv, (c.regolith ?? 1.5).toFixed(1)])}</span>
+          </div>
+          ${roverHtml ? `<div class="cv-row"><span class="cv-lbl">${L(tr, 'pn.cvVehicles')}</span>${roverHtml}</div><div class="help note-sm cv-note">${L(tr, 'pn.cvModelNote')}</div>` : ''}`;
+      }
+
       el.innerHTML = `${verdict}
         ${thermVerdict}
         ${driverHtml}
@@ -490,7 +573,7 @@
         <div class="kv"><span>${L(tr, 'pn.surfaceTempApprox')}</span><b>${L(tr, 'pn.night')} ${sTemp.night}°C · ${L(tr, 'pn.mean')} ${sTemp.mean}°C</b></div>
         <div class="kv"><span>${L(tr, 'pn.habitatHeatLoss')}</span><b>${pTherm} kW · ${L(tr, 'pn.extraHeaters')} ${Math.max(...res.rows.map(r => r.heater)).toFixed(0)} kWh/sol max</b></div>
         <div class="kv"><span>${L(tr, 'pn.clearSkySolar05')}</span><b>${clearSolar.toFixed(0)} kWh/sol</b></div>
-        <div class="kv"><span>${L(tr, 'pn.peakStormSolar')} ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${res.peakSolarDropPct.toFixed(0)}%)</b></div>
+        <div class="kv"><span>${L(tr, 'pn.peakStormSolar')} ${c.tauPeak.toFixed(1)}</span><b>${peakSolar.toFixed(0)} kWh/sol (−${Math.max(0, 100 * (1 - peakSolar / Math.max(1e-9, clearSolar))).toFixed(0)}%)</b></div>
         <div class="kv"><span>${L(tr, 'pn.panelDustAfterSols', [res.rows.length])}</span><b>−${res.postStormSolarLossPct}% (${L(tr, 'pn.noCleaningEventsAssumed')})</b></div>
         <div class="kv"><span>${L(tr, 'pn.kilopowerBaseload')}</span><b>${nuc.toFixed(0)} kWh/sol</b></div>
         <div class="kv kv-top"><span>${L(tr, 'pn.designBasisSpeOnSurface')}</span><b>${spe.unshieldedDoseMsv} mSv</b></div>

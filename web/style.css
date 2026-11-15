@@ -721,3 +721,15 @@ canvas:focus-visible { outline-offset: -3px; }
 @media (max-width: 680px) {
   .tac-workspace { left: 6px; right: 6px; bottom: 8px; width: auto; max-width: calc(100vw - 12px); max-height: 62vh; }
 }
+
+/* Dust-storm: always-visible survive / not-survive strip directly under the sliders */
+.crisis-verdict { position: sticky; bottom: 0; z-index: 6; margin: 12px 0 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--ink-3); border: 1px solid var(--hair-2); box-shadow: 0 -10px 18px rgba(0, 0, 0, 0.35); font-size: 12px; line-height: 1.45; color: var(--muted); }
+.crisis-verdict.ok { border-color: var(--ok); }
+.crisis-verdict.bad { border-color: var(--bad); }
+.cv-head { font: 600 16px/1.25 var(--serif); margin-bottom: 6px; }
+.crisis-verdict.ok .cv-head { color: var(--ok); }
+.crisis-verdict.bad .cv-head { color: var(--bad); }
+.cv-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 4px; font: 11px/1.45 var(--mono); }
+.cv-lbl { color: var(--dim); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
+.cv-chip.ok b { color: var(--ok); } .cv-chip.warn b { color: var(--warn); } .cv-chip.bad b { color: var(--bad); }
+.cv-note { margin-top: 6px; }
