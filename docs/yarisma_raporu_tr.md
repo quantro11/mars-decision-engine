@@ -4,7 +4,7 @@
 
 **Martiap**, Mars'ta insanlı üs kurulumu için üç soruyu gerçek NASA/USGS yörünge verisi üzerinde yanıtlar:
 **nereye inmeli**, **oradan ne kadar uzağa güvenle gidilebilir** ve **üs bir küresel toz fırtınasında ayakta kalır mı**.
-Canlı sürüm: <https://mars-decision-engine.vercel.app>.
+Canlı sürüm: <https://martiap.space>.
 
 Uygulama tek bir akıştan ve dört sekmeden oluşur:
 1. **İniş yeri:** Görev ön ayarları ve 8 kriterin ağırlıkları (MOLA rakımı, %90'lık eğim, SWIM 2.0 buz tutarlılığı, pürüzlülük, enlem, TES termal atalet, MSL-RAD kalibreli GCR dozu, doğrulanmamış mağara adayı mesafesi), NASA HLS-2015 eleme kuralları, ilk 5 aday ve 100 koşulu Monte Carlo duyarlılık testi (%95 Wilson aralığı). Haritaya iğne konunca uyumluluk puanı, puanı düşüren etkenler ve her gezgin sınıfı (Mini / Laboratuvar / İnsanlı) için menzil çemberi gösterilir.

@@ -4,7 +4,7 @@
 
 Martiap helps a mission team answer three questions on real NASA orbital data: **where to land**, **how far crews and rovers
 can safely travel from there**, and **whether the base survives a global dust storm**. Live at
-<https://mars-decision-engine.vercel.app>.
+<https://martiap.space>.
 
 ![screenshot](docs/screenshot_score.png)
 
