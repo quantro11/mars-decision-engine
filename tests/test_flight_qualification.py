@@ -1,5 +1,5 @@
 """NASA Flight Software Qualification Test Suite (run: python tests/test_flight_qualification.py).
-NASA NPR 7150.2D Class A/B Verification & FDIR Automated Stress Testing.
+FDIR automated stress tests (practice checks patterned after NPR 7150.2D; not a formal verification).
 """
 
 import os

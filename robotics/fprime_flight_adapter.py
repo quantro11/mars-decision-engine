@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Quantro Flight Systems · JPL F Prime (F') & NASA cFS Flight Software Interface
-NASA NPR 7150.2D Class A/B Flight Software Compatibility Layer
+Flight-software compatibility layer (patterned after NPR 7150.2D practices; not certified or flight qualified)
 
 Provides deterministic command and telemetry serialization, CRC-32 frame integrity,
 bounded-execution flight dispatching, and standard CCSDS/F Prime channel mapping.
