@@ -26,6 +26,7 @@
     './ui/eva_render.js',
     './ui/eva.js',
     './ui/panels.js',
+    './ui/landing_site.js',
     './ui/map2d.js',
     './ui/habitability.js',
     './ui/brief.js',

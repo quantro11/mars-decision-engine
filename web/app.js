@@ -17,7 +17,7 @@
   const W = META.width, H = META.height;
   const globeCanvas = $('#globe');
   const globe = (window.GLOBE3D && globeCanvas) ? window.GLOBE3D.createGlobe(globeCanvas) : null;
-  let viewport = null, panels = null, eva = null;
+  let viewport = null, panels = null, eva = null, landingTool = null;
 
   // ------------------------------------------------------------ theme & language
   function applyTheme(theme) {
@@ -38,7 +38,7 @@
     if ($('#btn-relief') && globe) $('#btn-relief').textContent = `${t('relief')} ${globe.state.exaggeration}×`;
     if ($('#ls-v')) $('#ls-v').textContent = `${S.crisis.ls}° · ${(I18N.trDomain ? I18N.trDomain(STORM.seasonName(S.crisis.ls)) : STORM.seasonName(S.crisis.ls)).split(' /')[0]}`;
     if (panels) { panels.buildPresets(); panels.buildSliders(); panels.renderCandidates(); if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); panels.renderRoute(); if (S.crisis.site) panels.runCrisis(); }
-    if (eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onLangChange();
+    if (eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onLangChange(); if (landingTool) landingTool.onLangChange();
     if (globalThis.MDE_LIVE_STATE && renderHabitability) renderHabitability(false, { useCache: true });
     if (viewport) viewport.draw();
   }
@@ -51,7 +51,7 @@
     viewMode: '2d',
     mode: 'score', preset: 'balanced', weights: { ...SCORING.PRESETS.balanced.w }, hard: true, iceBand: 'ice15',
     overlay: 'score', opacity: 0.45, showRegions: true, showEZ: false, globeOverlay: false,
-    view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null,
+    view: { scale: 1, tx: 0, ty: 0 }, score: new Float32Array(W * H), candidates: [], selected: null, customLanding: null,
     sensSpread: 0.2, agg: 'sum',
     route: { start: null, goal: null, safe: null, straight: null, maxSlope: 15, k: 0.3, speed: 20, ms: 0, travelMode: 'rover', viaSciencePoi: true },
     crisis: { site: null, ls: 251, tauPeak: 8, area: 1000, cons: 300, batt: 2000, kp: 0, regolith: 1.5 },
@@ -107,7 +107,7 @@
     if ($('#sens-result')) $('#sens-result').innerHTML = '';
     viewport.markOverlayDirty();
     panels.renderCandidates();
-    if (S.selected) panels.renderDetail(S.selected.x, S.selected.y);
+    if (S.selected) panels.renderDetail(S.selected.x, S.selected.y); if (landingTool) landingTool.refresh();
     viewport.draw();
     if ($('#hud-coord')) $('#hud-coord').dataset.t = elapsedMs.toFixed(0);
     if (candidates[0]) panels.announce(`Scoring ready: top candidate score ${candidates[0].score.toFixed(2)}.`);
@@ -181,8 +181,7 @@
     const si = $('#speed'), sv = $('#speed-v'); if (si) si.disabled = rm === 'marswalk'; if (sv) sv.textContent = rm === 'marswalk' ? '2.4 km/h (Foot EVA)' : S.route.speed + ' km/sol';
     panels.renderRoute(); if (viewport) viewport.draw();
   }
-  panels = window.MDE_PANELS.createPanels({
-    doc: document, S, layers, SCORING, STORM, FMT, CHARTS,
+  const panelCbs = {
     onRescore: rescore, onSelect: select, onUseCrisis: setCrisisSite,
     onUseRoute: (x, y) => { setMode('route'); S.route.start = { x, y }; S.route.goal = null; S.route.safe = S.route.straight = null; panels.renderRoute(); viewport.draw(); },
     onPlanMarswalk: (x, y) => {
@@ -199,7 +198,8 @@
       if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 6.0); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
     onGlobeFly: (lat, lon) => { if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon); viewport.schedule3D(); } },
-  });
+  };
+  panels = window.MDE_PANELS.createPanels({ doc: document, S, layers, SCORING, STORM, FMT, CHARTS, ...panelCbs });
 
   if (window.MDE_EVA) {
     eva = window.MDE_EVA.createEvaController({
@@ -213,17 +213,15 @@
     eva.bindControls();
   }
   if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.createController({ doc: document, S, layers, onToast: (msg) => setHudHint(msg, true) });
+  if (window.MDE_LANDING_SITE) landingTool = window.MDE_LANDING_SITE.createController({ doc: document, S, layers, SCORING, STORM, VEHICLES: window.MDE_VEHICLES, PLANET: window.PLANET_PROFILES ? window.PLANET_PROFILES.get() : null, FMT, onDraw: () => viewport && viewport.draw(), onUseEva: panelCbs.onUseEva, onPlanMarswalk: panelCbs.onPlanMarswalk, onUseCrisis: setCrisisSite });
 
   viewport = window.MDE_MAP2D.createViewport({
     doc: document, S, layers, SCORING, REGIONS, OVERLAYS, MARKERS: window.MDE_MARKERS, FMT, globe, globeCanvas,
     onStopSpin: () => { if (globe && globe.state.autoSpin) { globe.state.autoSpin = false; if ($('#btn-spin')) $('#btn-spin').classList.remove('active'); } },
     onPick: (x, y) => {
-      if (S.mode === 'route') {
-        const r = S.route;
-        if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; }
-        panels.renderRoute(); if (r.goal) computeRoute(); viewport.draw(); return;
-      }
+      if (S.mode === 'route') { const r = S.route; if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; } panels.renderRoute(); if (r.goal) computeRoute(); viewport.draw(); return; }
       if (S.mode === 'crisis') setCrisisSite(x, y);
+      if (S.mode === 'landing' && landingTool && L.elev) landingTool.openAt(x, y);
       select(x, y, null);
     },
   });
@@ -266,10 +264,10 @@
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    for (const k of ['score', 'eva', 'route', 'crisis', 'habitability']) {
+    for (const k of ['score', 'landing', 'eva', 'route', 'crisis', 'habitability']) {
       if ($('#panel-' + k)) $('#panel-' + k).classList.toggle('hidden', k !== m);
     }
-    if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'score') S.overlay = 'score';
+    if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'score' || m === 'landing') S.overlay = 'score';
     document.querySelectorAll('#overlay button').forEach(b => { const isActive = b.dataset.ov === S.overlay; b.classList.toggle('active', isActive); b.setAttribute('aria-pressed', String(isActive)); });
     updateHudLayer(); viewport.markOverlayDirty(); renderLegend();
     if (m === 'eva' && eva) eva.renderPanel(); if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);

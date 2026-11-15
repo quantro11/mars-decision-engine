@@ -406,13 +406,13 @@
       const clearSolar = c.area * 0.2 * STORM.dailySolar(v.lat, 0.5, c.ls);
       const peakSolar = c.area * 0.2 * STORM.dailySolar(v.lat, c.tauPeak, c.ls);
       const nuc = c.kp * STORM.KILOPOWER_KW * STORM.SOL_H;
-      const sTemp = STORM.surfaceTempC(v.lat, c.ls, v.ti, v.elev);
-      const pTherm = STORM.thermalDemandKw(v.lat, c.ls, v.ti, v.elev);
+      const sTemp = STORM.surfaceTempC(v.lat, c.ls, v.ti, v.elev, 0.5);
+      const pTherm = STORM.thermalDemandKw(v.lat, c.ls, v.ti, v.elev, 0.5);
       const spe = SCORING.calcSPE(v.elev, c.regolith ?? 1.5);
 
       const verdict = res.blackoutSol !== null
-        ? `<div class="summary-big bad">${escHtml(t('stormBlackout', 'Blackout on sol'))} ${res.blackoutSol}</div><div class="help">${L(tr, 'pn.batteryReserveExhaustedSolsAfter', [res.blackoutSol - 20, (peakSolar + nuc).toFixed(0), c.cons])}</div>`
-        : `<div class="summary-big ok">${escHtml(t('stormSurvives', 'Survives the storm'))}</div><div class="help">${L(tr, 'pn.minimumBatteryReserveKwhNet', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0), (peakSolar + nuc - c.cons).toFixed(0)])}</div>`;
+        ? `<div class="summary-big bad">${escHtml(t('stormBlackout', 'Power blackout on sol'))} ${res.blackoutSol}</div><div class="help">${L(tr, 'pn.batteryReserveExhaustedSolsAfter', [res.blackoutSol - 20, (peakSolar + nuc).toFixed(0), c.cons])}</div>`
+        : `<div class="summary-big ok">${escHtml(t('stormSurvives', 'Base survives the storm'))}</div><div class="help">${L(tr, 'pn.minimumBatteryReserveKwhNet', [res.minBatt.toFixed(0), (100 * res.minBatt / c.batt).toFixed(0), (peakSolar + nuc - c.cons).toFixed(0)])}</div>`;
 
       const thermVerdict = res.freezeSol !== null
         ? `<div class="summary-big bad mt-sm">${L(tr, 'pn.habitatInteriorBelow0C', [res.freezeSol])}</div><div class="help">${L(tr, 'pn.notEnoughHeatOncePower', [res.minHabTemp])}</div>`
@@ -434,11 +434,11 @@
         <div class="marswalk-micro-card">
           <div class="marswalk-micro-head">
             <b>${L(tr, 'pn.pimlMultiHorizonDustVortex')}</b>
-            <span class="badge-mode badge-live">ACC ${mlPred.overallAccuracyPct}% · AUC ${mlPred.overallRocAuc}</span>
+            <span class="badge-mode badge-model">${escHtml(tr ? 'Fizik-Temelli İndeks' : 'Physics Risk Index')}</span>
           </div>
           <div class="help note-sm">${tr
-            ? `<b>MDAD (22.865 fırtına)</b> + <b>Montabone MY24–MY36</b> + <b>MEDA/TWINS 1-Hz</b> verisiyle eğitilmiş GBDT topluluğu. Aktif Koridor: <b>${escHtml(mlPred.features.corridorNameTr)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/dk</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`
-            : `Physics-Informed GBDT trained on <b>MDAD (22,865 storms)</b> + <b>Montabone MY24–MY36</b> + <b>MEDA/TWINS 1-Hz</b>. Corridor: <b>${escHtml(mlPred.features.corridorName)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/m</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`}</div>
+            ? `<b>MDAD koridorları</b>, <b>Montabone klimatolojisi</b> ve <b>MEDA/TWINS sınır katmanı denklemlerine</b> dayalı sezgisel risk modeli. Koridor: <b>${escHtml(mlPred.features.corridorNameTr)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/dk</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`
+            : `Heuristic dust-lifting risk model informed by <b>MDAD storm corridors</b>, <b>Montabone climatology</b>, and <b>MEDA/TWINS boundary-layer physics</b>. Corridor: <b>${escHtml(mlPred.features.corridorName)}</b> (ΔP <code>${mlPred.features.deltaP1mPa} Pa/m</code> · u*/u*t <code>${mlPred.features.bagnoldRatio}</code> · Ri<sub>b</sub> <code>${mlPred.features.bulkRichardson}</code>).`}</div>
           <div class="eva-sim-btns">
             <button type="button" class="ghost ml-regime-btn ${activeRegime === 'auto' ? 'btn-spec' : ''}" data-ml-regime="auto">${L(tr, 'pn.siteSeasonAuto')}</button>
             <button type="button" class="ghost ml-regime-btn ${activeRegime === 'vortex_imminent' ? 'btn-spec' : ''}" data-ml-regime="vortex_imminent">${L(tr, 'pn.1mVortexStrike')}</button>
@@ -447,7 +447,7 @@
           </div>
           ${mlPred.horizons.map(h => `
             <div class="kv">
-              <span><b>${escHtml(tr ? h.horizonTr : h.horizonEn)}</b> <small>(${escHtml(h.keyMetric)} · Acc ${h.validationAccuracyPct}%)</small></span>
+              <span><b>${escHtml(tr ? h.horizonTr : h.horizonEn)}</b> <small>(${escHtml(h.keyMetric)})</small></span>
               <b class="${h.cls}">${h.probPct}% · ${escHtml(tr ? h.statusTr : h.statusEn)}</b>
             </div>`).join('')}
           <div class="help note-sm">${escHtml(tr ? mlPred.peakHorizon.actionTr : mlPred.peakHorizon.actionEn)}</div>

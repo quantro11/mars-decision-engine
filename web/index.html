@@ -40,6 +40,7 @@
 
   <nav class="modes" aria-label="Modules">
     <button class="mode-btn active" data-mode="score" aria-pressed="true"><span class="mode-label">Site selection</span></button>
+    <button class="mode-btn" data-mode="landing" aria-pressed="false"><span class="mode-label">Landing site</span></button>
     <button class="mode-btn" data-mode="eva" aria-pressed="false"><span class="mode-label">Tactical EVA · 16 km²</span></button>
     <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-label">Dust-storm power</span></button>
@@ -100,6 +101,74 @@
       </div>
       <div class="row"><button id="sens-run" class="ghost">Run robustness test</button></div>
       <div id="sens-result"></div>
+    </section>
+
+    <section id="panel-landing" class="mode-panel hidden" aria-label="Landing site planner">
+      <div class="sec-head">
+        <h2 id="ls-tab-title">Landing Site Planner</h2>
+        <button id="ls-close-btn" class="ls-close-btn tac-close-btn hidden" type="button" title="Clear landing site" aria-label="Clear landing site">✕</button>
+      </div>
+      <p class="intro-lead" id="ls-intro">Click anywhere on the Mars map or 3D globe to place your landing spot, draw its rover range circle, and inspect compatibility, summary, walk/EVA, and dust-storm tests.</p>
+
+      <div id="ls-empty" class="empty-state ls-empty-box">
+        <p class="help" id="ls-empty-msg">Click any location on the map or 3D globe to create a landing site here.</p>
+      </div>
+
+      <div id="landing-setup-card" class="landing-setup-card hidden" aria-label="Landing site analysis">
+        <div class="ls-card-head">
+          <div>
+            <div id="ls-coord" class="ls-coord">—</div>
+            <div id="ls-region" class="ls-region">—</div>
+          </div>
+          <span id="ls-compat-status" class="ls-compat-status">—</span>
+        </div>
+
+        <div class="ls-section">
+          <div id="ls-rover-lbl" class="ls-lbl">Rover class &amp; range (blue circle)</div>
+          <div id="ls-rover-seg" class="seg ls-rover-seg" role="group" aria-label="Rover class">
+            <button type="button" data-rover="manned_rover" class="active" aria-pressed="true">Manned</button>
+            <button type="button" data-rover="lab_rover" aria-pressed="false">Lab rover</button>
+            <button type="button" data-rover="mini_rover" aria-pressed="false">Mini</button>
+          </div>
+          <select id="ls-rover-select" class="ls-select hidden" aria-label="Rover class select"></select>
+          <div class="ls-range-box">
+            <div id="ls-range-lbl" class="ls-sub-lbl">Max surface range (radius)</div>
+            <div id="ls-range-val" class="ls-range-val">—</div>
+            <div id="ls-range-basis" class="ls-range-basis">—</div>
+            <div id="ls-range-env" class="ls-range-env"></div>
+          </div>
+        </div>
+
+        <div class="ls-section ls-compat-box">
+          <div id="ls-compat-lbl" class="ls-sub-lbl">1 · Landing compatibility</div>
+          <div id="ls-compat-score" class="ls-compat-score">—</div>
+          <div id="ls-factors-lbl" class="ls-sub-lbl">Negative score factors</div>
+          <div id="ls-factors-list" class="ls-factors-list"></div>
+          <div id="ls-metrics-kv" class="ls-metrics-kv"></div>
+        </div>
+
+        <div class="ls-section ls-block">
+          <div id="ls-summary-lbl" class="ls-sub-lbl">2 · Site summary</div>
+          <div id="ls-summary-body" class="ls-summary-body">—</div>
+        </div>
+
+        <div class="ls-section ls-block">
+          <div id="ls-walk-lbl" class="ls-sub-lbl">3 · Walk / EVA test</div>
+          <div id="ls-walk-body" class="ls-test-body">—</div>
+          <div class="row ls-btn-row">
+            <button id="ls-btn-eva" type="button" class="btn-spec">16 km² Tactical EVA</button>
+            <button id="ls-btn-walk" type="button" class="ghost">Plan EVA walk</button>
+          </div>
+        </div>
+
+        <div class="ls-section ls-block">
+          <div id="ls-storm-lbl" class="ls-sub-lbl">4 · Dust-storm power test</div>
+          <div id="ls-storm-body" class="ls-test-body">—</div>
+          <div class="row ls-btn-row">
+            <button id="ls-btn-storm" type="button" class="ghost">Open Dust-Storm Power</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="panel-eva" class="mode-panel hidden">
@@ -422,28 +491,28 @@
     </section>
 
     <section id="panel-crisis" class="mode-panel hidden">
-      <div class="sec-head"><h2>Dust-storm power</h2></div>
-      <p class="help">Pick a site on the map or a candidate card, then size the power system against a 2018-class global dust storm.</p>
+      <div class="sec-head"><h2>Dust-Storm Power &amp; Survival</h2></div>
+      <p class="help">Pick a spot on the map or candidate list to test whether your solar panels, batteries, and backup nuclear reactors can keep the base powered and warm during a 2018-style global dust storm.</p>
 
       <div class="station-lock">
-        <span class="station-lbl">Site</span>
+        <span class="station-lbl">Selected site</span>
         <b id="crisis-site">Choose a site on the map</b>
       </div>
 
       <div class="control-group">
-        <label>Season, L<sub>s</sub> <span id="ls-v">251° · Perihelion</span>
+        <label>Mars season (solar angle L<sub>s</sub>) <span id="ls-v">251° · Perihelion</span>
           <input type="range" id="ls" min="0" max="360" step="1" value="251"></label>
-        <label>Peak optical depth τ <span id="tau-v">8.0</span>
+        <label>Peak dust haze (optical depth τ) <span id="tau-v">8.0</span>
           <input type="range" id="tau" min="5" max="120" value="80"></label>
-        <label>Solar array <span id="area-v">1000 m²</span>
+        <label>Solar panel area <span id="area-v">1000 m²</span>
           <input type="range" id="area" min="100" max="5000" step="50" value="1000"></label>
-        <label>Habitat load <span id="cons-v">300 kWh/sol</span>
+        <label>Daily base power need <span id="cons-v">300 kWh/sol</span>
           <input type="range" id="cons" min="50" max="1000" step="10" value="300"></label>
-        <label>Battery <span id="batt-v">2000 kWh</span>
+        <label>Battery storage capacity <span id="batt-v">2000 kWh</span>
           <input type="range" id="batt" min="100" max="10000" step="100" value="2000"></label>
-        <label>Kilopower reactors · 10 kW each <span id="kp-v">0</span>
+        <label>Backup nuclear reactors (10 kW each) <span id="kp-v">0</span>
           <input type="range" id="kp" min="0" max="4" value="0"></label>
-        <label>Regolith trench cover <span id="rego-v">1.5 m</span>
+        <label>Soil shielding cover (regolith depth) <span id="rego-v">1.5 m</span>
           <input type="range" id="rego" min="0" max="35" step="1" value="15"></label>
       </div>
 
@@ -754,6 +823,7 @@
 <script src="ui/eva_render.js"></script>
 <script src="ui/eva.js"></script>
 <script src="ui/panels.js"></script>
+<script src="ui/landing_site.js"></script>
 <script src="ui/map2d.js"></script>
 <script src="ui/habitability.js"></script>
 <script src="ui/brief.js"></script>

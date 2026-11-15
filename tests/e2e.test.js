@@ -639,6 +639,54 @@ async function runHttpE2E(browserPath, securityHeaders) {
     await cdp.send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
     await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId);
 
+    // 7b. Landing site tab -> click map -> rover range blue circle, compatibility, summary, walk/EVA & storm tests -> red X clears
+    await evalJS(`document.getElementById('btn-2d').click()`);
+    const lsCheck = await evalJS(`(() => {
+      document.querySelector('.mode-btn[data-mode="landing"]').click();
+      const panel = document.getElementById('panel-landing');
+      const empty = document.getElementById('ls-empty');
+      const panelOpenedEmpty = !!(panel && !panel.classList.contains('hidden') && empty && !empty.classList.contains('hidden'));
+      const canvas = document.getElementById('map');
+      const r = canvas.getBoundingClientRect();
+      // Include minor 4px pointer jitter to verify left-click still registers cleanly
+      canvas.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width * 0.5, clientY: r.top + r.height * 0.5 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width * 0.5 + 4, clientY: r.top + r.height * 0.5 + 2 }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width * 0.5 + 4, clientY: r.top + r.height * 0.5 + 2 }));
+      canvas.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true, button: 0,
+        clientX: r.left + r.width * 0.5 + 4, clientY: r.top + r.height * 0.5 + 2
+      }));
+      const card = document.getElementById('landing-setup-card');
+      const r1 = window.MDE.S.customLanding ? window.MDE.S.customLanding.rangeKm : -1;
+      const pt = window.MDE.S.customLanding && window.MDE.S.customLanding.circlePts ? window.MDE.S.customLanding.circlePts[0] : null;
+      const scale1 = window.MDE.S.view.scale;
+      document.getElementById('zoom-in').click();
+      document.getElementById('zoom-in').click();
+      const scale2 = window.MDE.S.view.scale;
+      document.querySelector('#ls-rover-seg button[data-rover="mini_rover"]').click();
+      const r2 = window.MDE.S.customLanding ? window.MDE.S.customLanding.rangeKm : -1;
+      const compatTxt = document.getElementById('ls-compat-score').textContent;
+      const sumTxt = document.getElementById('ls-summary-body').textContent;
+      const walkTxt = document.getElementById('ls-walk-body').textContent;
+      const stormTxt = document.getElementById('ls-storm-body').textContent;
+      const opened = !!(card && !card.classList.contains('hidden') && empty.classList.contains('hidden'));
+      document.getElementById('ls-close-btn').click();
+      const closedAfterX = card.classList.contains('hidden') && !empty.classList.contains('hidden') && window.MDE.S.customLanding === null;
+      document.querySelector('.mode-btn[data-mode="score"]').click();
+      return {
+        panelOpenedEmpty, opened, r1, r2,
+        hasCirclePt: !!(pt && pt.length === 2),
+        scaleRatio: scale2 / scale1,
+        compatTxt, sumTxt, walkTxt, stormTxt,
+        closedAfterX
+      };
+    })()`);
+    assert(lsCheck.panelOpenedEmpty && lsCheck.opened, 'Landing site tab opens and clicking map populates analysis card');
+    assert(lsCheck.r1 > 0 && lsCheck.r2 > 0 && lsCheck.r1 !== lsCheck.r2, `Landing site range reacts to rover class (r1=${lsCheck.r1}, r2=${lsCheck.r2})`);
+    assert(lsCheck.hasCirclePt && lsCheck.scaleRatio > 1.2, `Range circle projects surface coords scaled by view.scale (scaleRatio=${lsCheck.scaleRatio})`);
+    assert(lsCheck.compatTxt.includes('/ 100') && lsCheck.sumTxt.length > 10 && lsCheck.walkTxt.includes('kcal/h') && lsCheck.stormTxt.includes('m'), 'Compatibility, summary, walk/EVA, and dust-storm tests render in Landing site tab');
+    assert(lsCheck.closedAfterX, 'Clicking red X clears landing site setup and blue circle');
+
     // 8. Verify zero CSP violations, zero page errors, zero console errors
     const violations = await evalJS(`window.__cspViolations || []`);
     assert.strictEqual(violations.length, 0, `CSP violations detected under strict vercel.json CSP: ${JSON.stringify(violations)}`);

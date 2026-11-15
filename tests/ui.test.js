@@ -376,5 +376,23 @@ assert.ok(cvHole.dust !== null && cvHole.dust > 0.1, 'TES Dust nodata pixel inte
   assert.strictEqual(EVA_SIM.MARS_G, PLANET_ACTIVE.gravityMs2.value, 'eva_sim.js reads gravity dynamically from PLANET_PROFILES');
   assert.ok(typeof EVA_SIM.simulateEVA === 'function' && EVA.SIM === EVA_SIM, 'MDE_EVA exposes decoupled MDE_EVA_SIM engine');
 
-  console.log('All UI module / A* window / brief / habitability XSS / markers / WebGL 3D tests passed.');
+  // --- 11. Right-click Custom Landing Site (Rover + Env Range, Surface Circle, Negative Factors)
+  const LS = require('../web/ui/landing_site.js');
+  const VEHICLES = require('../web/vehicles_data.js');
+  const benignCell = { elev: -2500, slope: 2.0, rough: 25, ice: 0.6, ti: 300, dust: 0.12, lat: 18.4, lon: 77.5, rad: 210, cave: 120 };
+  const harshCell = { elev: 1500, slope: 12.0, rough: 190, ice: -0.6, ti: 75, dust: 0.65, lat: -48.0, lon: 120.0, rad: 280, cave: null };
+  const resBenignManned = LS.analyzeSite({ cellValues: benignCell, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  const resHarshManned = LS.analyzeSite({ cellValues: harshCell, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  const resBenignMini = LS.analyzeSite({ cellValues: benignCell, roverId: 'mini_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: false });
+  assert.ok(resBenignManned.rangeKm > resHarshManned.rangeKm, 'harsher environment reduces rover range');
+  assert.ok(resBenignManned.rangeKm > resBenignMini.rangeKm, 'different rover classes compute distinct range radii');
+  assert.ok(resHarshManned.negativeFactors.length >= 3 && resHarshManned.negativeFactors[0].lossPts >= resHarshManned.negativeFactors[1].lossPts, 'negative factors sorted by descending point loss');
+  const blockedSteep = LS.analyzeSite({ cellValues: { ...benignCell, slope: 18 }, roverId: 'manned_rover', weights: S.PRESETS.balanced.w, hard: true, SCORING: S, STORM: T, VEHICLES, PLANET: PLANET_ACTIVE, tr: true });
+  assert.ok(blockedSteep.rover.slopeBlocked && blockedSteep.rangeKm === 0 && blockedSteep.nasaVeto && blockedSteep.effectiveScore === 0, 'steep slope >15 deg triggers NASA veto and 0 range for manned rover');
+  const ptsSmall = LS.circleLatLons(18.4, 77.5, 25, PLANET_ACTIVE.radiusKm.value, 36);
+  const ptsLarge = LS.circleLatLons(18.4, 77.5, 100, PLANET_ACTIVE.radiusKm.value, 36);
+  assert.strictEqual(ptsSmall.length, 37, 'spherical boundary closes loop');
+  assert.ok(Math.abs((ptsLarge[0][0] - 18.4) / (ptsSmall[0][0] - 18.4) - 4) < 0.05, 'circle geometry scales strictly in Martian surface degrees/km');
+
+  console.log('All UI module / A* window / brief / habitability XSS / markers / WebGL 3D / landing site tests passed.');
 })().catch((e) => { console.error(e); process.exit(1); });

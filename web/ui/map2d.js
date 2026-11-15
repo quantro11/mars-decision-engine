@@ -412,6 +412,7 @@
       });
       if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
       if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
+      drawCustomLandingOverlay(dpr);
       // Legacy on-foot walkback ring ("EVA WALKBACK 0.80 km"): only meaningful for the legacy
       // astronaut demo, so draw it only while that collapsed section is open. The new 16 km²
       // rover analysis has no on-foot mode and the label was being misread as map resolution.
@@ -420,6 +421,82 @@
       if (legacyOpen && global.MDE_EVA && global.MDE_EVA.drawGlobalWalkbackOverlay && (S.mode === 'eva' || S.mode === 'route' || S.selected)) {
         global.MDE_EVA.drawGlobalWalkbackOverlay(ctx, projectGrid, L, S, dpr);
       }
+    }
+
+    function drawCustomLandingOverlay(dpr) {
+      const cl = S.customLanding;
+      if (!cl) return;
+      const cx = cl.x + 0.5, cy = cl.y + 0.5;
+      const strokeCol = '#4da6ff';
+      const fillCol = 'rgba(77, 166, 255, 0.16)';
+      const pinCol = cl.slopeBlocked ? '#f06458' : '#4da6ff';
+      ctx.save();
+      if (S.viewMode === '3d' && globe) {
+        if (cl.circlePts && cl.circlePts.length > 2) {
+          ctx.beginPath();
+          let started = false;
+          for (const [ptLat, ptLon] of cl.circlePts) {
+            const [sx, sy, vis] = globe.project(ptLat, ptLon, true);
+            if (!vis) { started = false; continue; }
+            if (!started) { ctx.moveTo(sx, sy); started = true; } else ctx.lineTo(sx, sy);
+          }
+          ctx.fillStyle = fillCol; ctx.fill();
+          ctx.strokeStyle = strokeCol; ctx.lineWidth = 2 * dpr; ctx.stroke();
+        }
+        const [px, py, pvis] = projectGrid(cx, cy);
+        if (pvis) drawLandingMarkerPin(px, py, pinCol, dpr, cl.rangeKm);
+        ctx.restore();
+        return;
+      }
+      for (const off of [-W, 0, W]) {
+        const span = W * S.view.scale;
+        const left = S.view.tx + off * S.view.scale;
+        if (left > canvas.width + span * 0.25 || left + span < -span * 0.25) continue;
+        if (cl.circlePts && cl.circlePts.length > 2) {
+          ctx.beginPath();
+          cl.circlePts.forEach(([ptLat, ptLon], idx) => {
+            let gx = ((((ptLon + 180) % 360) + 360) % 360) / 360 * W;
+            const gy = (90 - ptLat) / 180 * H;
+            const d = gx - cx;
+            if (d > W * 0.5) gx -= W;
+            else if (d < -W * 0.5) gx += W;
+            const sx = S.view.tx + (gx + off) * S.view.scale;
+            const sy = S.view.ty + gy * S.view.scale;
+            if (idx === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+          });
+          ctx.closePath();
+          ctx.fillStyle = fillCol; ctx.fill();
+          ctx.strokeStyle = strokeCol; ctx.lineWidth = 2 * dpr; ctx.stroke();
+        }
+        const px = S.view.tx + (cx + off) * S.view.scale;
+        const py = S.view.ty + cy * S.view.scale;
+        if (px >= -40 && px <= canvas.width + 40 && py >= -40 && py <= canvas.height + 40) {
+          drawLandingMarkerPin(px, py, pinCol, dpr, cl.rangeKm);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawLandingMarkerPin(px, py, col, dpr, rangeKm) {
+      const r = 6 * dpr;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(px - r - 4 * dpr, py); ctx.lineTo(px + r + 4 * dpr, py);
+      ctx.moveTo(px, py - r - 4 * dpr); ctx.lineTo(px, py + r + 4 * dpr);
+      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(px, py, 2.5 * dpr, 0, Math.PI * 2); ctx.fill();
+      const lbl = rangeKm > 0 ? `${rangeKm.toFixed(1)} km` : '0 km';
+      ctx.font = `600 ${Math.round(10 * dpr)}px "IBM Plex Mono", monospace`;
+      const tw = ctx.measureText(lbl).width;
+      ctx.fillStyle = 'rgba(12, 14, 18, 0.88)';
+      ctx.fillRect(px - tw / 2 - 4 * dpr, py - r - 18 * dpr, tw + 8 * dpr, 13 * dpr);
+      ctx.fillStyle = col;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(lbl, px, py - r - 11.5 * dpr);
     }
 
     function zoomBy(factor) {
@@ -452,6 +529,7 @@
 
     let drag = null, moved = false, lastTouchTap = 0, touchState = null;
     canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
       drag = { x: e.clientX, y: e.clientY, tx: S.view.tx, ty: S.view.ty, rLat: globe ? globe.state.targetLat : 0, rLon: globe ? globe.state.targetLon : 0 };
       moved = false;
     });
@@ -459,7 +537,10 @@
       if (!drag) return;
       const dpr = global.devicePixelRatio || 1;
       const dx = (e.clientX - drag.x) * dpr, dy = (e.clientY - drag.y) * dpr;
-      if (Math.hypot(dx, dy) > 3) moved = true;
+      if (!moved) {
+        if (Math.hypot(dx, dy) < 8 * dpr) return;
+        moved = true;
+      }
       if (S.viewMode === '3d' && globe) {
         const sens = 0.14 * (globe.state.camDist - 0.85) / dpr;
         globe.state.targetLon = drag.rLon - dx * sens;
@@ -473,7 +554,7 @@
     global.addEventListener('mouseup', () => { drag = null; });
     canvas.addEventListener('click', (e) => {
       if (moved || performance.now() - lastTouchTap < 450) return;
-      const g = gridAt(e); if (g && onPick) onPick(g[0], g[1]);
+      const g = gridAt(e); if (g && onPick) onPick(g[0], g[1], e);
     });
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
