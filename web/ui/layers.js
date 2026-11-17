@@ -20,6 +20,7 @@
       colOfLon: (lon) => ((Math.floor((lon + 180) / 360 * W) % W) + W) % W,
     };
     let baseImg = null;
+    let earthImg = null;
     const decodeInflight = {};
 
     function decode(key) {
@@ -72,6 +73,18 @@
         };
         hi.onerror = () => rej(new Error('viking_4k.jpg unavailable'));
         hi.src = 'layers/viking_4k.jpg';
+      });
+    }
+
+    function loadEarthMosaic() {
+      return new Promise((res) => {
+        const ei = new Image();
+        ei.onload = () => {
+          earthImg = ei;
+          res(ei);
+        };
+        ei.onerror = () => res(null);
+        ei.src = 'layers/earth_base.jpg';
       });
     }
 
@@ -199,9 +212,11 @@
     return {
       W, H, MARS_R, L,
       getBaseImg: () => baseImg,
+      getEarthImg: () => earthImg,
       decode,
       ensureFileDataBundle,
       loadVikingMosaic,
+      loadEarthMosaic,
       cellValues,
       blockValues,
       flatShare,

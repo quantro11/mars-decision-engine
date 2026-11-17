@@ -69,7 +69,7 @@
       float hU = texture2D(u_elevTex, v_uv - vec2(0.0, texel.y)).r;
       float hD = texture2D(u_elevTex, v_uv + vec2(0.0, texel.y)).r;
 
-      float bumpStrength = 8.0 + u_relief * 45.0;
+      float bumpStrength = (u_relief <= 0.0) ? 0.0 : (8.0 + u_relief * 45.0);
       float cosLat = max(0.25, cos(lat));
       float dU = (hR - hL) * bumpStrength / cosLat;
       float dV = (hD - hU) * bumpStrength;
@@ -658,7 +658,7 @@
 
       const mvp = buildMVP();
       gl.uniformMatrix4fv(res.uGlobe.mvp, false, mvp);
-      gl.uniform1f(res.uGlobe.relief, getReliefScale());
+      gl.uniform1f(res.uGlobe.relief, (opts && opts.relief != null) ? opts.relief : getReliefScale());
       gl.uniform2f(res.uGlobe.texel, 1 / state.W, 1 / state.H);
       gl.uniform1f(res.uGlobe.opacity, opts.opacity ?? 0.7);
       gl.uniform1f(res.uGlobe.showOv, opts.showOverlay ? 1.0 : 0.0);

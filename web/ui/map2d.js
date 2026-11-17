@@ -302,7 +302,10 @@
     }
 
     function draw() {
-      const baseImg = layers.getBaseImg();
+      const isAfad = S.mode === 'afad';
+      const baseImg = (isAfad && layers.getEarthImg && layers.getEarthImg())
+        ? layers.getEarthImg()
+        : layers.getBaseImg();
       if (!baseImg) return;
       if (ovDirty) buildOverlay();
       const dpr = global.devicePixelRatio || 1;
@@ -311,24 +314,26 @@
       const placer = createLabelPlacer(dpr, bounds);
 
       if (S.viewMode === '3d' && globe) {
-        globe.render({ opacity: S.opacity, showOverlay: S.overlay !== 'none' && S.globeOverlay });
+        globe.render({
+          opacity: isAfad ? 0 : S.opacity,
+          showOverlay: !isAfad && S.overlay !== 'none' && S.globeOverlay,
+          relief: isAfad ? 0 : undefined,
+        });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         draw3DGraticule(dpr);
       } else {
         const { scale, tx, ty } = S.view;
         ctx.fillStyle = '#030508';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const useDetail = !!pickDetailLevel(scale);
+        const useDetail = !isAfad && !!pickDetailLevel(scale);
         detail.activeKmPerPx = null;
         for (const off of [-W, 0, W]) {
           const sx = tx + off * scale;
           if (sx > canvas.width || sx + W * scale < 0) continue;
-          // With relief tiles active, smooth the colour mosaic so 5 km blocks don't show through
           ctx.imageSmoothingEnabled = useDetail || scale < 1.2;
           ctx.drawImage(baseImg, sx, ty, W * scale, H * scale);
           if (useDetail) drawDetailTiles(sx, ty, scale);
-          if (S.overlay !== 'none') {
-            // Data overlays are 5 km cells; smooth them when zoomed in so they read as a field, not blocks
+          if (!isAfad && S.overlay !== 'none') {
             ctx.imageSmoothingEnabled = useDetail || scale < 1.2;
             ctx.globalAlpha = S.opacity;
             ctx.drawImage(ovCanvas, sx, ty, W * scale, H * scale);
@@ -339,80 +344,82 @@
         draw2DGraticule(dpr, placer, bounds);
       }
 
-      // Reserve candidate & pin label zones so place names never overwrite markers or numbers
-      S.candidates.forEach((c) => {
-        const [sx, sy, vis] = projectGrid(c.x, c.y);
-        if (vis) placer.reserve(sx - 18 * dpr, sy - 18 * dpr, sx + 34 * dpr, sy + 18 * dpr);
-      });
-      if (S.route.start) {
-        const [sx, sy, vis] = projectGrid(S.route.start.x, S.route.start.y);
-        if (vis) placer.reserve(sx - 24 * dpr, sy - 24 * dpr, sx + 48 * dpr, sy + 16 * dpr);
-      }
-      if (S.route.goal) {
-        const [sx, sy, vis] = projectGrid(S.route.goal.x, S.route.goal.y);
-        if (vis) placer.reserve(sx - 24 * dpr, sy - 24 * dpr, sx + 48 * dpr, sy + 16 * dpr);
-      }
-
-      const effScale = S.viewMode === '3d' && globe ? (2.8 / Math.max(0.4, globe.state.camDist - 1.0)) : S.view.scale;
-      const fontPx = Math.max(9.5, Math.min(12, 8.5 + effScale * 0.8)) * dpr;
-      ctx.font = `500 ${fontPx}px "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left';
-      if (S.showRegions || S.showEZ) for (const r of REGIONS) {
-        if (S.showEZ && !r.ez && !S.showRegions) continue;
-        if (!S.showEZ && !S.showRegions) break;
-        if (!S.showEZ && effScale < 1.5 && !r.mission && !r.ez) continue;
-        const [x, y, vis] = projectGrid(L.colOfLon(r.lon), L.rowOfLat(r.lat));
-        if (!vis || x < -80 || x > canvas.width + 80 || y < -30 || y > canvas.height + 30) continue;
-        const ez = S.showEZ && r.ez;
-        if (ez) {
-          const s = 4.5 * dpr;
-          ctx.strokeStyle = '#10b981'; ctx.lineWidth = 1.3 * dpr; ctx.strokeRect(x - s, y - s, s * 2, s * 2);
-        } else {
-          ctx.fillStyle = r.mission ? '#7f9bb3' : 'rgba(226, 232, 240, 0.78)';
-          ctx.beginPath(); ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2); ctx.fill();
+      if (!isAfad) {
+        // Reserve candidate & pin label zones so place names never overwrite markers or numbers
+        S.candidates.forEach((c) => {
+          const [sx, sy, vis] = projectGrid(c.x, c.y);
+          if (vis) placer.reserve(sx - 18 * dpr, sy - 18 * dpr, sx + 34 * dpr, sy + 18 * dpr);
+        });
+        if (S.route.start) {
+          const [sx, sy, vis] = projectGrid(S.route.start.x, S.route.start.y);
+          if (vis) placer.reserve(sx - 24 * dpr, sy - 24 * dpr, sx + 48 * dpr, sy + 16 * dpr);
         }
-        if (ez || effScale >= 1.5 || (r.mission && effScale >= 1.1)) {
-          const lx = x + 6 * dpr, tw = ctx.measureText(r.name).width;
-          if (placer.canPlace(lx, y - fontPx * 0.6, lx + tw, y + fontPx * 0.6)) {
-            ctx.fillStyle = 'rgba(3, 5, 8, 0.86)'; ctx.fillText(r.name, lx + 1 * dpr, y + 1 * dpr);
-            ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.94)'); ctx.fillText(r.name, lx, y);
+        if (S.route.goal) {
+          const [sx, sy, vis] = projectGrid(S.route.goal.x, S.route.goal.y);
+          if (vis) placer.reserve(sx - 24 * dpr, sy - 24 * dpr, sx + 48 * dpr, sy + 16 * dpr);
+        }
+
+        const effScale = S.viewMode === '3d' && globe ? (2.8 / Math.max(0.4, globe.state.camDist - 1.0)) : S.view.scale;
+        const fontPx = Math.max(9.5, Math.min(12, 8.5 + effScale * 0.8)) * dpr;
+        ctx.font = `500 ${fontPx}px "SF Mono", "IBM Plex Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        if (S.showRegions || S.showEZ) for (const r of REGIONS) {
+          if (S.showEZ && !r.ez && !S.showRegions) continue;
+          if (!S.showEZ && !S.showRegions) break;
+          if (!S.showEZ && effScale < 1.5 && !r.mission && !r.ez) continue;
+          const [x, y, vis] = projectGrid(L.colOfLon(r.lon), L.rowOfLat(r.lat));
+          if (!vis || x < -80 || x > canvas.width + 80 || y < -30 || y > canvas.height + 30) continue;
+          const ez = S.showEZ && r.ez;
+          if (ez) {
+            const s = 4.5 * dpr;
+            ctx.strokeStyle = '#10b981'; ctx.lineWidth = 1.3 * dpr; ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+          } else {
+            ctx.fillStyle = r.mission ? '#7f9bb3' : 'rgba(226, 232, 240, 0.78)';
+            ctx.beginPath(); ctx.arc(x, y, (r.mission ? 2.8 : 2) * dpr, 0, Math.PI * 2); ctx.fill();
+          }
+          if (ez || effScale >= 1.5 || (r.mission && effScale >= 1.1)) {
+            const lx = x + 6 * dpr, tw = ctx.measureText(r.name).width;
+            if (placer.canPlace(lx, y - fontPx * 0.6, lx + tw, y + fontPx * 0.6)) {
+              ctx.fillStyle = 'rgba(3, 5, 8, 0.86)'; ctx.fillText(r.name, lx + 1 * dpr, y + 1 * dpr);
+              ctx.fillStyle = ez ? '#6ee7b7' : (r.mission ? '#bae6fd' : 'rgba(241, 245, 249, 0.94)'); ctx.fillText(r.name, lx, y);
+            }
           }
         }
-      }
 
-      const drawPath = (path, color, width, dash) => {
-        if (!path) return;
-        ctx.strokeStyle = color; ctx.lineWidth = width * dpr; ctx.setLineDash(dash || []); ctx.beginPath();
-        let px = null, wasVis = false;
-        for (const n of path) {
-          const y = (n / W) | 0, x = n - y * W;
-          const [sx, sy, vis] = projectGrid(x + 0.5, y + 0.5);
-          if (!vis) { wasVis = false; px = null; continue; }
-          if (!wasVis || (S.viewMode === '2d' && px !== null && Math.abs(sx - px) > W * S.view.scale / 2)) ctx.moveTo(sx, sy);
-          else ctx.lineTo(sx, sy);
-          px = sx; wasVis = true;
+        const drawPath = (path, color, width, dash) => {
+          if (!path) return;
+          ctx.strokeStyle = color; ctx.lineWidth = width * dpr; ctx.setLineDash(dash || []); ctx.beginPath();
+          let px = null, wasVis = false;
+          for (const n of path) {
+            const y = (n / W) | 0, x = n - y * W;
+            const [sx, sy, vis] = projectGrid(x + 0.5, y + 0.5);
+            if (!vis) { wasVis = false; px = null; continue; }
+            if (!wasVis || (S.viewMode === '2d' && px !== null && Math.abs(sx - px) > W * S.view.scale / 2)) ctx.moveTo(sx, sy);
+            else ctx.lineTo(sx, sy);
+            px = sx; wasVis = true;
+          }
+          ctx.stroke(); ctx.setLineDash([]);
+        };
+        const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
+        const t = (k, fb) => (i18n && i18n.t(k) !== k ? i18n.t(k) : fb);
+        if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
+        if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
+        if (S.route.safe && S.route.safe.stats && S.route.safe.stats.scienceWaypoints) {
+          S.route.safe.stats.scienceWaypoints.forEach((wp) => {
+            drawWaypoint(wp.x, wp.y, '#ea9662', `${wp.id} ${wp.code}`);
+          });
         }
-        ctx.stroke(); ctx.setLineDash([]);
-      };
-      const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
-      const t = (k, fb) => (i18n && i18n.t(k) !== k ? i18n.t(k) : fb);
-      if (S.route.straight) drawPath(S.route.straight.path, '#ef4444', 1.8, [6 * dpr, 4 * dpr]);
-      if (S.route.safe) drawPath(S.route.safe.path, '#10b981', 2.8);
-      if (S.route.safe && S.route.safe.stats && S.route.safe.stats.scienceWaypoints) {
-        S.route.safe.stats.scienceWaypoints.forEach((wp) => {
-          drawWaypoint(wp.x, wp.y, '#ea9662', `${wp.id} ${wp.code}`);
-        });
-      }
-      if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', t('startPin', 'Start'));
-      if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#cfa25c', t('goalPin', 'Goal'));
+        if (S.route.start) drawWaypoint(S.route.start.x, S.route.start.y, '#7fae8c', t('startPin', 'Start'));
+        if (S.route.goal) drawWaypoint(S.route.goal.x, S.route.goal.y, '#cfa25c', t('goalPin', 'Goal'));
 
-      S.candidates.forEach((c, i) => {
-        drawCandidateReticle(c.x, c.y, i + 1, c.score, !!(S.selected && S.selected.cand === i));
-      });
-      if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
-      if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
-      drawCustomLandingOverlay(dpr);
+        S.candidates.forEach((c, i) => {
+          drawCandidateReticle(c.x, c.y, i + 1, c.score, !!(S.selected && S.selected.cand === i));
+        });
+        if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
+        if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
+        drawCustomLandingOverlay(dpr);
+      }
       drawAFADOverlay(dpr);
     }
 

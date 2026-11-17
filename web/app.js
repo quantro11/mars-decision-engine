@@ -290,9 +290,14 @@
     if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
-    if (m === 'afad' && panels.renderAFAD) {
-      panels.renderAFAD();
+    if (m === 'afad') {
+      const applyEarth = (img) => { if (globe && img) try { globe.setBaseTexture(img); } catch (e) {} viewport.draw(); };
+      if (layers.getEarthImg && layers.getEarthImg()) applyEarth(layers.getEarthImg());
+      else if (layers.loadEarthMosaic) layers.loadEarthMosaic().then(img => { if (S.mode === 'afad' && img) applyEarth(img); });
+      if (panels && panels.renderAFAD) panels.renderAFAD();
       if (S.afad && S.afad.scenario) panelCbs.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
+    } else if (globe && layers.getBaseImg && layers.getBaseImg()) {
+      try { globe.setBaseTexture(layers.getBaseImg()); } catch (e) { /* ignore */ }
     }
     viewport.draw();
   }
@@ -450,6 +455,7 @@
     const basePromise = layers.loadVikingMosaic().catch(() => layers.decode('base'));
     return Promise.all([...coreKeys.map(layers.decode), basePromise]).then(() => {
       if (globe) globe.setLayers(layers.getBaseImg(), L.elev, W, H);
+      layers.loadEarthMosaic().catch(() => {});
       setTimeout(() => { ['ice01', 'ice5'].forEach(k => { if (!L[k]) layers.decode(k).then(() => syncWorkerLayer(k)).catch(() => {}); }); }, 300);
     });
   }).then(async () => {
