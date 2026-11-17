@@ -351,9 +351,20 @@
             ${prov.map(r => `<tr><td><b>${esc(r.id)}</b></td><td>${esc(r.name || r.dataset)}</td><td><code>${esc(r.productCode)}</code></td><td>${esc(r.crs)}</td><td>${esc(r.nativeRes ? `${r.nativeRes} → ${r.shippedRes}` : r.resolution)}</td><td>${esc(r.epoch)}</td></tr>`).join('')}
           </tbody>
         </table>` : ''}
-      <div class="help mt-sm">${tr
-        ? '5. Doğrulama ve Kapsam: 9 gerçek Mars iniş aracında ort. 90. yüzdelik (geometrik 89.), 39 NASA HLS-2015 keşif bölgesinde 71. yüzdelik (p < 0.005) ve 4 bağımsız yaya EVA biyom senaryosunda doğrulama sağlanmıştır.'
-        : '5. Validation & Scope: Orbital suitability benchmark (90th pct across 9 landers, 71st across 39 HLS-2015 zones, p < 0.005) is validated independently from 4 multi-biome Foot EVA routing & PLSS scenarios.'}</div>`;
+      <div class="modal-grid mt-sm">
+        <div>
+          <h3>${tr ? '5. Dünya Çift Kullanım: AFAD &amp; Afet Lojistiği' : '5. Earth Dual-Use: AFAD SAR &amp; Disaster Logistics'}</h3>
+          <p>${tr
+            ? '<b>AFAD Sahra Hastanesi &amp; Konteyner Kent:</b> Eğim ≤ 3° (taşkın yatağı ve heyelan koruma sınırı), zemin oturma riski ve ulaşım arterlerine erişim analizi. <b>Kurtarma Personeli Biyoenerjetiği (Earth 1.0g):</b> 4.0 km/sa yürüyüşte 22 kg teçhizatla saatlik güç tüketimi <code>432 W (~372 kcal/sa)</code>, hidrasyon ihtiyacı <code>0.86 L/sa</code>. <b>İnsansız Kara Aracı (İKA):</b> Arama-kurtarma robotları için MAVLink WPL 110 ve AFAD CBS uyumlu GeoJSON kurtarma koridoru üretilir.'
+            : '<b>AFAD Field Hospital &amp; Container City Siting:</b> Slope ≤ 3° (flash flood / landslide exclusion), soil bearing assessment, and logistics arterial connectivity. <b>Rescue Crew Bioenergetics (Earth 1.0g):</b> At 4.0 km/h with 22 kg pack, metabolic consumption is <code>432 W (~372 kcal/h)</code>, hydration demand <code>0.86 L/h</code>. <b>Unmanned Ground Vehicles (UGV):</b> Autonomous SAR navigation waypoints exported via MAVLink WPL 110 and GIS GeoJSON.'}</p>
+        </div>
+        <div>
+          <h3>${tr ? '6. Doğrulama ve Kapsam' : '6. Validation &amp; Scope'}</h3>
+          <p class="help">${tr
+            ? '9 gerçek Mars iniş aracında ort. 90. yüzdelik (geometrik 89.), 39 NASA HLS-2015 keşif bölgesinde 71. yüzdelik (p < 0.005) ve 4 bağımsız yaya EVA biyom senaryosunda doğrulama sağlanmıştır.'
+            : 'Orbital suitability benchmark (90th pct across 9 landers, 71st across 39 HLS-2015 zones, p < 0.005) is validated independently from 4 multi-biome Foot EVA routing & PLSS scenarios.'}</p>
+        </div>
+      </div>`;
   }
 
   function triggerDownload(filename, mime, content) {
@@ -374,6 +385,30 @@
     triggerDownload('mars-mission-sites.geojson', 'application/geo+json', JSON.stringify(buildGeoJSON(ctx), null, 2));
   }
 
+  function downloadBriefSARGeoJSON(ctx) {
+    const geo = buildGeoJSON(ctx);
+    const sarGeo = {
+      type: 'FeatureCollection',
+      metadata: {
+        system: 'Martiap Terrestrial SAR & AFAD Disaster Logistics Engine (1.0g WGS84)',
+        standard: 'AFAD / INSARAG Wilderness Search & Rescue Compatible',
+        generated_at: new Date().toISOString(),
+        guidelines: 'Slope <= 3° for field hospitals; Infinite-slope Landslide FS >= 1.5; Pandolf 1.0g 4.0 km/h hydration pace',
+      },
+      features: (geo.features || []).map((f) => {
+        const p = { ...f.properties };
+        if (p.feature_type === 'candidate_site') {
+          p.afad_siting_role = 'Safe Assembly Zone / Field Hospital Candidate';
+          p.flood_landslide_safety = (p.slope_p90_deg <= 3.0) ? 'OPTIMAL' : 'MONITOR';
+        } else if (p.feature_type === 'astar_safe_route') {
+          p.afad_corridor_role = 'Unmanned Ground Vehicle (İKA) Evacuation Route';
+        }
+        return { ...f, properties: p };
+      }),
+    };
+    triggerDownload('afad-sar-mission.geojson', 'application/geo+json', JSON.stringify(sarGeo, null, 2));
+  }
+
   function downloadBriefMAVLink(payload) {
     const cands = payload.top_candidates || [];
     const lines = ['QGC WPL 110'];
@@ -385,5 +420,5 @@
     triggerDownload('mars-mission-flightplan.waypoints', 'text/plain', lines.join('\n') + '\n');
   }
 
-  global.MDE_BRIEF = { buildBriefPayload, buildGeoJSON, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON, downloadBriefMAVLink };
+  global.MDE_BRIEF = { buildBriefPayload, buildGeoJSON, renderBriefHTML, downloadBriefJSON, downloadBriefGeoJSON, downloadBriefSARGeoJSON, downloadBriefMAVLink };
 })(typeof module === 'object' && module.exports ? module.exports : globalThis);
