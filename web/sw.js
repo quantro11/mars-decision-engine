@@ -1,7 +1,7 @@
 // Offline Cache-First Service Worker for Martiap (Planetary Layers & Core UI)
 (function (sw) {
   'use strict';
-  const CACHE_NAME = 'mde-planetary-cache-v9';
+  const CACHE_NAME = 'mde-planetary-cache-v10';
   const CORE_ASSETS = [
     './',
     './index.html',

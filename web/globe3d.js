@@ -69,7 +69,8 @@
       float hU = texture2D(u_elevTex, v_uv - vec2(0.0, texel.y)).r;
       float hD = texture2D(u_elevTex, v_uv + vec2(0.0, texel.y)).r;
 
-      float bumpStrength = (u_relief <= 0.0) ? 0.0 : (8.0 + u_relief * 45.0);
+      float bumpStrength = 8.0 + u_relief * 45.0;
+      if (u_relief <= 0.0) bumpStrength = 0.0;
       float cosLat = max(0.25, cos(lat));
       float dU = (hR - hL) * bumpStrength / cosLat;
       float dV = (hD - hU) * bumpStrength;
@@ -407,16 +408,29 @@
     function setBaseTexture(img) {
       lastBaseImg = img;
       if (!res || state.contextLost || gl.isContextLost()) return;
+      let source = img;
+      const maxTex = (typeof gl.getParameter === 'function' && gl.MAX_TEXTURE_SIZE) ? (gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096) : 4096;
+      const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+      if (typeof document !== 'undefined' && (w0 > maxTex || h0 > maxTex)) {
+        const c = document.createElement('canvas');
+        c.width = Math.min(w0, maxTex);
+        c.height = Math.min(h0, Math.floor(c.width * (h0 / w0)));
+        const cx = c.getContext('2d');
+        if (cx) {
+          cx.drawImage(img, 0, 0, c.width, c.height);
+          source = c;
+        }
+      }
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
       gl.bindTexture(gl.TEXTURE_2D, res.texBase);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      const w = source.naturalWidth || source.width, h = source.naturalHeight || source.height;
       const pot = (w & (w - 1)) === 0 && (h & (h - 1)) === 0;
       if (pot) {
         gl.generateMipmap(gl.TEXTURE_2D);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         const aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
-        if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+        if (aniso && typeof gl.getParameter === 'function') gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
       } else {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       }

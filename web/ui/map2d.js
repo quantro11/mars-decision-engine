@@ -125,24 +125,28 @@
     function updateScaleBar() {
       const elLbl = $('#scale-label'), elBar = $('#scale-bar');
       if (!elLbl || !elBar) return;
+      const isAfad = S.mode === 'afad';
+      const planetR = isAfad ? 6371.0 : MARS_R;
       let kmPerCssPx;
       if (S.viewMode === '3d' && globe) {
-        kmPerCssPx = globe.equatorialKmPerCssPx();
+        kmPerCssPx = globe.equatorialKmPerCssPx() * (isAfad ? (6371.0 / MARS_R) : 1);
       } else {
-        const kmPerGridPx = (2 * Math.PI * MARS_R) / W;
+        const kmPerGridPx = (2 * Math.PI * planetR) / W;
         const cssPxPerGridPx = S.view.scale / (global.devicePixelRatio || 1);
         kmPerCssPx = kmPerGridPx / Math.max(0.05, cssPxPerGridPx);
       }
       const targetKm = kmPerCssPx * 72;
-      const steps = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+      const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
       let niceKm = steps[0];
       for (const s of steps) { if (s <= targetKm * 1.35) niceKm = s; }
       const barPx = Math.max(28, Math.min(120, Math.round(niceKm / kmPerCssPx)));
-      const baseKm = (2 * Math.PI * MARS_R) / W;
+      const baseKm = (2 * Math.PI * planetR) / W;
       const lv = S.viewMode === '3d' ? null : pickDetailLevel(S.view.scale);
-      const dataKm = lv ? lv.kmPerPx : baseKm;
+      const dataKm = lv ? lv.kmPerPx : (isAfad ? (baseKm / 8) : baseKm);
       elLbl.textContent = `${niceKm} km · data ${dataKm < 1 ? Math.round(dataKm * 1000) + ' m' : dataKm.toFixed(1) + ' km'}/px`;
-      elLbl.title = lv ? `Relief detail tiles z${lv.z} from MOLA-HRSC 200 m DEM (USGS 2018)` : 'Global base map (MOLA 463 m DEM averaged to 4096×2048)';
+      elLbl.title = isAfad
+        ? 'NASA Blue Marble 8K Ultra-HD Earth Basemap (MODIS / Terra 8192×4096)'
+        : (lv ? `Relief detail tiles z${lv.z} from MOLA-HRSC 200 m DEM (USGS 2018)` : 'Global base map (MOLA 463 m DEM averaged to 4096×2048)');
       elBar.style.width = `${barPx}px`;
     }
 
@@ -430,81 +434,296 @@
 
       ctx.save();
       const tr = (global.MDE_I18N && global.MDE_I18N.getLang && global.MDE_I18N.getLang() === 'tr');
+      const scale = S.view.scale;
 
-      if (sc.route && sc.route.length >= 2) {
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 3.2 * dpr;
+      // 1. Tectonic Fault Systems (DAF, KAF)
+      const FAULTS = [
+        {
+          id: 'daf-1', name: 'DAF · Pazarcık-Türkoğlu (2023 Mw 7.8)', major: true,
+          pts: [[38.2, 37.9], [37.6, 37.8], [37.15, 37.35], [36.75, 37.2], [36.5, 36.9], [36.25, 36.4], [36.1, 36.1], [35.9, 35.8]]
+        },
+        {
+          id: 'daf-2', name: 'Çardak Fayı · Elbistan (2023 Mw 7.5)', major: true,
+          pts: [[37.9, 38.05], [37.25, 38.08], [36.6, 38.05], [36.1, 38.0]]
+        },
+        {
+          id: 'daf-3', name: 'DAF · Sivrice-Palu-Karlıova', major: false,
+          pts: [[41.0, 39.3], [40.5, 38.9], [39.9, 38.7], [39.3, 38.45], [38.8, 38.2], [38.2, 37.9]]
+        },
+        {
+          id: 'kaf-1', name: 'KAF · Kuzey Marmara Segmenti', major: true,
+          pts: [[30.5, 40.75], [29.9, 40.75], [29.1, 40.8], [28.2, 40.85], [27.3, 40.88], [26.4, 40.55]]
+        },
+        {
+          id: 'kaf-2', name: 'KAF · Bolu-Düzce-Adapazarı', major: false,
+          pts: [[35.5, 40.85], [33.5, 40.75], [31.5, 40.75], [30.5, 40.75]]
+        },
+        {
+          id: 'kaf-3', name: 'KAF · Doğu Karadeniz Geçişi', major: false,
+          pts: [[41.0, 39.3], [39.5, 39.75], [38.5, 40.05], [36.5, 40.7], [35.5, 40.85]]
+        }
+      ];
+
+      for (const f of FAULTS) {
         ctx.beginPath();
         let started = false;
-        for (const wp of sc.route) {
-          const gx = L.colOfLon(wp.lon), gy = L.rowOfLat(wp.lat);
+        for (const pt of f.pts) {
+          const gx = L.colOfLon(pt[0]), gy = L.rowOfLat(pt[1]);
           const [sx, sy, vis] = projectGrid(gx, gy);
           if (!vis) { started = false; continue; }
           if (!started) { ctx.moveTo(sx, sy); started = true; } else { ctx.lineTo(sx, sy); }
         }
+        ctx.strokeStyle = f.major ? 'rgba(239, 68, 68, 0.35)' : 'rgba(245, 158, 11, 0.28)';
+        ctx.lineWidth = (f.major ? 4.5 : 3.0) * dpr;
+        ctx.stroke();
+        ctx.strokeStyle = f.major ? '#ef4444' : '#f59e0b';
+        ctx.lineWidth = (f.major ? 2.0 : 1.4) * dpr;
         ctx.stroke();
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        if (f.major && scale >= 3.5 && f.pts.length >= 3) {
+          const mid = f.pts[Math.floor(f.pts.length / 2)];
+          const [mx, my, mvis] = projectGrid(L.colOfLon(mid[0]), L.rowOfLat(mid[1]));
+          if (mvis && mx > 40 && mx < canvas.width - 40 && my > 40 && my < canvas.height - 40) {
+            ctx.font = `600 ${9.5 * dpr}px monospace`;
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText(`⚡ ${f.name}`, mx + 8 * dpr, my - 6 * dpr);
+          }
+        }
+      }
+
+      // 2. ShakeMap & Sismik Şiddet Zonları (Isoseismals)
+      if (sc.id === 'maras') {
+        const QUAKES = [
+          { name: 'Mw 7.8 Pazarcık Odak Noktası', lat: 37.17, lon: 37.08, r9: 45, r8: 95, r7: 175 },
+          { name: 'Mw 7.5 Elbistan Odak Noktası', lat: 38.08, lon: 37.24, r9: 35, r8: 80, r7: 145 }
+        ];
+        for (const q of QUAKES) {
+          const qx = L.colOfLon(q.lon), qy = L.rowOfLat(q.lat);
+          const [sx, sy, vis] = projectGrid(qx, qy);
+          if (!vis) continue;
+
+          const kmScale = (scale * 2.8) * dpr;
+          const drawRing = (rKm, strokeCol, fillCol, dash, lbl) => {
+            const rPx = rKm * kmScale;
+            if (rPx < 6 || rPx > canvas.width * 1.5) return;
+            ctx.beginPath();
+            ctx.arc(sx, sy, rPx, 0, Math.PI * 2);
+            if (fillCol) { ctx.fillStyle = fillCol; ctx.fill(); }
+            ctx.strokeStyle = strokeCol;
+            ctx.lineWidth = 1.4 * dpr;
+            ctx.setLineDash(dash ? [5 * dpr, 4 * dpr] : []);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            if (scale >= 4.0) {
+              ctx.font = `500 ${8.5 * dpr}px monospace`;
+              ctx.fillStyle = strokeCol;
+              ctx.fillText(lbl, sx + rPx * 0.72, sy - rPx * 0.72);
+            }
+          };
+
+          drawRing(q.r7, 'rgba(234, 179, 8, 0.45)', 'rgba(234, 179, 8, 0.04)', true, 'MMI VII (Orta)');
+          drawRing(q.r8, 'rgba(245, 158, 11, 0.65)', 'rgba(245, 158, 11, 0.07)', true, 'MMI VIII (Ağır)');
+          drawRing(q.r9, 'rgba(239, 68, 68, 0.85)', 'rgba(239, 68, 68, 0.12)', false, 'MMI IX (Yıkıcı)');
+
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath();
+          ctx.arc(sx, sy, 7 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2 * dpr;
+          ctx.stroke();
+
+          ctx.font = `700 ${10.5 * dpr}px monospace`;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(`★ ${q.name}`, sx + 10 * dpr, sy - 5 * dpr);
+        }
+      } else if (sc.id === 'marmara') {
+        const mx = L.colOfLon(29.1), my = L.rowOfLat(40.8);
+        const [sx, sy, vis] = projectGrid(mx, my);
+        if (vis) {
+          const rPx = 42 * (scale * 2.8) * dpr;
+          ctx.beginPath();
+          ctx.arc(sx, sy, rPx, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
+          ctx.lineWidth = 1.6 * dpr;
+          ctx.setLineDash([5 * dpr, 4 * dpr]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = `600 ${10 * dpr}px monospace`;
+          ctx.fillStyle = '#ef4444';
+          ctx.fillText(`🌊 Marmara Tsunami & Sıvılaşma Tehdit Tamponu (Mw 7.6 Projeksiyonu)`, sx - rPx * 0.7, sy - rPx - 6 * dpr);
+        }
+      }
+
+      // 3. Bölgesel Şehir ve Koordinasyon Merkezleri (City Beacons)
+      const CITIES = [
+        { name: 'Kahramanmaraş', lat: 37.58, lon: 36.93, hub: true },
+        { name: 'Gaziantep', lat: 37.06, lon: 37.38, hub: true },
+        { name: 'Antakya (Hatay)', lat: 36.20, lon: 36.16, hub: true },
+        { name: 'Adıyaman', lat: 37.76, lon: 38.28, hub: false },
+        { name: 'Malatya', lat: 38.35, lon: 38.31, hub: false },
+        { name: 'Osmaniye', lat: 37.07, lon: 36.25, hub: false },
+        { name: 'İskenderun', lat: 36.58, lon: 36.17, hub: true },
+        { name: 'Şanlıurfa', lat: 37.16, lon: 38.79, hub: false },
+        { name: 'Adana', lat: 37.00, lon: 35.32, hub: true },
+        { name: 'İstanbul', lat: 41.01, lon: 28.97, hub: true },
+        { name: 'Kocaeli (İzmit)', lat: 40.76, lon: 29.92, hub: true },
+        { name: 'Sakarya', lat: 40.77, lon: 30.40, hub: false },
+        { name: 'Bursa', lat: 40.18, lon: 29.06, hub: true },
+        { name: 'Trabzon', lat: 41.00, lon: 39.72, hub: true },
+        { name: 'Rize', lat: 41.02, lon: 40.52, hub: true },
+        { name: 'Artvin', lat: 41.18, lon: 41.82, hub: false },
+        { name: 'Ankara', lat: 39.93, lon: 32.85, hub: true }
+      ];
+
+      for (const ct of CITIES) {
+        const [cx, cy, vis] = projectGrid(L.colOfLon(ct.lon), L.rowOfLat(ct.lat));
+        if (!vis || cx < 20 || cx > canvas.width - 20 || cy < 20 || cy > canvas.height - 20) continue;
+        ctx.fillStyle = ct.hub ? '#3b82f6' : 'rgba(226, 232, 240, 0.85)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, (ct.hub ? 4.2 : 2.8) * dpr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.2 * dpr;
+        ctx.stroke();
+
+        if (scale >= 2.5 || ct.hub) {
+          ctx.font = `600 ${Math.max(9, Math.min(12, 8 + scale * 0.4)) * dpr}px "SF Mono", monospace`;
+          ctx.fillStyle = 'rgba(3, 5, 8, 0.88)';
+          ctx.fillText(ct.name, cx + 7 * dpr + 1, cy + 3 * dpr + 1);
+          ctx.fillStyle = ct.hub ? '#93c5fd' : '#f1f5f9';
+          ctx.fillText(ct.name, cx + 7 * dpr, cy + 3 * dpr);
+        }
+      }
+
+      // 4. Arama-Kurtarma (SAR) Rota ve Güvenli Koridor Çizimi
+      if (sc.route && sc.route.length >= 2) {
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+        ctx.lineWidth = 7 * dpr;
+        ctx.beginPath();
+        let s1 = false;
+        for (const wp of sc.route) {
+          const [sx, sy, vis] = projectGrid(L.colOfLon(wp.lon), L.rowOfLat(wp.lat));
+          if (!vis) { s1 = false; continue; }
+          if (!s1) { ctx.moveTo(sx, sy); s1 = true; } else { ctx.lineTo(sx, sy); }
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3.2 * dpr;
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 1.4 * dpr;
         ctx.setLineDash([6 * dpr, 4 * dpr]);
         ctx.stroke();
         ctx.setLineDash([]);
+
+        sc.route.forEach((wp, idx) => {
+          const [sx, sy, vis] = projectGrid(L.colOfLon(wp.lon), L.rowOfLat(wp.lat));
+          if (!vis) return;
+          ctx.fillStyle = idx === 0 ? '#3b82f6' : (idx === sc.route.length - 1 ? '#10b981' : '#f59e0b');
+          ctx.beginPath();
+          ctx.arc(sx, sy, 3.8 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.4 * dpr;
+          ctx.stroke();
+          if (scale >= 5.0) {
+            ctx.font = `500 ${8.5 * dpr}px monospace`;
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(`WP-${idx + 1} (${wp.name})`, sx + 6 * dpr, sy - 5 * dpr);
+          }
+        });
       }
 
+      // 5. AFAD Koordinasyon Merkezi (HQ)
       if (sc.hq) {
-        const hqX = L.colOfLon(sc.hq.lon), hqY = L.rowOfLat(sc.hq.lat);
-        const [sx, sy, vis] = projectGrid(hqX, hqY);
+        const [sx, sy, vis] = projectGrid(L.colOfLon(sc.hq.lon), L.rowOfLat(sc.hq.lat));
         if (vis) {
           ctx.fillStyle = '#3b82f6';
           ctx.beginPath();
-          ctx.arc(sx, sy, 6 * dpr, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 7 * dpr, 0, Math.PI * 2);
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.8 * dpr;
+          ctx.lineWidth = 2.0 * dpr;
           ctx.stroke();
 
-          ctx.font = `600 ${10.5 * dpr}px monospace`;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(`📍 ${tr ? 'AFAD KOORDİNASYON' : 'AFAD HQ'}`, sx + 9 * dpr, sy + 3 * dpr);
+          ctx.font = `700 ${11 * dpr}px monospace`;
+          ctx.fillStyle = 'rgba(3, 5, 8, 0.9)';
+          ctx.fillText(`📍 ${tr ? 'AFAD KOORDİNASYON MERKEZİ' : 'AFAD HQ'}`, sx + 10 * dpr + 1, sy + 4 * dpr + 1);
+          ctx.fillStyle = '#60a5fa';
+          ctx.fillText(`📍 ${tr ? 'AFAD KOORDİNASYON MERKEZİ' : 'AFAD HQ'}`, sx + 10 * dpr, sy + 4 * dpr);
         }
       }
 
+      // 6. Sahra Hastanesi Seçim ve Uygunluk Parseli (FS Değerlendirmesi)
       if (sc.hospital) {
-        const hospX = L.colOfLon(sc.hospital.lon), hospY = L.rowOfLat(sc.hospital.lat);
-        const [sx, sy, vis] = projectGrid(hospX, hospY);
+        const [sx, sy, vis] = projectGrid(L.colOfLon(sc.hospital.lon), L.rowOfLat(sc.hospital.lat));
         if (vis) {
-          const s = 14 * dpr;
-          ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+          const s = 16 * dpr;
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.24)';
           ctx.fillRect(sx - s, sy - s, s * 2, s * 2);
           ctx.strokeStyle = '#10b981';
-          ctx.lineWidth = 2.0 * dpr;
+          ctx.lineWidth = 2.2 * dpr;
           ctx.strokeRect(sx - s, sy - s, s * 2, s * 2);
 
-          ctx.font = `600 ${11 * dpr}px monospace`;
+          const b = 4 * dpr;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.8 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(sx - s - b, sy - s); ctx.lineTo(sx - s, sy - s); ctx.lineTo(sx - s, sy - s - b);
+          ctx.moveTo(sx + s + b, sy - s); ctx.lineTo(sx + s, sy - s); ctx.lineTo(sx + s, sy - s - b);
+          ctx.moveTo(sx - s - b, sy + s); ctx.lineTo(sx - s, sy + s); ctx.lineTo(sx - s, sy + s + b);
+          ctx.moveTo(sx + s + b, sy + s); ctx.lineTo(sx + s, sy + s); ctx.lineTo(sx + s, sy + s + b);
+          ctx.stroke();
+
+          ctx.font = `700 ${11.5 * dpr}px monospace`;
+          ctx.fillStyle = 'rgba(3, 5, 8, 0.9)';
+          ctx.fillText(`🏥 ${tr ? 'SAHRA HASTANESİ (FS = 2.45 · OPTİMAL)' : 'FIELD HOSPITAL (FS = 2.45 · OPTIMAL)'}`, sx + s + 8 * dpr + 1, sy + 4 * dpr + 1);
           ctx.fillStyle = '#6ee7b7';
-          ctx.fillText(`🏥 ${tr ? 'SAHRA HASTANESİ' : 'FIELD HOSPITAL'}`, sx + s + 6 * dpr, sy + 3 * dpr);
+          ctx.fillText(`🏥 ${tr ? 'SAHRA HASTANESİ (FS = 2.45 · OPTİMAL)' : 'FIELD HOSPITAL (FS = 2.45 · OPTIMAL)'}`, sx + s + 8 * dpr, sy + 4 * dpr);
         }
       }
 
+      // 7. Tehlike / Hasar Alanı (Hazard Exclusion Zone)
       if (sc.hazard) {
-        const hazX = L.colOfLon(sc.hazard.lon), hazY = L.rowOfLat(sc.hazard.lat);
-        const [sx, sy, vis] = projectGrid(hazX, hazY);
+        const [sx, sy, vis] = projectGrid(L.colOfLon(sc.hazard.lon), L.rowOfLat(sc.hazard.lat));
         if (vis) {
-          const r = Math.max(16, sc.hazard.rKm * (S.view.scale * 4)) * dpr;
+          const r = Math.max(18, sc.hazard.rKm * (scale * 3.5)) * dpr;
           ctx.strokeStyle = '#ef4444';
-          ctx.lineWidth = 1.6 * dpr;
-          ctx.setLineDash([4 * dpr, 4 * dpr]);
+          ctx.lineWidth = 1.8 * dpr;
+          ctx.setLineDash([5 * dpr, 4 * dpr]);
           ctx.beginPath();
           ctx.arc(sx, sy, r, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
 
-          ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.14)';
           ctx.fill();
-          ctx.font = `500 ${9.5 * dpr}px monospace`;
+          ctx.font = `600 ${10 * dpr}px monospace`;
           ctx.fillStyle = '#fca5a5';
-          ctx.fillText(`⚠ ${sc.hazard.name}`, sx - r, sy - r - 4 * dpr);
+          ctx.fillText(`⚠ ${sc.hazard.name}`, sx - r, sy - r - 6 * dpr);
         }
+      }
+
+      // 8. Taktik SAR Grid Çerçevesi (Arama-Kurtarma Sektörleme Grid'i)
+      if (scale >= 5.0 && sc.hq && sc.hospital) {
+        const [hx, hy] = projectGrid(L.colOfLon(sc.hq.lon), L.rowOfLat(sc.hq.lat));
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+        ctx.lineWidth = 1 * dpr;
+        ctx.setLineDash([3 * dpr, 3 * dpr]);
+        for (let off = -120 * dpr; off <= 120 * dpr; off += 60 * dpr) {
+          ctx.beginPath(); ctx.moveTo(hx + off, hy - 140 * dpr); ctx.lineTo(hx + off, hy + 140 * dpr); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(hx - 140 * dpr, hy + off); ctx.lineTo(hx + 140 * dpr, hy + off); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.font = `500 ${8.5 * dpr}px monospace`;
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+        ctx.fillText('SEKTÖR A-1 (AFAD SAR)', hx - 110 * dpr, hy - 110 * dpr);
+        ctx.fillText('SEKTÖR A-2 (İKA / UGV)', hx + 30 * dpr, hy - 110 * dpr);
       }
 
       ctx.restore();
