@@ -567,7 +567,186 @@
       announce(res.blackoutSol !== null ? (L(tr, 'pn.stormSimulationBlackoutOnSol', [res.blackoutSol])) : (L(tr, 'pn.stormSimulationBaseSurvivesWith', [res.minBatt.toFixed(0)])), doc);
     }
 
-    return { buildPresets, buildSliders, renderCandidates, renderDetail, renderRoute, runCrisis, announce };
+    const AFAD_SCENARIOS = {
+      maras: {
+        id: 'maras',
+        name: 'Kahramanmaraş - Pazarcık & Hatay Fay Hattı',
+        nameEn: 'Kahramanmaraş - Pazarcık & Hatay Fault Corridor',
+        lat: 36.20, lon: 36.16,
+        locTitle: '36.20° N, 36.16° E · Antakya Afet Koridoru',
+        locTitleEn: '36.20° N, 36.16° E · Antakya Disaster Corridor',
+        hospital: { lat: 36.21, lon: 36.18, name: 'Sahra Hastanesi #1 (Antakya Fuar Alanı)' },
+        hq: { lat: 36.19, lon: 36.14, name: 'AFAD Koordinasyon Merkezi' },
+        hazard: { lat: 36.18, lon: 36.16, rKm: 1.2, name: 'Ağır Enkaz & Çökme Riski' },
+        route: [
+          { lat: 36.19, lon: 36.14, name: 'AFAD-HQ' },
+          { lat: 36.196, lon: 36.152, name: 'İntikal-01' },
+          { lat: 36.204, lon: 36.168, name: 'Güvenli Koridor' },
+          { lat: 36.21, lon: 36.18, name: 'Sahra Hastanesi' }
+        ],
+        baseSlope: 1.8,
+        baseRainMm: 35,
+      },
+      marmara: {
+        id: 'marmara',
+        name: 'Marmara - İstanbul / Kocaeli Sahra Hastanesi Seçimi',
+        nameEn: 'Marmara - Istanbul / Kocaeli Field Hospital Siting',
+        lat: 40.76, lon: 29.92,
+        locTitle: '40.76° N, 29.92° E · Marmara Sahra Hastanesi & Lojistik',
+        locTitleEn: '40.76° N, 29.92° E · Marmara Field Hospital & Logistics',
+        hospital: { lat: 40.77, lon: 29.95, name: 'Sahra Hastanesi #2 (İzmit Fuar Alanı)' },
+        hq: { lat: 40.75, lon: 29.90, name: 'AFAD Bölge Afet Merkezi' },
+        hazard: { lat: 40.76, lon: 29.92, rKm: 1.5, name: 'Sıvılaşma & Hasarlı Viyadük' },
+        route: [
+          { lat: 40.75, lon: 29.90, name: 'AFAD-HQ' },
+          { lat: 40.758, lon: 29.915, name: 'Kuzey Geçişi' },
+          { lat: 40.765, lon: 29.932, name: 'Lojistik Arter' },
+          { lat: 40.77, lon: 29.95, name: 'Sahra Hastanesi' }
+        ],
+        baseSlope: 1.2,
+        baseRainMm: 20,
+      },
+      rize: {
+        id: 'rize',
+        name: 'Karadeniz - Rize / Artvin Taşkın & Heyelan Riski',
+        nameEn: 'Black Sea - Rize / Artvin Flash Flood & Landslide Warning',
+        lat: 41.02, lon: 40.52,
+        locTitle: '41.02° N, 40.52° E · Karadeniz Taşkın & Heyelan Alanı',
+        locTitleEn: '41.02° N, 40.52° E · Black Sea Landslide & Flood Zone',
+        hospital: { lat: 41.03, lon: 40.54, name: 'Sahra Çadır Kenti (Rize Sırtı)' },
+        hq: { lat: 41.01, lon: 40.50, name: 'AFAD Kriz Masası' },
+        hazard: { lat: 41.02, lon: 40.52, rKm: 2.0, name: 'Aktif Heyelan & Şev Kayması' },
+        route: [
+          { lat: 41.01, lon: 40.50, name: 'AFAD-HQ' },
+          { lat: 41.018, lon: 40.514, name: 'Sırt Emniyet Hattı' },
+          { lat: 41.025, lon: 40.528, name: 'Taşkın Baypası' },
+          { lat: 41.03, lon: 40.54, name: 'Sahra Çadırı' }
+        ],
+        baseSlope: 6.5,
+        baseRainMm: 110,
+      }
+    };
+
+    function renderAFAD() {
+      const panel = $('#panel-afad');
+      if (!panel) return;
+      const selEl = $('#afad-scenario-select');
+      const scKey = (selEl && selEl.value) || 'maras';
+      const sc = AFAD_SCENARIOS[scKey] || AFAD_SCENARIOS.maras;
+      S.afad = S.afad || {};
+      S.afad.active = true;
+      S.afad.scenario = sc;
+
+      const slopeEl = $('#afad-slope'), rainEl = $('#afad-rain'), packEl = $('#afad-pack');
+      const slopeVal = slopeEl ? +slopeEl.value : sc.baseSlope;
+      const rainVal = rainEl ? +rainEl.value : sc.baseRainMm;
+      const packVal = packEl ? +packEl.value : 22;
+
+      if ($('#afad-slope-v')) $('#afad-slope-v').textContent = slopeVal.toFixed(1) + '°';
+      if ($('#afad-rain-v')) $('#afad-rain-v').textContent = rainVal + ' mm';
+      if ($('#afad-pack-v')) $('#afad-pack-v').textContent = packVal + ' kg';
+
+      const tr = isTr();
+      if ($('#afad-loc-title')) $('#afad-loc-title').textContent = tr ? sc.locTitle : sc.locTitleEn;
+
+      let score = 96;
+      if (slopeVal > 3.0) score -= (slopeVal - 3.0) * 11;
+      if (rainVal > 70) score -= (rainVal - 70) * 0.18;
+      score = Math.max(10, Math.min(99, Math.round(score)));
+
+      const scoreEl = $('#afad-score-val');
+      if (scoreEl) {
+        scoreEl.className = score >= 80 ? 'ok' : score >= 50 ? 'warn' : 'bad';
+        scoreEl.textContent = tr
+          ? `%${score} · ${score >= 80 ? 'OPTİMAL YERLEŞİM' : score >= 50 ? 'ŞARTLI UYGUN' : 'RİSKLİ ALAN'}`
+          : `${score}% · ${score >= 80 ? 'OPTIMAL SITING' : score >= 50 ? 'CONDITIONAL' : 'HAZARDOUS'}`;
+      }
+
+      const betaRad = slopeVal * Math.PI / 180;
+      const pore = Math.min(0.6, rainVal / 200.0);
+      const resisting = 5.0 + 18.0 * 2.0 * Math.pow(Math.cos(betaRad), 2) * (1.0 - pore) * Math.tan(30 * Math.PI / 180);
+      const driving = 18.0 * 2.0 * Math.sin(betaRad) * Math.cos(betaRad);
+      const fs = +(Math.max(0.1, resisting / Math.max(0.1, driving))).toFixed(2);
+      const fsEl = $('#afad-fs-val');
+      if (fsEl) {
+        fsEl.className = fs >= 1.5 ? 'ok' : fs >= 1.1 ? 'warn' : 'bad';
+        fsEl.textContent = tr
+          ? `FS = ${fs} (${fs >= 1.5 ? 'GÜVENLİ - STABİL' : fs >= 1.1 ? 'ORTA RİSK' : 'KRİTİK HEYELAN TEHLİKESİ'})`
+          : `FS = ${fs} (${fs >= 1.5 ? 'SAFE - STABLE' : fs >= 1.1 ? 'MODERATE RISK' : 'CRITICAL HAZARD'})`;
+      }
+
+      const v = 4.0 / 3.6;
+      const W = 80, L_mass = packVal;
+      const slopePct = Math.tan(slopeVal * Math.PI / 180) * 100;
+      const pandolfW = Math.round(1.5 * W + 2.0 * (W + L_mass) * Math.pow(L_mass / W, 2) + 1.2 * (W + L_mass) * (1.5 * v * v + 0.35 * v * slopePct));
+      const kcalH = Math.round(pandolfW * 0.8604);
+      const waterL = +(pandolfW / 400.0 * 0.8).toFixed(2);
+
+      if ($('#afad-pandolf-val')) $('#afad-pandolf-val').textContent = `${pandolfW} W · ${kcalH} kcal/${tr ? 'sa' : 'h'}`;
+      if ($('#afad-water-val')) $('#afad-water-val').textContent = `${waterL} L / ${tr ? 'saat' : 'h'}`;
+      if ($('#afad-route-val')) $('#afad-route-val').textContent = `2.4 km · ${tr ? 'Emniyetli İKA Koridoru' : 'Safe UGV Corridor'}`;
+
+      if ($('#afad-verdict-note')) {
+        $('#afad-verdict-note').textContent = tr
+          ? `Eğim ${slopeVal}° (Konteyner eşiği ≤ 3°), 24s yağış ${rainVal} mm. Bekker zemin batma derinliği < 8 mm. Kurtarma ekipleri ve İKA araçları için rota açıktır.`
+          : `Slope ${slopeVal}° (Container threshold ≤ 3°), 24h rain ${rainVal} mm. Bekker soil sinkage < 8 mm. Route cleared for rescue personnel and UGVs.`;
+      }
+    }
+
+    const selScenario = $('#afad-scenario-select');
+    if (selScenario) {
+      selScenario.onchange = () => {
+        renderAFAD();
+        if (ctx.onAfadFly && S.afad && S.afad.scenario) {
+          ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
+        }
+      };
+    }
+    ['#afad-slope', '#afad-rain', '#afad-pack'].forEach(sel => {
+      const el = $(sel);
+      if (el) el.oninput = () => renderAFAD();
+    });
+    const btnAfadFly = $('#afad-btn-fly');
+    if (btnAfadFly) {
+      btnAfadFly.onclick = () => {
+        if (ctx.onAfadFly && S.afad && S.afad.scenario) {
+          ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
+        }
+      };
+    }
+    const btnAfadRoute = $('#afad-btn-route');
+    if (btnAfadRoute) {
+      btnAfadRoute.onclick = () => {
+        if (ctx.onAfadFly && S.afad && S.afad.scenario) {
+          ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
+        }
+        announce(isTr() ? 'İKA Güvenli tahliye koridoru haritaya işlendi.' : 'UGV evacuation corridor plotted on map.', doc);
+      };
+    }
+    const btnAfadGeo = $('#afad-export-geojson');
+    if (btnAfadGeo && global.MDE_BRIEF && global.MDE_BRIEF.downloadBriefSARGeoJSON) {
+      btnAfadGeo.onclick = () => {
+        const briefCtx = { S, W: layers.W, L: layers.L, flatShare: layers.flatShare, cellValues: layers.cellValues, blockValues: layers.blockValues, nearestRegion: layers.nearestRegion };
+        global.MDE_BRIEF.downloadBriefSARGeoJSON(briefCtx);
+      };
+    }
+    const btnAfadMav = $('#afad-export-mavlink');
+    if (btnAfadMav && global.MDE_BRIEF && global.MDE_BRIEF.downloadBriefMAVLink) {
+      btnAfadMav.onclick = () => {
+        const sc = (S.afad && S.afad.scenario) || AFAD_SCENARIOS.maras;
+        const fakePayload = {
+          top_candidates: (sc.route || []).map((r, i) => ({
+            rank: i + 1,
+            lat_deg: r.lat,
+            lon_deg: r.lon,
+            elev_m: 500,
+          }))
+        };
+        global.MDE_BRIEF.downloadBriefMAVLink(fakePayload);
+      };
+    }
+
+    return { buildPresets, buildSliders, renderCandidates, renderDetail, renderRoute, runCrisis, renderAFAD, announce };
   }
 
   global.MDE_PANELS = { createPanels, critRowsHTML, announce };

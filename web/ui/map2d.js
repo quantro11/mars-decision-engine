@@ -413,6 +413,94 @@
       if (S.crisis.site) drawStationBeacon(S.crisis.site.x, S.crisis.site.y);
       if (S.selected && S.selected.cand == null) drawSelectionReticle(S.selected.x + 0.5, S.selected.y + 0.5);
       drawCustomLandingOverlay(dpr);
+      drawAFADOverlay(dpr);
+    }
+
+    function drawAFADOverlay(dpr) {
+      if (S.mode !== 'afad' && (!S.afad || !S.afad.active)) return;
+      const sc = (S.afad && S.afad.scenario) || null;
+      if (!sc) return;
+
+      ctx.save();
+      const tr = (global.MDE_I18N && global.MDE_I18N.getLang && global.MDE_I18N.getLang() === 'tr');
+
+      if (sc.route && sc.route.length >= 2) {
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3.2 * dpr;
+        ctx.beginPath();
+        let started = false;
+        for (const wp of sc.route) {
+          const gx = L.colOfLon(wp.lon), gy = L.rowOfLat(wp.lat);
+          const [sx, sy, vis] = projectGrid(gx, gy);
+          if (!vis) { started = false; continue; }
+          if (!started) { ctx.moveTo(sx, sy); started = true; } else { ctx.lineTo(sx, sy); }
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1.2 * dpr;
+        ctx.setLineDash([6 * dpr, 4 * dpr]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      if (sc.hq) {
+        const hqX = L.colOfLon(sc.hq.lon), hqY = L.rowOfLat(sc.hq.lat);
+        const [sx, sy, vis] = projectGrid(hqX, hqY);
+        if (vis) {
+          ctx.fillStyle = '#3b82f6';
+          ctx.beginPath();
+          ctx.arc(sx, sy, 6 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.8 * dpr;
+          ctx.stroke();
+
+          ctx.font = `600 ${10.5 * dpr}px monospace`;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(`📍 ${tr ? 'AFAD KOORDİNASYON' : 'AFAD HQ'}`, sx + 9 * dpr, sy + 3 * dpr);
+        }
+      }
+
+      if (sc.hospital) {
+        const hospX = L.colOfLon(sc.hospital.lon), hospY = L.rowOfLat(sc.hospital.lat);
+        const [sx, sy, vis] = projectGrid(hospX, hospY);
+        if (vis) {
+          const s = 14 * dpr;
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+          ctx.fillRect(sx - s, sy - s, s * 2, s * 2);
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 2.0 * dpr;
+          ctx.strokeRect(sx - s, sy - s, s * 2, s * 2);
+
+          ctx.font = `600 ${11 * dpr}px monospace`;
+          ctx.fillStyle = '#6ee7b7';
+          ctx.fillText(`🏥 ${tr ? 'SAHRA HASTANESİ' : 'FIELD HOSPITAL'}`, sx + s + 6 * dpr, sy + 3 * dpr);
+        }
+      }
+
+      if (sc.hazard) {
+        const hazX = L.colOfLon(sc.hazard.lon), hazY = L.rowOfLat(sc.hazard.lat);
+        const [sx, sy, vis] = projectGrid(hazX, hazY);
+        if (vis) {
+          const r = Math.max(16, sc.hazard.rKm * (S.view.scale * 4)) * dpr;
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 1.6 * dpr;
+          ctx.setLineDash([4 * dpr, 4 * dpr]);
+          ctx.beginPath();
+          ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+          ctx.fill();
+          ctx.font = `500 ${9.5 * dpr}px monospace`;
+          ctx.fillStyle = '#fca5a5';
+          ctx.fillText(`⚠ ${sc.hazard.name}`, sx - r, sy - r - 4 * dpr);
+        }
+      }
+
+      ctx.restore();
     }
 
     function drawCustomLandingOverlay(dpr) {

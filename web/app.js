@@ -216,6 +216,16 @@
       if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 6.0); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
     onGlobeFly: (lat, lon) => { if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon); viewport.schedule3D(); } },
+    onAfadFly: (lat, lon) => {
+      const x = L.colOfLon(lon), y = L.rowOfLat(lat);
+      if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon, 1.45); viewport.schedule3D(); }
+      else if (viewport) {
+        S.view.scale = Math.max(S.view.scale, 8.5);
+        S.view.tx = viewport.canvas.width / 2 - x * S.view.scale;
+        S.view.ty = viewport.canvas.height / 2 - y * S.view.scale;
+        viewport.wrapView(); viewport.updateScaleBar(); viewport.draw();
+      }
+    },
   };
   panels = window.MDE_PANELS.createPanels({ doc: document, S, layers, SCORING, STORM, FMT, CHARTS, ...panelCbs });
 
@@ -271,7 +281,7 @@
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    for (const k of ['landing', 'eva', 'route', 'crisis']) {
+    for (const k of ['landing', 'eva', 'route', 'crisis', 'afad']) {
       if ($('#panel-' + k)) $('#panel-' + k).classList.toggle('hidden', k !== m);
     }
     if (m === 'route' || m === 'eva') S.overlay = 'slope'; else if (m === 'landing') S.overlay = 'score';
@@ -280,6 +290,10 @@
     if (window.MDE_TACTICAL_EVA) window.MDE_TACTICAL_EVA.onModeChange(m);
     if (m === 'route') panels.renderRoute();
     if (m === 'crisis') panels.runCrisis();
+    if (m === 'afad' && panels.renderAFAD) {
+      panels.renderAFAD();
+      if (S.afad && S.afad.scenario) panelCbs.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
+    }
     viewport.draw();
   }
 

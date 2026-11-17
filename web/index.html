@@ -43,6 +43,7 @@
     <button class="mode-btn" data-mode="eva" aria-pressed="false"><span class="mode-label">Tactical EVA · 16 km²</span></button>
     <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-label">Dust-storm power</span></button>
+    <button class="mode-btn" data-mode="afad" aria-pressed="false"><span class="mode-label">AFAD Afet · Dünya</span></button>
   </nav>
 
   <div class="topbar-right">
@@ -467,6 +468,74 @@
       <div id="crisis-verdict" class="crisis-verdict" role="status" aria-live="polite">Pick a site on the map to run the survival test.</div>
 
       <div id="crisis-summary"></div>
+    </section>
+
+    <section id="panel-afad" class="mode-panel hidden" aria-label="AFAD Disaster Logistics Planner">
+      <div class="sec-head">
+        <h2>AFAD Afet &amp; İKA Modülü</h2>
+        <span class="hint">Dünya 1.0g · Dual-Use</span>
+      </div>
+      <p class="help">Deprem, heyelan ve sel acil durumlarında sahra hastanesi yer seçimi ve insansız kurtarma aracı (İKA) rotalaması.</p>
+
+      <div class="control-group">
+        <label for="afad-scenario-select">Afet Senaryosu &amp; Bölge
+          <select id="afad-scenario-select" class="ls-select">
+            <option value="maras">Kahramanmaraş - Pazarcık &amp; Hatay (Deprem Afet Koridoru)</option>
+            <option value="marmara">Marmara - İstanbul / Kocaeli Sahra Hastanesi Seçimi</option>
+            <option value="rize">Karadeniz - Rize / Artvin Taşkın &amp; Heyelan Riski</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="station-lock">
+        <span class="station-lbl">Koordinat &amp; Bölge</span>
+        <b id="afad-loc-title">36.20° N, 36.16° E · Antakya Afet Bölgesi</b>
+      </div>
+
+      <div class="control-group">
+        <label>Maksimum Eğim Sınırı (Konteyner/Sahra) <span id="afad-slope-v">3.0°</span>
+          <input type="range" id="afad-slope" min="1" max="15" step="0.5" value="3.0"></label>
+        <label>24 Saatlik Yağış (Heyelan Riski) <span id="afad-rain-v">35 mm</span>
+          <input type="range" id="afad-rain" min="0" max="250" step="5" value="35"></label>
+        <label>Arama-Kurtarma Personeli Teçhizatı <span id="afad-pack-v">22 kg</span>
+          <input type="range" id="afad-pack" min="5" max="40" step="1" value="22"></label>
+      </div>
+
+      <div class="row">
+        <button type="button" id="afad-btn-fly" class="btn-spec">Haritada Afet Bölgesine Odaklan</button>
+        <button type="button" id="afad-btn-route" class="ghost">İKA Güvenli Koridor Çiz</button>
+      </div>
+
+      <div id="afad-results-card" class="tactical-card mt-sm">
+        <div class="kv">
+          <span>Sahra Hastanesi &amp; Çadır Kent</span>
+          <b id="afad-score-val" class="ok">%94 · OPTİMAL YERLEŞİM</b>
+        </div>
+        <div class="kv">
+          <span>Yamaç Heyelan Güvenliği (FS)</span>
+          <b id="afad-fs-val" class="ok">FS = 2.45 (GÜVENLİ)</b>
+        </div>
+        <div class="kv">
+          <span>Kurtarma Personeli Yorgunluğu (1.0g)</span>
+          <b id="afad-pandolf-val">432 W · 372 kcal/sa</b>
+        </div>
+        <div class="kv">
+          <span>Önerilen Saatlik Su Tüketimi</span>
+          <b id="afad-water-val">0.86 L / saat</b>
+        </div>
+        <div class="kv">
+          <span>İKA Otonom Arama Koridoru</span>
+          <b id="afad-route-val">2.4 km · Emniyetli</b>
+        </div>
+        <div id="afad-verdict-note" class="help note-sm mt-sm">
+          Topografik eğim ≤ 3°, taşkın yatağı dışı stabil taban. Bekker zemin batma derinliği &lt; 8 mm. İKA aracı ve kurtarma personeli için tam geçişe uygundur.
+        </div>
+      </div>
+
+      <div class="row mt-sm">
+        <button type="button" id="afad-export-geojson" class="ghost">AFAD CBS GeoJSON İndir</button>
+        <button type="button" id="afad-export-mavlink" class="ghost">İKA MAVLink İndir</button>
+      </div>
     </section>
 
 
