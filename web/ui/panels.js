@@ -686,7 +686,33 @@
       if ($('#afad-water-val')) $('#afad-water-val').textContent = `${waterL} L / ${tr ? 'saat' : 'h'}`;
       if ($('#afad-route-val')) $('#afad-route-val').textContent = `2.4 km · ${tr ? 'Emniyetli İKA Koridoru' : 'Safe UGV Corridor'}`;
 
-      if ($('#afad-verdict-note')) {
+      const astarEngine = global.ASTAR;
+      if (astarEngine && astarEngine.planEarth) {
+        const sLat = (S.afad.customStart ? S.afad.customStart.lat : (sc.hq ? sc.hq.lat : sc.lat));
+        const sLon = (S.afad.customStart ? S.afad.customStart.lon : (sc.hq ? sc.hq.lon : sc.lon));
+        const gLat = (S.afad.customGoal ? S.afad.customGoal.lat : (sc.hospital ? sc.hospital.lat : (sc.lat + 0.04)));
+        const gLon = (S.afad.customGoal ? S.afad.customGoal.lon : (sc.hospital ? sc.hospital.lon : (sc.lon + 0.04)));
+        const hazards = sc.hazard ? [sc.hazard] : [];
+        const astarRes = astarEngine.planEarth(sLat, sLon, gLat, gLon, { hazards, packKg: packVal });
+        S.afad.astar = astarRes;
+        if (astarRes && astarRes.stats) {
+          const st = astarRes.stats;
+          if ($('#afad-route-val')) {
+            $('#afad-route-val').textContent = `${st.distKm} km · ${tr ? 'A* Emniyetli Koridor' : 'A* Safe Route'} (+%${st.detourPct})`;
+          }
+          if ($('#afad-pandolf-val')) {
+            $('#afad-pandolf-val').textContent = `${st.pandolfW} W · ${st.kcalH} kcal/${tr ? 'sa' : 'h'} (${st.transitTimeMin} ${tr ? 'dk intikal' : 'min'})`;
+          }
+          if ($('#afad-water-val')) {
+            $('#afad-water-val').textContent = `${st.waterL} L (${tr ? 'İKA:' : 'UGV:'} ${st.ugvTimeMin} dk)`;
+          }
+          if ($('#afad-verdict-note')) {
+            $('#afad-verdict-note').textContent = tr
+              ? `A* Eniyilemesi: ${st.distKm} km güvenli koridor (Düz hat: ${st.straightKm} km, %${st.detourPct} enkaz baypası). İntikal süresi kurtarma personeli için ${st.transitTimeMin} dk, otonom İKA için ${st.ugvTimeMin} dk. Haritaya tıklayarak başlangıç/hedef noktalarını değiştirebilirsiniz.`
+              : `A* Multi-Hazard Solution: ${st.distKm} km safe route (${st.straightKm} km direct, +${st.detourPct}% detour avoiding hazard zone). Transit time: ${st.transitTimeMin} min walking, ${st.ugvTimeMin} min autonomous UGV. Click on map to set custom Start / Goal.`;
+          }
+        }
+      } else if ($('#afad-verdict-note')) {
         $('#afad-verdict-note').textContent = tr
           ? `Eğim ${slopeVal}° (Konteyner eşiği ≤ 3°), 24s yağış ${rainVal} mm. Bekker zemin batma derinliği < 8 mm. Kurtarma ekipleri ve İKA araçları için rota açıktır.`
           : `Slope ${slopeVal}° (Container threshold ≤ 3°), 24h rain ${rainVal} mm. Bekker soil sinkage < 8 mm. Route cleared for rescue personnel and UGVs.`;
@@ -696,6 +722,8 @@
     const selScenario = $('#afad-scenario-select');
     if (selScenario) {
       selScenario.onchange = () => {
+        S.afad.customStart = null;
+        S.afad.customGoal = null;
         renderAFAD();
         if (ctx.onAfadFly && S.afad && S.afad.scenario) {
           ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
@@ -717,10 +745,13 @@
     const btnAfadRoute = $('#afad-btn-route');
     if (btnAfadRoute) {
       btnAfadRoute.onclick = () => {
+        S.afad.customStart = null;
+        S.afad.customGoal = null;
+        renderAFAD();
         if (ctx.onAfadFly && S.afad && S.afad.scenario) {
           ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
         }
-        announce(isTr() ? 'İKA Güvenli tahliye koridoru haritaya işlendi.' : 'UGV evacuation corridor plotted on map.', doc);
+        announce(isTr() ? 'A* Afet / SAR Koridoru haritada hesaplandı.' : 'A* disaster route computed on map.', doc);
       };
     }
     const btnAfadGeo = $('#afad-export-geojson');

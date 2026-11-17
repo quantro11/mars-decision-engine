@@ -598,8 +598,66 @@
         }
       }
 
-      // 4. Arama-Kurtarma (SAR) Rota ve Güvenli Koridor Çizimi
-      if (sc.route && sc.route.length >= 2) {
+      // 4. Arama-Kurtarma (SAR) A* Eniyilenmiş Rota ve Güvenli Koridor Çizimi
+      const astarData = (S.afad && S.afad.astar) || null;
+      if (astarData && astarData.ok && astarData.safePath && astarData.safePath.length >= 2) {
+        // A) Tehlike Bölgesini Doğrudan Kesen Düz Hat (Kuş Uçuşu - Baypas Gösterimi)
+        if (astarData.straightPath && astarData.straightPath.length >= 2) {
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
+          ctx.lineWidth = 2.0 * dpr;
+          ctx.setLineDash([7 * dpr, 5 * dpr]);
+          ctx.beginPath();
+          let s0 = false;
+          for (const pt of astarData.straightPath) {
+            const [sx, sy, vis] = projectGrid(L.colOfLon(pt.lon), L.rowOfLat(pt.lat));
+            if (!vis) { s0 = false; continue; }
+            if (!s0) { ctx.moveTo(sx, sy); s0 = true; } else { ctx.lineTo(sx, sy); }
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // B) A* Emniyetli Çoklu-Tehlike Baypas Koridoru (Emerald Safe Corridor)
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.38)';
+        ctx.lineWidth = 8.0 * dpr;
+        ctx.beginPath();
+        let s1 = false;
+        for (const pt of astarData.safePath) {
+          const [sx, sy, vis] = projectGrid(L.colOfLon(pt.lon), L.rowOfLat(pt.lat));
+          if (!vis) { s1 = false; continue; }
+          if (!s1) { ctx.moveTo(sx, sy); s1 = true; } else { ctx.lineTo(sx, sy); }
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3.4 * dpr;
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 1.4 * dpr;
+        ctx.setLineDash([6 * dpr, 4 * dpr]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Ara Noktalar (Waypoints)
+        const wps = (astarData.stats && astarData.stats.waypoints) || [];
+        wps.forEach((wp, idx) => {
+          const [sx, sy, vis] = projectGrid(L.colOfLon(wp.lon), L.rowOfLat(wp.lat));
+          if (!vis) return;
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.arc(sx, sy, 3.6 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.4 * dpr;
+          ctx.stroke();
+          if (scale >= 4.5) {
+            ctx.font = `600 ${8.5 * dpr}px monospace`;
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(wp.name || `WP-${idx + 1}`, sx + 6 * dpr, sy - 5 * dpr);
+          }
+        });
+      } else if (sc.route && sc.route.length >= 2) {
         ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
         ctx.lineWidth = 7 * dpr;
         ctx.beginPath();
@@ -724,6 +782,48 @@
         ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
         ctx.fillText('SEKTÖR A-1 (AFAD SAR)', hx - 110 * dpr, hy - 110 * dpr);
         ctx.fillText('SEKTÖR A-2 (İKA / UGV)', hx + 30 * dpr, hy - 110 * dpr);
+      }
+
+      // 9. Özel İnteraktif A* Başlangıç ve Hedef Pinleri (Map Click Pins)
+      if (S.afad && S.afad.customStart) {
+        const [sx, sy, vis] = projectGrid(L.colOfLon(S.afad.customStart.lon), L.rowOfLat(S.afad.customStart.lat));
+        if (vis) {
+          ctx.fillStyle = '#3b82f6';
+          ctx.beginPath();
+          ctx.arc(sx, sy, 8 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.2 * dpr;
+          ctx.stroke();
+
+          const lbl = S.afad.customGoal
+            ? `📍 ${tr ? 'A* BAŞLANGIÇ (SAR Çıkış)' : 'A* START'}`
+            : `📍 ${tr ? 'A* BAŞLANGIÇ (Hedef seçmek için haritaya tıklayın)' : 'A* START (Click for Goal)'}`;
+          ctx.font = `700 ${11 * dpr}px monospace`;
+          ctx.fillStyle = 'rgba(3, 5, 8, 0.9)';
+          ctx.fillText(lbl, sx + 11 * dpr + 1, sy + 4 * dpr + 1);
+          ctx.fillStyle = '#93c5fd';
+          ctx.fillText(lbl, sx + 11 * dpr, sy + 4 * dpr);
+        }
+      }
+      if (S.afad && S.afad.customGoal) {
+        const [gx, gy, vis] = projectGrid(L.colOfLon(S.afad.customGoal.lon), L.rowOfLat(S.afad.customGoal.lat));
+        if (vis) {
+          ctx.fillStyle = '#10b981';
+          ctx.beginPath();
+          ctx.arc(gx, gy, 8 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.2 * dpr;
+          ctx.stroke();
+
+          const lbl = `🎯 ${tr ? 'A* HEDEF (Tahliye Noktası)' : 'A* GOAL'}`;
+          ctx.font = `700 ${11 * dpr}px monospace`;
+          ctx.fillStyle = 'rgba(3, 5, 8, 0.9)';
+          ctx.fillText(lbl, gx + 11 * dpr + 1, gy + 4 * dpr + 1);
+          ctx.fillStyle = '#6ee7b7';
+          ctx.fillText(lbl, gx + 11 * dpr, gy + 4 * dpr);
+        }
       }
 
       ctx.restore();

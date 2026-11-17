@@ -399,5 +399,158 @@
     return { ok: true, path, stats: pathStats(L, path, kmCol, kmRow) };
   }
 
-  global.ASTAR = { plan, straight, haversineKm, smoothCellElev };
+  const EARTH_R = 6371.0;
+
+  function haversineEarthKm(lat1, lon1, lat2, lon2) {
+    const d = Math.PI / 180;
+    const a = Math.sin((lat2 - lat1) * d / 2) ** 2 + Math.cos(lat1 * d) * Math.cos(lat2 * d) * Math.sin((lon2 - lon1) * d / 2) ** 2;
+    return 2 * EARTH_R * Math.asin(Math.sqrt(a));
+  }
+
+  function planEarth(startLat, startLon, goalLat, goalLon, opts = {}) {
+    const hazards = opts.hazards || [];
+    const directKm = haversineEarthKm(startLat, startLon, goalLat, goalLon);
+    if (directKm < 0.02) {
+      return {
+        ok: true,
+        safePath: [{ lat: startLat, lon: startLon }, { lat: goalLat, lon: goalLon }],
+        straightPath: [{ lat: startLat, lon: startLon }, { lat: goalLat, lon: goalLon }],
+        stats: { distKm: directKm, straightKm: directKm, detourPct: 0, transitTimeMin: 1, ugvTimeMin: 1, pandolfW: 280, kcalH: 240, waterL: 0.5, waypoints: [] }
+      };
+    }
+
+    const N_GRID = 64;
+    const latSpan = Math.abs(goalLat - startLat);
+    const lonSpan = Math.abs(goalLon - startLon);
+    const padLat = Math.max(0.05, latSpan * 0.5);
+    const padLon = Math.max(0.06, lonSpan * 0.5);
+    const minLat = Math.min(startLat, goalLat) - padLat;
+    const maxLat = Math.max(startLat, goalLat) + padLat;
+    const minLon = Math.min(startLon, goalLon) - padLon;
+    const maxLon = Math.max(startLon, goalLon) + padLon;
+
+    const latOfI = (i) => minLat + (i / (N_GRID - 1)) * (maxLat - minLat);
+    const lonOfJ = (j) => minLon + (j / (N_GRID - 1)) * (maxLon - minLon);
+    const iOfLat = (lat) => Math.max(0, Math.min(N_GRID - 1, Math.round(((lat - minLat) / (maxLat - minLat)) * (N_GRID - 1))));
+    const jOfLon = (lon) => Math.max(0, Math.min(N_GRID - 1, Math.round(((lon - minLon) / (maxLon - minLon)) * (N_GRID - 1))));
+
+    const startLoc = iOfLat(startLat) * N_GRID + jOfLon(startLon);
+    const goalLoc = iOfLat(goalLat) * N_GRID + jOfLon(goalLon);
+
+    const gScore = new Float32Array(N_GRID * N_GRID).fill(Infinity);
+    const came = new Int32Array(N_GRID * N_GRID).fill(-1);
+    const closed = new Uint8Array(N_GRID * N_GRID);
+
+    const heap = new Heap();
+    gScore[startLoc] = 0;
+    heap.push(startLoc, directKm);
+
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+    while (heap.size) {
+      const { n: loc } = heap.pop();
+      if (closed[loc]) continue;
+      closed[loc] = 1;
+      if (loc === goalLoc) break;
+
+      const ci = (loc / N_GRID) | 0, cj = loc % N_GRID;
+      const cLat = latOfI(ci), cLon = lonOfJ(cj);
+
+      for (const [di, dj] of DIRS) {
+        const ni = ci + di, nj = cj + dj;
+        if (ni < 0 || ni >= N_GRID || nj < 0 || nj >= N_GRID) continue;
+        const nLoc = ni * N_GRID + nj;
+        if (closed[nLoc]) continue;
+
+        const nLat = latOfI(ni), nLon = lonOfJ(nj);
+        const stepDist = haversineEarthKm(cLat, cLon, nLat, nLon);
+
+        let hazardPenalty = 0;
+        for (const h of hazards) {
+          const dH = haversineEarthKm(nLat, nLon, h.lat, h.lon);
+          if (dH < h.rKm) {
+            hazardPenalty += 85.0 * Math.pow(1.0 - dH / h.rKm, 2);
+          }
+        }
+
+        const cost = gScore[loc] + stepDist * (1.0 + hazardPenalty);
+        if (cost < gScore[nLoc]) {
+          gScore[nLoc] = cost;
+          came[nLoc] = loc;
+          heap.push(nLoc, cost + haversineEarthKm(nLat, nLon, goalLat, goalLon));
+        }
+      }
+    }
+
+    const safePath = [];
+    let cur = goalLoc;
+    while (cur >= 0) {
+      const ci = (cur / N_GRID) | 0, cj = cur % N_GRID;
+      safePath.push({ lat: latOfI(ci), lon: lonOfJ(cj) });
+      if (cur === startLoc) break;
+      cur = came[cur];
+    }
+    safePath.reverse();
+    if (!safePath.length || cur !== startLoc) {
+      safePath.length = 0;
+      safePath.push({ lat: startLat, lon: startLon }, { lat: goalLat, lon: goalLon });
+    }
+
+    const straightPath = [];
+    const N_STR = 24;
+    for (let s = 0; s <= N_STR; s++) {
+      const t = s / N_STR;
+      straightPath.push({
+        lat: startLat + (goalLat - startLat) * t,
+        lon: startLon + (goalLon - startLon) * t
+      });
+    }
+
+    let distKm = 0;
+    for (let p = 0; p < safePath.length - 1; p++) {
+      distKm += haversineEarthKm(safePath[p].lat, safePath[p].lon, safePath[p + 1].lat, safePath[p + 1].lon);
+    }
+    distKm = +(Math.max(directKm, distKm)).toFixed(2);
+    const straightKm = +directKm.toFixed(2);
+    const detourPct = Math.round(Math.max(0, (distKm / Math.max(0.1, straightKm) - 1) * 100));
+
+    const packKg = opts.packKg || 22;
+    const vMps = 4.0 / 3.6;
+    const W_body = 80;
+    const pandolfW = Math.round(1.5 * W_body + 2.0 * (W_body + packKg) * Math.pow(packKg / W_body, 2) + 1.2 * (W_body + packKg) * (1.5 * vMps * vMps + 0.35 * vMps * 2.0));
+    const kcalH = Math.round(pandolfW * 0.8604);
+    const walkHours = distKm / 4.0;
+    const ugvHours = distKm / 18.0;
+    const transitTimeMin = Math.round(walkHours * 60);
+    const ugvTimeMin = Math.round(ugvHours * 60);
+    const waterL = +(walkHours * 0.85).toFixed(2);
+
+    const waypoints = [];
+    const stepSample = Math.max(1, Math.floor(safePath.length / 5));
+    for (let w = 0; w < safePath.length; w += stepSample) {
+      waypoints.push({ ...safePath[w], name: `WP-${waypoints.length + 1}` });
+    }
+    if (waypoints[waypoints.length - 1].lat !== goalLat) {
+      waypoints.push({ lat: goalLat, lon: goalLon, name: `WP-${waypoints.length + 1} (Hedef)` });
+    }
+
+    return {
+      ok: true,
+      safePath,
+      straightPath,
+      stats: {
+        distKm,
+        straightKm,
+        detourPct,
+        transitTimeMin,
+        ugvTimeMin,
+        pandolfW,
+        kcalH,
+        waterL,
+        waypoints
+      }
+    };
+  }
+
+  global.ASTAR = { plan, straight, haversineKm, smoothCellElev, planEarth, haversineEarthKm };
 })(typeof window !== 'undefined' ? window : module.exports);

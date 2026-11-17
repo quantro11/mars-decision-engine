@@ -236,6 +236,7 @@
     doc: document, S, layers, SCORING, REGIONS, OVERLAYS, MARKERS: window.MDE_MARKERS, FMT, globe, globeCanvas,
     onStopSpin: () => { if (globe && globe.state.autoSpin) { globe.state.autoSpin = false; if ($('#btn-spin')) $('#btn-spin').classList.remove('active'); } },
     onPick: (x, y) => {
+      if (S.mode === 'afad') { const lat = L.latOfRow(y), lon = L.lonOfCol(x); S.afad = S.afad || {}; if (!S.afad.customStart || (S.afad.customStart && S.afad.customGoal)) { S.afad.customStart = { lat, lon }; S.afad.customGoal = null; } else { S.afad.customGoal = { lat, lon }; } if (panels && panels.renderAFAD) panels.renderAFAD(); viewport.draw(); return; }
       if (S.mode === 'route') { const r = S.route; if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; } panels.renderRoute(); if (r.goal) computeRoute(); viewport.draw(); return; }
       if (S.mode === 'crisis') setCrisisSite(x, y);
       if (S.mode === 'landing' && landingTool && L.elev) landingTool.openAt(x, y);
