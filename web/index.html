@@ -44,6 +44,10 @@
     <button class="mode-btn" data-mode="route" aria-pressed="false"><span class="mode-label">Rover route</span></button>
     <button class="mode-btn" data-mode="crisis" aria-pressed="false"><span class="mode-label">Dust-storm power</span></button>
     <button class="mode-btn" data-mode="afad" aria-pressed="false"><span class="mode-label">AFAD Afet · Dünya</span></button>
+    <button type="button" class="mode-btn earth-nav-btn" id="btn-earth-roads"><span class="mode-label">KGM Yol &amp; Fay Ağı</span></button>
+    <button type="button" class="mode-btn earth-nav-btn" id="btn-earth-maritime"><span class="mode-label">Akdeniz Deniz &amp; Hava</span></button>
+    <button type="button" class="mode-btn earth-nav-btn" id="btn-earth-siting"><span class="mode-label">Sahra Hastanesi</span></button>
+    <button type="button" class="mode-btn earth-nav-btn" id="btn-return-mars"><span class="mode-label">🪐 Mars Moduna Dön</span></button>
   </nav>
 
   <div class="topbar-right">
@@ -619,8 +623,29 @@
       </div>
     </section>
 
+    <section id="afad-layers-sec" class="layers earth-layers-sec" aria-label="Dünya CBS Katmanları">
+      <div class="sec-head"><h2>Dünya CBS Katmanları</h2><span class="hint">Ultra-HD · KGM · AFAD</span></div>
+      <div class="seg seg-grid" id="afad-ov-seg">
+        <button type="button" data-eov="hybrid" class="active" aria-pressed="true">HD Uydu + CBS</button>
+        <button type="button" data-eov="roads" aria-pressed="false">KGM Yol Ağı</button>
+        <button type="button" data-eov="seismic" aria-pressed="false">Fay &amp; Sismik</button>
+        <button type="button" data-eov="maritime" aria-pressed="false">Deniz &amp; Hava</button>
+      </div>
+      <div class="toggles-group mt-sm">
+        <label class="check"><input type="checkbox" id="afad-chk-hdtiles" checked> <span>Esri Ultra-HD Uydu Karoları (Canlı Akış)</span></label>
+        <label class="check"><input type="checkbox" id="afad-chk-roads" checked> <span>KGM / OSM Karayolu Ağı (53 Ana Koridor)</span></label>
+        <label class="check"><input type="checkbox" id="afad-chk-faults" checked> <span>DAF &amp; KAF Aktif Fay Hatları &amp; ShakeMap</span></label>
+        <label class="check"><input type="checkbox" id="afad-chk-cities" checked> <span>İl Merkezleri, Limanlar (⚓) ve Üsler</span></label>
+      </div>
+      <div class="tactical-card mt-sm">
+        <div class="kv"><span>Yeşil Koridor</span><b class="ok">A* Açık Karayolu / İKA</b></div>
+        <div class="kv"><span>Mavi Kesik (⚓)</span><b>IMO Deniz Ro-Ro / LST Gemisi</b></div>
+        <div class="kv"><span>Açık Mavi (✈️)</span><b>ICAO Hava Köprüsü (A400M/Heli)</b></div>
+        <div class="kv"><span>Sarı / Kırmızı Yol</span><b class="warn">Kısmi Hasarlı / Kapalı Yol</b></div>
+      </div>
+    </section>
 
-    <section class="layers">
+    <section id="mars-layers-sec" class="layers mars-layers-sec">
       <div class="sec-head"><h2>Map layer</h2></div>
       <div class="seg seg-grid" id="overlay">
         <button data-ov="score" class="active" aria-pressed="true">Score</button>
@@ -762,7 +787,7 @@
 </main>
 
 <footer class="sources">
-  <div class="sources-left">
+  <div class="sources-left mars-sources-bar">
     <span class="sources-tag">Data</span>
     <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">MOLA elevation · NASA Mars Trek / USGS</a>
     <span class="hud-sep">·</span>
@@ -774,7 +799,19 @@
     <span class="hud-sep">·</span>
     <span>Viking Orbiter colour mosaic</span>
   </div>
-  <div class="sources-right"><span>Grid 4096 × 2048 · ≈ 5 km per pixel</span></div>
+  <div class="sources-right mars-sources-bar"><span>Grid 4096 × 2048 · ≈ 5 km per pixel</span></div>
+
+  <div class="sources-left earth-sources-bar">
+    <span class="sources-tag">Dünya CBS</span>
+    <span>Esri World Imagery &amp; NASA Blue Marble 8K Ultra-HD</span>
+    <span class="hud-sep">·</span>
+    <span>KGM &amp; OpenStreetMap / OSRM Karayolu Ağı (53 Ana Koridor)</span>
+    <span class="hud-sep">·</span>
+    <span>AFAD TBDY-2018 &amp; USGS Canlı Sismik Akış</span>
+    <span class="hud-sep">·</span>
+    <span>UN OCHA / INSARAG &amp; Eurocode 7</span>
+  </div>
+  <div class="sources-right earth-sources-bar"><span>WGS-84 (EPSG:4326) · MGRS · 1.0g · HD Uydu Akışı (15 m/px)</span></div>
 </footer>
 
 <div id="about" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">

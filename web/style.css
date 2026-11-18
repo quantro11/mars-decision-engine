@@ -826,3 +826,15 @@ canvas:focus-visible { outline-offset: -2px; }
 .ls-cal-p90 { stroke: var(--paper); stroke-width: 1.5; }
 .ls-cal-dusty { stroke: var(--bad); stroke-width: 1; stroke-dasharray: 3 3; }
 .ls-cal-tick { fill: var(--dim); font-size: 8px; font-family: var(--mono); }
+
+/* Earth / AFAD Dedicated Mode UI Transformation */
+body:not(.earth-mode) .earth-nav-btn,
+body:not(.earth-mode) .earth-layers-sec,
+body:not(.earth-mode) .earth-sources-bar { display: none !important; }
+body.earth-mode .modes .mode-btn:not([data-mode="afad"]):not(.earth-nav-btn),
+body.earth-mode .mars-layers-sec,
+body.earth-mode .mars-sources-bar,
+body.earth-mode #btn-ov3d,
+body.earth-mode #btn-relief { display: none !important; }
+body.earth-mode #btn-return-mars { border-color: var(--ochre); color: var(--ochre); }
+body.earth-mode #btn-return-mars:hover { background: var(--ink-4); color: var(--paper); }

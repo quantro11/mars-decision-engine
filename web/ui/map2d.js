@@ -103,6 +103,119 @@
       ctx.restore();
     }
 
+    // ---- Earth Regional Ultra-HD Cutouts & Live Esri World Imagery Slippy-Map Tile Streamer
+    const earthHD = {
+      trImg: null, trLoading: false,
+      hatayImg: null, hatayLoading: false,
+      tileCache: new Map(), tilePending: 0, activeKmPerPx: null
+    };
+    function ensureEarthRegionalHD() {
+      if (!earthHD.trImg && !earthHD.trLoading) {
+        earthHD.trLoading = true;
+        const im = new Image();
+        im.onload = () => { earthHD.trImg = im; draw(); };
+        im.onerror = () => {};
+        im.src = 'layers/earth_tr_hd.jpg';
+      }
+      if (!earthHD.hatayImg && !earthHD.hatayLoading) {
+        earthHD.hatayLoading = true;
+        const im2 = new Image();
+        im2.onload = () => { earthHD.hatayImg = im2; draw(); };
+        im2.onerror = () => {};
+        im2.src = 'layers/earth_hatay_hd.jpg';
+      }
+    }
+    function getEarthSlippyTile(z, x, y) {
+      const key = `${z}/${y}/${x}`;
+      let e = earthHD.tileCache.get(key);
+      if (e) {
+        earthHD.tileCache.delete(key);
+        earthHD.tileCache.set(key, e);
+        return e.ok ? e.img : null;
+      }
+      if (earthHD.tilePending > 20) return null;
+      if (typeof location !== 'undefined' && (location.protocol === 'file:' || location.hostname === 'mde.local')) return null;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      e = { img, ok: false };
+      earthHD.tileCache.set(key, e);
+      earthHD.tilePending++;
+      img.onload = () => { e.ok = true; earthHD.tilePending--; updateScaleBar(); draw(); };
+      img.onerror = () => { earthHD.tilePending--; };
+      img.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+      if (earthHD.tileCache.size > 420) earthHD.tileCache.delete(earthHD.tileCache.keys().next().value);
+      return null;
+    }
+    function drawEarthPatchesAndTiles(sx, ty, scale) {
+      ensureEarthRegionalHD();
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // 1. Baked Turkey & Cyprus 4K HD Patch (lon 25..45, lat 34.5..42.5 -> ~480 m/px)
+      if (earthHD.trImg) {
+        const gx0 = L.colOfLon(25.0), gx1 = L.colOfLon(45.0);
+        const gy0 = L.rowOfLat(42.5), gy1 = L.rowOfLat(34.5);
+        ctx.drawImage(earthHD.trImg, sx + gx0 * scale, ty + gy0 * scale, (gx1 - gx0) * scale, (gy1 - gy0) * scale);
+      }
+      // 2. Baked Hatay / Kahramanmaraş / Gaziantep / Adana Ultra-HD Patch (lon 35.0..38.8, lat 35.6..38.4 -> ~140 m/px)
+      if (earthHD.hatayImg) {
+        const gx0 = L.colOfLon(35.0), gx1 = L.colOfLon(38.8);
+        const gy0 = L.rowOfLat(38.4), gy1 = L.rowOfLat(35.6);
+        ctx.drawImage(earthHD.hatayImg, sx + gx0 * scale, ty + gy0 * scale, (gx1 - gx0) * scale, (gy1 - gy0) * scale);
+      }
+
+      // 3. Live Multi-Zoom Esri World Imagery Satellite Tiles (z = 5..13, down to 19 m/px anywhere on Earth)
+      const hdEnabled = !S.afad || !S.afad.layers || S.afad.layers.hdtiles !== false;
+      if (!hdEnabled || scale < 1.8) {
+        earthHD.activeKmPerPx = earthHD.hatayImg && scale >= 5 ? 0.14 : (earthHD.trImg && scale >= 2 ? 0.45 : 1.2);
+        ctx.restore();
+        return;
+      }
+      const z = Math.max(5, Math.min(13, Math.floor(4 + Math.log2(scale) + 0.6)));
+      const n = 1 << z;
+      earthHD.activeKmPerPx = (40075.0 / (n * 256)) * 0.8;
+
+      const gxMin = Math.max(0, (0 - sx) / scale), gxMax = Math.min(W, (canvas.width - sx) / scale);
+      const gyMin = Math.max(0, (0 - ty) / scale), gyMax = Math.min(H, (canvas.height - ty) / scale);
+      if (gxMax <= gxMin || gyMax <= gyMin) { ctx.restore(); return; }
+
+      const lonMin = Math.max(-179.9, L.lonOfCol(gxMin)), lonMax = Math.min(179.9, L.lonOfCol(gxMax));
+      const latMax = Math.min(84.5, L.latOfRow(gyMin)), latMin = Math.max(-84.5, L.latOfRow(gyMax));
+      if (latMax <= latMin || lonMax <= lonMin) { ctx.restore(); return; }
+
+      const lon2tx = (lon) => Math.max(0, Math.min(n - 1, Math.floor(((lon + 180) / 360) * n)));
+      const lat2ty = (lat) => {
+        const rad = lat * Math.PI / 180;
+        return Math.max(0, Math.min(n - 1, Math.floor((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2 * n)));
+      };
+      const ty2lat = (t) => (180 / Math.PI) * Math.atan(Math.sinh(Math.PI * (1 - 2 * t / n)));
+
+      const tx0 = lon2tx(lonMin), tx1 = lon2tx(lonMax);
+      const ty0 = lat2ty(latMax), ty1 = lat2ty(latMin);
+      if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 48) { ctx.restore(); return; }
+
+      for (let tyIdx = ty0; tyIdx <= ty1; tyIdx++) {
+        const latN = ty2lat(tyIdx), latS = ty2lat(tyIdx + 1);
+        const py0 = ty + L.rowOfLat(latN) * scale, py1 = ty + L.rowOfLat(latS) * scale;
+        for (let txIdx = tx0; txIdx <= tx1; txIdx++) {
+          const lonW = (txIdx / n) * 360 - 180, lonE = ((txIdx + 1) / n) * 360 - 180;
+          const px0 = sx + L.colOfLon(lonW) * scale, px1 = sx + L.colOfLon(lonE) * scale;
+          const tImg = getEarthSlippyTile(z, txIdx, tyIdx);
+          if (tImg) {
+            ctx.drawImage(tImg, px0, py0, (px1 - px0) + 0.65, (py1 - py0) + 0.65);
+          } else if (z > 5) {
+            const pImg = getEarthSlippyTile(z - 1, txIdx >> 1, tyIdx >> 1);
+            if (pImg) {
+              const ox = (txIdx & 1) * 128, oy = (tyIdx & 1) * 128;
+              ctx.drawImage(pImg, ox, oy, 128, 128, px0, py0, (px1 - px0) + 0.65, (py1 - py0) + 0.65);
+            }
+          }
+        }
+      }
+      ctx.restore();
+    }
+
     const toScreen = (x, y) => [S.view.tx + x * S.view.scale, S.view.ty + y * S.view.scale];
     const toGrid = (sx, sy) => [(sx - S.view.tx) / S.view.scale, (sy - S.view.ty) / S.view.scale];
 
@@ -142,10 +255,12 @@
       const barPx = Math.max(28, Math.min(120, Math.round(niceKm / kmPerCssPx)));
       const baseKm = (2 * Math.PI * planetR) / W;
       const lv = S.viewMode === '3d' ? null : pickDetailLevel(S.view.scale);
-      const dataKm = lv ? lv.kmPerPx : (isAfad ? (baseKm / 8) : baseKm);
+      const dataKm = isAfad
+        ? (earthHD.activeKmPerPx || (baseKm / 8))
+        : (lv ? lv.kmPerPx : baseKm);
       elLbl.textContent = `${niceKm} km · data ${dataKm < 1 ? Math.round(dataKm * 1000) + ' m' : dataKm.toFixed(1) + ' km'}/px`;
       elLbl.title = isAfad
-        ? 'NASA Blue Marble 8K Ultra-HD Earth Basemap (MODIS / Terra 8192×4096)'
+        ? 'Esri World Imagery Ultra-HD Satellite Stream + NASA Blue Marble 8K (WGS-84)'
         : (lv ? `Relief detail tiles z${lv.z} from MOLA-HRSC 200 m DEM (USGS 2018)` : 'Global base map (MOLA 463 m DEM averaged to 4096×2048)');
       elBar.style.width = `${barPx}px`;
     }
@@ -338,8 +453,10 @@
         for (const off of [-W, 0, W]) {
           const sx = tx + off * scale;
           if (sx > canvas.width || sx + W * scale < 0) continue;
-          ctx.imageSmoothingEnabled = useDetail || scale < 1.2;
+          ctx.imageSmoothingEnabled = isAfad || useDetail || scale < 1.2;
+          if (isAfad) ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(baseImg, sx, ty, W * scale, H * scale);
+          if (isAfad) drawEarthPatchesAndTiles(sx, ty, scale);
           if (useDetail) drawDetailTiles(sx, ty, scale);
           if (!isAfad && S.overlay !== 'none') {
             ctx.imageSmoothingEnabled = useDetail || scale < 1.2;
@@ -348,7 +465,7 @@
             ctx.globalAlpha = 1;
           }
         }
-        ctx.imageSmoothingEnabled = scale < 1.2;
+        ctx.imageSmoothingEnabled = isAfad || scale < 1.2;
         draw2DGraticule(dpr, placer, bounds);
       }
 
@@ -439,9 +556,10 @@
       ctx.save();
       const tr = (global.MDE_I18N && global.MDE_I18N.getLang && global.MDE_I18N.getLang() === 'tr');
       const scale = S.view.scale;
+      const afLayers = (S.afad && S.afad.layers) || { hdtiles: true, roads: true, faults: true, cities: true };
 
       // 1. Tectonic Fault Systems (DAF, KAF)
-      const FAULTS = [
+      const FAULTS = afLayers.faults === false ? [] : [
         {
           id: 'daf-1', name: 'DAF · Pazarcık-Türkoğlu (2023 Mw 7.8)', major: true,
           pts: [[38.2, 37.9], [37.6, 37.8], [37.15, 37.35], [36.75, 37.2], [36.5, 36.9], [36.25, 36.4], [36.1, 36.1], [35.9, 35.8]]
@@ -496,7 +614,7 @@
       }
 
       // 2. ShakeMap & Sismik Şiddet Zonları (Isoseismals)
-      if (sc.id === 'maras') {
+      if (afLayers.faults !== false && sc.id === 'maras') {
         const QUAKES = [
           { name: 'Mw 7.8 Pazarcık Odak Noktası', lat: 37.17, lon: 37.08, r9: 45, r8: 95, r7: 175 },
           { name: 'Mw 7.5 Elbistan Odak Noktası', lat: 38.08, lon: 37.24, r9: 35, r8: 80, r7: 145 }
@@ -541,7 +659,7 @@
           ctx.fillStyle = '#ffffff';
           ctx.fillText(`★ ${q.name}`, sx + 10 * dpr, sy - 5 * dpr);
         }
-      } else if (sc.id === 'marmara') {
+      } else if (afLayers.faults !== false && sc.id === 'marmara') {
         const mx = L.colOfLon(29.1), my = L.rowOfLat(40.8);
         const [sx, sy, vis] = projectGrid(mx, my);
         if (vis) {
@@ -561,50 +679,43 @@
         }
       }
 
-      // 3. Bölgesel Şehir ve Koordinasyon Merkezleri (City Beacons)
-      const CITIES = [
-        { name: 'Kahramanmaraş', lat: 37.58, lon: 36.93, hub: true },
-        { name: 'Gaziantep', lat: 37.06, lon: 37.38, hub: true },
-        { name: 'Antakya (Hatay)', lat: 36.20, lon: 36.16, hub: true },
-        { name: 'Adıyaman', lat: 37.76, lon: 38.28, hub: false },
-        { name: 'Malatya', lat: 38.35, lon: 38.31, hub: false },
-        { name: 'Osmaniye', lat: 37.07, lon: 36.25, hub: false },
-        { name: 'İskenderun', lat: 36.58, lon: 36.17, hub: true },
-        { name: 'Şanlıurfa', lat: 37.16, lon: 38.79, hub: false },
-        { name: 'Adana', lat: 37.00, lon: 35.32, hub: true },
-        { name: 'İstanbul', lat: 41.01, lon: 28.97, hub: true },
-        { name: 'Kocaeli (İzmit)', lat: 40.76, lon: 29.92, hub: true },
-        { name: 'Sakarya', lat: 40.77, lon: 30.40, hub: false },
-        { name: 'Bursa', lat: 40.18, lon: 29.06, hub: true },
-        { name: 'Trabzon', lat: 41.00, lon: 39.72, hub: true },
-        { name: 'Rize', lat: 41.02, lon: 40.52, hub: true },
-        { name: 'Artvin', lat: 41.18, lon: 41.82, hub: false },
-        { name: 'Ankara', lat: 39.93, lon: 32.85, hub: true }
-      ];
+      // 3. Bölgesel Şehir, Liman ve Havalimanı Merkezleri (City & Port Beacons)
+      const ER = global.EARTH_ROADS || null;
+      const cityList = (ER && ER.NODES)
+        ? Object.values(ER.NODES).map((n) => ({ name: n.name, lat: n.lat, lon: n.lon, hub: !!(n.port || n.airport), port: !!n.port }))
+        : [
+          { name: 'Kahramanmaraş', lat: 37.58, lon: 36.93, hub: true },
+          { name: 'Gaziantep', lat: 37.06, lon: 37.38, hub: true },
+          { name: 'Antakya (Hatay)', lat: 36.20, lon: 36.16, hub: true },
+          { name: 'İskenderun Limanı', lat: 36.58, lon: 36.17, hub: true, port: true },
+          { name: 'İstanbul', lat: 41.01, lon: 28.97, hub: true, port: true },
+          { name: 'Ankara', lat: 39.93, lon: 32.85, hub: true }
+        ];
 
-      for (const ct of CITIES) {
-        const [cx, cy, vis] = projectGrid(L.colOfLon(ct.lon), L.rowOfLat(ct.lat));
-        if (!vis || cx < 20 || cx > canvas.width - 20 || cy < 20 || cy > canvas.height - 20) continue;
-        ctx.fillStyle = ct.hub ? '#3b82f6' : 'rgba(226, 232, 240, 0.85)';
-        ctx.beginPath();
-        ctx.arc(cx, cy, (ct.hub ? 4.2 : 2.8) * dpr, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.2 * dpr;
-        ctx.stroke();
+      if (afLayers.cities !== false) {
+        for (const ct of cityList) {
+          const [cx, cy, vis] = projectGrid(L.colOfLon(ct.lon), L.rowOfLat(ct.lat));
+          if (!vis || cx < 20 || cx > canvas.width - 20 || cy < 20 || cy > canvas.height - 20) continue;
+          ctx.fillStyle = ct.port ? '#0ea5e9' : (ct.hub ? '#3b82f6' : 'rgba(226, 232, 240, 0.85)');
+          ctx.beginPath();
+          ctx.arc(cx, cy, (ct.hub ? 4.2 : 2.8) * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2 * dpr;
+          ctx.stroke();
 
-        if (scale >= 2.5 || ct.hub) {
-          ctx.font = `600 ${Math.max(9, Math.min(12, 8 + scale * 0.4)) * dpr}px "SF Mono", monospace`;
-          ctx.fillStyle = 'rgba(3, 5, 8, 0.88)';
-          ctx.fillText(ct.name, cx + 7 * dpr + 1, cy + 3 * dpr + 1);
-          ctx.fillStyle = ct.hub ? '#93c5fd' : '#f1f5f9';
-          ctx.fillText(ct.name, cx + 7 * dpr, cy + 3 * dpr);
+          if (scale >= 2.2 || ct.hub) {
+            ctx.font = `600 ${Math.max(9, Math.min(12, 8 + scale * 0.4)) * dpr}px "SF Mono", monospace`;
+            ctx.fillStyle = 'rgba(3, 5, 8, 0.88)';
+            ctx.fillText(ct.name, cx + 7 * dpr + 1, cy + 3 * dpr + 1);
+            ctx.fillStyle = ct.port ? '#7dd3fc' : (ct.hub ? '#93c5fd' : '#f1f5f9');
+            ctx.fillText(ct.name, cx + 7 * dpr, cy + 3 * dpr);
+          }
         }
       }
 
       // 3b. KGM / OSM Karayolu Ağı & Otonom Açık/Hasarlı/Kapalı Yol Durumu Çizimi
-      const ER = global.EARTH_ROADS || null;
-      if (ER && ER.SEGMENTS) {
+      if (afLayers.roads !== false && ER && ER.SEGMENTS) {
         for (const seg of ER.SEGMENTS) {
           const isClosed = seg.status === 'BLOCKED_COLLAPSE' || seg.status === 'CLOSED_WEATHER';
           const isDamaged = seg.status === 'DAMAGED_PARTIAL';
@@ -987,7 +1098,7 @@
       }
       const mx = canvas.width / 2, my = canvas.height / 2;
       const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
-      const ns = Math.max(minS, Math.min(detail.levels.length ? 96 : 40, S.view.scale * factor));
+      const ns = Math.max(minS, Math.min((S.mode === 'afad' || detail.levels.length) ? 96 : 40, S.view.scale * factor));
       const k = ns / S.view.scale;
       S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k;
       S.view.scale = ns; wrapView(); updateScaleBar(); draw();
@@ -1047,7 +1158,7 @@
       const dpr = global.devicePixelRatio || 1, r = canvas.getBoundingClientRect();
       const mx = (e.clientX - r.left) * dpr, my = (e.clientY - r.top) * dpr;
       const f = Math.exp(-e.deltaY * 0.0015), minS = Math.min(canvas.width / W, canvas.height / H) * 0.9;
-      const ns = Math.max(minS, Math.min(detail.levels.length ? 96 : 40, S.view.scale * f)), k = ns / S.view.scale;
+      const ns = Math.max(minS, Math.min((S.mode === 'afad' || detail.levels.length) ? 96 : 40, S.view.scale * f)), k = ns / S.view.scale;
       S.view.tx = mx - (mx - S.view.tx) * k; S.view.ty = my - (my - S.view.ty) * k; S.view.scale = ns;
       wrapView(); updateScaleBar(); draw();
     }, { passive: false });
@@ -1161,7 +1272,7 @@
           schedule3D();
         } else {
           const mx = ((t1.clientX + t2.clientX) / 2 - rect.left) * dpr, my = ((t1.clientY + t2.clientY) / 2 - rect.top) * dpr;
-          const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9, ns = Math.max(minS, Math.min(detail.levels.length ? 96 : 40, touchState.scale * ratio));
+          const minS = Math.min(canvas.width / W, canvas.height / H) * 0.9, ns = Math.max(minS, Math.min((S.mode === 'afad' || detail.levels.length) ? 96 : 40, touchState.scale * ratio));
           const k = ns / touchState.scale;
           S.view.scale = ns; S.view.tx = mx - (touchState.mx - touchState.tx) * k; S.view.ty = my - (touchState.my - touchState.ty) * k;
           wrapView(); updateScaleBar(); draw();

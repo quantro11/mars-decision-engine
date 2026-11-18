@@ -216,15 +216,11 @@
       if (S.viewMode === '2d' && viewport) { S.view.scale = Math.max(S.view.scale, 6.0); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
     onGlobeFly: (lat, lon) => { if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon); viewport.schedule3D(); } },
-    onAfadFly: (lat, lon) => {
+    onAfadFly: (lat, lon, customScale) => {
+      if (lat == null || lon == null) { if (viewport) viewport.draw(); return; }
       const x = L.colOfLon(lon), y = L.rowOfLat(lat);
-      if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon, 1.45); viewport.schedule3D(); }
-      else if (viewport) {
-        S.view.scale = Math.max(S.view.scale, 8.5);
-        S.view.tx = viewport.canvas.width / 2 - x * S.view.scale;
-        S.view.ty = viewport.canvas.height / 2 - y * S.view.scale;
-        viewport.wrapView(); viewport.updateScaleBar(); viewport.draw();
-      }
+      if (S.viewMode === '3d' && globe) { globe.flyTo(lat, lon, customScale ? Math.max(1.25, 2.2 - customScale * 0.1) : 1.45); viewport.schedule3D(); }
+      else if (viewport) { S.view.scale = customScale || Math.max(S.view.scale, 8.5); S.view.tx = viewport.canvas.width / 2 - x * S.view.scale; S.view.ty = viewport.canvas.height / 2 - y * S.view.scale; viewport.wrapView(); viewport.updateScaleBar(); viewport.draw(); }
     },
   };
   panels = window.MDE_PANELS.createPanels({ doc: document, S, layers, SCORING, STORM, FMT, CHARTS, ...panelCbs });
@@ -236,7 +232,7 @@
     doc: document, S, layers, SCORING, REGIONS, OVERLAYS, MARKERS: window.MDE_MARKERS, FMT, globe, globeCanvas,
     onStopSpin: () => { if (globe && globe.state.autoSpin) { globe.state.autoSpin = false; if ($('#btn-spin')) $('#btn-spin').classList.remove('active'); } },
     onPick: (x, y) => {
-      if (S.mode === 'afad') { const lat = L.latOfRow(y), lon = L.lonOfCol(x); S.afad = S.afad || {}; if (!S.afad.customStart || (S.afad.customStart && S.afad.customGoal)) { S.afad.customStart = { lat, lon }; S.afad.customGoal = null; if ($('#afad-start-city')) $('#afad-start-city').value = ''; } else { S.afad.customGoal = { lat, lon }; if ($('#afad-goal-city')) $('#afad-goal-city').value = ''; } if (panels && panels.renderAFAD) panels.renderAFAD(); viewport.draw(); return; }
+      if (S.mode === 'afad') { const lat = L.latOfRow(y), lon = L.lonOfCol(x); S.afad = S.afad || {}; S.afad.inspected = { lat, lon }; if (!S.afad.customStart || (S.afad.customStart && S.afad.customGoal)) { S.afad.customStart = { lat, lon }; S.afad.customGoal = null; if ($('#afad-start-city')) $('#afad-start-city').value = ''; } else { S.afad.customGoal = { lat, lon }; if ($('#afad-goal-city')) $('#afad-goal-city').value = ''; } if (panels && panels.renderAFAD) panels.renderAFAD(); viewport.draw(); return; }
       if (S.mode === 'route') { const r = S.route; if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; } panels.renderRoute(); if (r.goal) computeRoute(); viewport.draw(); return; }
       if (S.mode === 'crisis') setCrisisSite(x, y);
       if (S.mode === 'landing' && landingTool && L.elev) landingTool.openAt(x, y);
@@ -298,8 +294,9 @@
       if (panels && panels.renderAFAD) panels.renderAFAD();
       if (window.EARTH_ROADS && window.EARTH_ROADS.fetchLiveExternalFeeds) window.EARTH_ROADS.fetchLiveExternalFeeds().then(d => { if (d && S.mode === 'afad' && panels && panels.renderAFAD) { panels.renderAFAD(); viewport.draw(); } });
       if (S.afad && S.afad.scenario) panelCbs.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
-    } else if (globe && layers.getBaseImg && layers.getBaseImg()) {
-      try { globe.setBaseTexture(layers.getBaseImg()); } catch (e) { /* ignore */ }
+    } else {
+      if (panels && panels.exitAFAD) panels.exitAFAD();
+      if (globe && layers.getBaseImg && layers.getBaseImg()) try { globe.setBaseTexture(layers.getBaseImg()); } catch (e) { /* ignore */ }
     }
     viewport.draw();
   }
@@ -368,6 +365,7 @@
   const fly = $('#flyto');
   REGIONS.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(r => { const o = document.createElement('option'); o.value = r.name; o.textContent = (r.ez ? '[EZ] ' : '') + r.name; fly.appendChild(o); });
   fly.onchange = () => {
+    if (S.mode === 'afad' && window.EARTH_ROADS && window.EARTH_ROADS.NODES[fly.value]) { const n = window.EARTH_ROADS.NODES[fly.value]; S.afad = S.afad || {}; S.afad.inspected = { lat: n.lat, lon: n.lon, name: n.name }; if (panels && panels.renderAFAD) panels.renderAFAD(); panelCbs.onAfadFly(n.lat, n.lon, 9.0); fly.value = ''; return; }
     const r = REGIONS.find(q => q.name === fly.value); if (!r) return;
     const x = L.colOfLon(r.lon), y = L.rowOfLat(r.lat);
     if (S.viewMode === '3d' && globe) { globe.flyTo(r.lat, r.lon, Math.min(globe.state.targetDist, 1.95)); viewport.schedule3D(); }

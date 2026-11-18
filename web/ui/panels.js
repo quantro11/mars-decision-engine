@@ -627,10 +627,238 @@
       }
     };
 
+    const AFAD_HUBS = [
+      {
+        rank: 1, id: 'antakya', scenario: 'maras',
+        name: 'Antakya / Hatay Sahra & Lojistik Üssü',
+        nameEn: 'Antakya / Hatay Field Hospital & Logistics Hub',
+        lat: 36.21, lon: 36.18, elevM: 85, slopeDeg: 1.8, scorePct: 94, fs: 2.45,
+        corridor: 'D-817 · İskenderun Limanı (42 km) · Hatay Havalimanı',
+        seismic: 'DAF Pazarcık-Antakya Zonu · TBDY-2018 ZD'
+      },
+      {
+        rank: 2, id: 'gaziantep', scenario: 'maras',
+        name: 'Gaziantep / Nurdağı Hava & Kara İkmal Üssü',
+        nameEn: 'Gaziantep / Nurdağı Air & Highway Supply Base',
+        lat: 37.066, lon: 37.383, elevM: 850, slopeDeg: 1.4, scorePct: 96, fs: 2.65,
+        corridor: 'O-52 TAG Otoyolu · D-400 · Gaziantep Havalimanı (✈️)',
+        seismic: 'DAF Doğu Tampon Zonu · TBDY-2018 ZC'
+      },
+      {
+        rank: 3, id: 'maras', scenario: 'maras',
+        name: 'Kahramanmaraş / Pazarcık Afet Koordinasyon Üssü',
+        nameEn: 'Kahramanmaraş / Pazarcık Disaster Command Base',
+        lat: 37.585, lon: 36.937, elevM: 568, slopeDeg: 2.1, scorePct: 92, fs: 2.35,
+        corridor: 'D-825 · D-835 · O-52 Bağlantısı',
+        seismic: 'DAF & Çardak Fayı Kavşağı · TBDY-2018 ZC'
+      },
+      {
+        rank: 4, id: 'kocaeli', scenario: 'marmara',
+        name: 'Kocaeli / Kuzey Marmara Sahra & Liman Üssü',
+        nameEn: 'Kocaeli / North Marmara Field Hospital & Port Hub',
+        lat: 40.765, lon: 29.940, elevM: 42, slopeDeg: 1.2, scorePct: 91, fs: 2.15,
+        corridor: 'O-4 TEM · O-7 Kuzey Marmara · Derince Limanı (⚓)',
+        seismic: 'KAF Kuzey Marmara Segmenti · TBDY-2018 ZD'
+      },
+      {
+        rank: 5, id: 'rize', scenario: 'rize',
+        name: 'Rize / Doğu Karadeniz Taşkın & Tahliye Üssü',
+        nameEn: 'Rize / Eastern Black Sea Flood & Evacuation Base',
+        lat: 41.020, lon: 40.523, elevM: 115, slopeDeg: 2.8, scorePct: 88, fs: 1.85,
+        corridor: 'D-010 Karadeniz Sahil Yolu · Trabzon Limanı (⚓)',
+        seismic: 'Karadeniz Heyelan/Taşkın Kuşağı · Eurocode 7'
+      }
+    ];
+
     function fmtDur(min, tr) {
       if (min < 60) return `${min} ${tr ? 'dk' : 'min'}`;
       const h = Math.floor(min / 60), m = Math.round(min % 60);
       return m > 0 ? `${h} ${tr ? 'sa' : 'h'} ${m} ${tr ? 'dk' : 'm'}` : `${h} ${tr ? 'saat' : 'h'}`;
+    }
+
+    function populateEarthFlyto(tr, ER) {
+      const fly = $('#flyto');
+      if (!fly || !ER || !ER.NODES) return;
+      if (fly.dataset.planet === 'earth') return;
+      fly.dataset.planet = 'earth';
+      fly.innerHTML = '';
+      const def = doc.createElement('option');
+      def.value = '';
+      def.textContent = tr ? 'Dünya / Türkiye bölgesine git…' : 'Fly to Earth / Turkey region…';
+      fly.appendChild(def);
+      Object.entries(ER.NODES)
+        .sort((a, b) => a[1].name.localeCompare(b[1].name, 'tr'))
+        .forEach(([id, nd]) => {
+          const o = doc.createElement('option');
+          o.value = id;
+          const badge = nd.port ? '⚓ ' : nd.airport ? '✈️ ' : '📍 ';
+          o.textContent = `${badge}${nd.name}`;
+          fly.appendChild(o);
+        });
+    }
+
+    function restoreMarsFlyto(tr) {
+      const fly = $('#flyto');
+      const regs = global.REGIONS;
+      if (!fly || !Array.isArray(regs)) return;
+      if (fly.dataset.planet === 'mars') return;
+      fly.dataset.planet = 'mars';
+      fly.innerHTML = '';
+      const def = doc.createElement('option');
+      def.value = '';
+      def.textContent = tr ? 'Bir bölgeye git…' : 'Go to a region…';
+      fly.appendChild(def);
+      regs.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach((r) => {
+        const o = doc.createElement('option');
+        o.value = r.name;
+        o.textContent = (r.ez ? '[EZ] ' : '') + r.name;
+        fly.appendChild(o);
+      });
+    }
+
+    function renderEarthCandidates(tr, ER) {
+      const cSec = $('#candidates-sec');
+      if (cSec) {
+        const h2 = cSec.querySelector('h2');
+        const hint = cSec.querySelector('.hint');
+        if (h2) h2.textContent = tr ? 'AFAD Öncelikli Sahra & Lojistik Üsleri' : 'AFAD Priority Field Hospital & Logistics Hubs';
+        if (hint) hint.textContent = 'UN OCHA · Eurocode 7 · KGM';
+      }
+      const ol = $('#candidates');
+      if (!ol) return;
+      ol.innerHTML = '';
+      AFAD_HUBS.forEach((h) => {
+        const mgrs = (ER && ER.latLonToMGRS) ? ER.latLonToMGRS(h.lat, h.lon) : 'WGS-84';
+        const li = doc.createElement('li');
+        li.className = 'card' + ((S.afad && S.afad.selectedHub === h.id) ? ' active' : '');
+        li.tabIndex = 0;
+        li.innerHTML =
+          `<div class="card-top"><span class="rank">#${h.rank}</span><b>${escHtml(tr ? h.name : h.nameEn)}</b><span class="score">${h.scorePct}%</span></div>` +
+          `<div class="card-sub">${h.lat.toFixed(2)}°N, ${h.lon.toFixed(2)}°E · MGRS ${escHtml(mgrs)}</div>` +
+          `<div class="card-sub">${tr ? 'Eğim' : 'Slope'} ${h.slopeDeg.toFixed(1)}° · ${tr ? 'Rakım' : 'Elev'} ${h.elevM} m · FS = ${h.fs} (${tr ? 'Güvenli' : 'Safe'})</div>` +
+          `<div class="card-sub">${escHtml(h.corridor)}</div>`;
+        const pickHub = () => {
+          S.afad = S.afad || {};
+          S.afad.selectedHub = h.id;
+          S.afad.inspected = { lat: h.lat, lon: h.lon, name: tr ? h.name : h.nameEn };
+          const selEl = $('#afad-scenario-select');
+          if (selEl && selEl.value !== h.scenario) selEl.value = h.scenario;
+          renderAFAD();
+          if (ctx.onAfadFly) ctx.onAfadFly(h.lat, h.lon, 9.5);
+        };
+        li.onclick = pickHub;
+        li.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickHub(); } };
+        ol.appendChild(li);
+      });
+    }
+
+    function renderEarthDetail(lat, lon, tr, ER) {
+      const dSec = $('#detail-sec');
+      if (dSec) {
+        const h2 = dSec.querySelector('h2');
+        if (h2) h2.textContent = tr ? 'Seçili Dünya Konumu & Saha Analizi' : 'Selected Earth Location & Field Analysis';
+      }
+      const box = $('#detail');
+      if (!box) return;
+      const mgrs = (ER && ER.latLonToMGRS) ? ER.latLonToMGRS(lat, lon) : 'WGS-84';
+      const isLand = (ER && ER.isLand) ? ER.isLand(lat, lon) : true;
+
+      let nearNode = null, nearDist = Infinity, nearPort = null, portDist = Infinity, nearAir = null, airDist = Infinity;
+      if (ER && ER.NODES) {
+        for (const k in ER.NODES) {
+          const n = ER.NODES[k];
+          const d = Math.hypot(lat - n.lat, (lon - n.lon) * Math.cos(lat * Math.PI / 180)) * 111.32;
+          if (d < nearDist) { nearDist = d; nearNode = n; }
+          if (n.port && d < portDist) { portDist = d; nearPort = n; }
+          if (n.airport && d < airDist) { airDist = d; nearAir = n; }
+        }
+      }
+      let nearRoad = null, roadDist = Infinity;
+      if (ER && ER.SEGMENTS) {
+        for (const s of ER.SEGMENTS) {
+          for (const [rlat, rlon] of s.coords) {
+            const d = Math.hypot(lat - rlat, (lon - rlon) * Math.cos(lat * Math.PI / 180)) * 111.32;
+            if (d < roadDist) { roadDist = d; nearRoad = s; }
+          }
+        }
+      }
+
+      const slopeEl = $('#afad-slope'), rainEl = $('#afad-rain');
+      const slopeVal = slopeEl ? +slopeEl.value : 1.8;
+      const rainVal = rainEl ? +rainEl.value : 35;
+      const betaRad = slopeVal * Math.PI / 180;
+      const pore = Math.min(0.6, rainVal / 200.0);
+      const resisting = 5.0 + 18.0 * 2.0 * Math.pow(Math.cos(betaRad), 2) * (1.0 - pore) * Math.tan(30 * Math.PI / 180);
+      const driving = 18.0 * 2.0 * Math.sin(betaRad) * Math.cos(betaRad);
+      const fs = +(Math.max(0.1, resisting / Math.max(0.1, driving))).toFixed(2);
+      const roadStatusTxt = nearRoad
+        ? (nearRoad.status === 'OPEN' ? (tr ? 'AÇIK' : 'OPEN') : nearRoad.status === 'DAMAGED_PARTIAL' ? (tr ? 'KISMI HASARLI' : 'DAMAGED') : (tr ? 'KAPALI' : 'CLOSED'))
+        : 'AÇIK';
+      const roadCls = nearRoad && nearRoad.status !== 'OPEN' ? 'warn' : 'ok';
+      const locTitle = (S.afad && S.afad.inspected && S.afad.inspected.name) || (nearNode ? `${nearNode.name} (${nearDist.toFixed(0)} km)` : 'Anadolu / Akdeniz');
+
+      box.innerHTML =
+        `<div class="detail-head">` +
+          `<div><b>${escHtml(locTitle)}</b><div class="card-sub">WGS-84: ${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E · MGRS: <b>${escHtml(mgrs)}</b></div></div>` +
+          `<span class="badge-mode ${isLand ? 'badge-live' : 'badge-ref'}">${isLand ? (tr ? 'KARA SAHASI' : 'LAND') : (tr ? 'DENİZ ALANI' : 'MARITIME')}</span>` +
+        `</div>` +
+        `<div class="tactical-card mt-sm">` +
+          `<div class="kv"><span>${tr ? 'Yerçekimi & Atmosfer' : 'Gravity & Atmosphere'}</span><b>1.00 g (9.81 m/s²) · 1013.25 hPa (%21 O₂)</b></div>` +
+          `<div class="kv"><span>${tr ? 'Referans Elipsoid & Grid' : 'Datum & Military Grid'}</span><b>WGS-84 (EPSG:4326) · ${escHtml(mgrs)}</b></div>` +
+          `<div class="kv"><span>${tr ? 'Sahra / Konteyner Eğimi' : 'Field Slope & Bearing'}</span><b class="${slopeVal <= 3 ? 'ok' : 'warn'}">${slopeVal.toFixed(1)}° (ISO 668 ≤ 3.0° · Bekker &lt; 8 mm)</b></div>` +
+          `<div class="kv"><span>${tr ? 'Eurocode 7 Heyelan Güvenliği' : 'Eurocode 7 Landslide FS'}</span><b class="${fs >= 1.5 ? 'ok' : 'warn'}">FS = ${fs} (${rainVal} mm/24s WMO)</b></div>` +
+          `<div class="kv"><span>${tr ? 'En Yakın KGM Karayolu' : 'Nearest Highway Corridor'}</span><b class="${roadCls}">${nearRoad ? escHtml(nearRoad.name.split(' ').slice(0, 3).join(' ')) : 'D-817'} · ${roadStatusTxt}</b></div>` +
+          `<div class="kv"><span>${tr ? 'En Yakın Deniz Limanı (Ro-Ro)' : 'Nearest Sea Port'}</span><b>⚓ ${nearPort ? escHtml(nearPort.name) + ' (' + portDist.toFixed(0) + ' km)' : 'İskenderun'}</b></div>` +
+          `<div class="kv"><span>${tr ? 'En Yakın Havalimanı (Hava Köprüsü)' : 'Nearest Airfield'}</span><b>✈️ ${nearAir ? escHtml(nearAir.name) + ' (' + airDist.toFixed(0) + ' km)' : 'Hatay / İncirlik'}</b></div>` +
+          `<div class="kv"><span>${tr ? 'INSARAG & Triyaj Standardı' : 'INSARAG & Triage Standard'}</span><b>Heavy USAR · T1-T4 Uluslararası Triyaj</b></div>` +
+        `</div>` +
+        `<div class="row mt-sm">` +
+          `<button type="button" id="afad-det-set-start" class="btn-spec">📍 ${tr ? 'Başlangıç Noktası Yap' : 'Set as A* Start'}</button>` +
+          `<button type="button" id="afad-det-set-goal" class="ghost">🎯 ${tr ? 'Hedef Noktası Yap' : 'Set as A* Goal'}</button>` +
+        `</div>`;
+
+      const bStart = $('#afad-det-set-start');
+      const bGoal = $('#afad-det-set-goal');
+      if (bStart) bStart.onclick = () => {
+        S.afad.customStart = { lat, lon, name: locTitle };
+        if ($('#afad-start-city')) $('#afad-start-city').value = '';
+        renderAFAD();
+        if (ctx.onAfadFly) ctx.onAfadFly(null, null);
+      };
+      if (bGoal) bGoal.onclick = () => {
+        S.afad.customGoal = { lat, lon, name: locTitle };
+        if ($('#afad-goal-city')) $('#afad-goal-city').value = '';
+        renderAFAD();
+        if (ctx.onAfadFly) ctx.onAfadFly(null, null);
+      };
+    }
+
+    function exitAFAD() {
+      if (doc && doc.body) doc.body.classList.remove('earth-mode');
+      const tr = isTr();
+      restoreMarsFlyto(tr);
+      const bSub = $('.brand-sub');
+      if (bSub) bSub.textContent = tr
+        ? 'Gerçek yörünge verileriyle Mars iniş yeri, Mars yürüyüşü (EVA) rotası ve bilim planlama'
+        : 'Landing-site, Marswalk (EVA) route & science planning on real orbital data';
+      const gTxt = $('#guide-text');
+      if (gTxt) gTxt.textContent = tr
+        ? 'Aşağıdaki sıralı aday bölgelerden birini seçin veya iniş güvenliği, su buzu ve fırtına gücünü incelemek için Mars haritasında herhangi bir yere dokunun.'
+        : 'Pick a ranked site below or tap anywhere on Mars to inspect landing safety, water ice, and storm power.';
+      const cSec = $('#candidates-sec');
+      if (cSec) {
+        const h2 = cSec.querySelector('h2');
+        const hint = cSec.querySelector('.hint');
+        if (h2) h2.textContent = tr ? 'En iyi aday bölgeler' : 'Best candidate regions';
+        if (hint) hint.textContent = tr ? '2°×2° blok · ≥ 800 km aralıklı' : '2°×2° blocks · ≥ 800 km apart';
+      }
+      const dSec = $('#detail-sec');
+      if (dSec) {
+        const h2 = dSec.querySelector('h2');
+        if (h2) h2.textContent = tr ? 'Seçili konum' : 'Selected location';
+      }
+      renderCandidates();
+      if (S.selected) renderDetail(S.selected.x, S.selected.y);
     }
 
     function renderAFAD() {
@@ -642,6 +870,7 @@
       S.afad = S.afad || {};
       S.afad.active = true;
       S.afad.scenario = sc;
+      S.afad.layers = S.afad.layers || { hdtiles: true, roads: true, faults: true, cities: true, mode: 'hybrid' };
 
       const vehSel = $('#afad-vehicle-select');
       const seaSel = $('#afad-sea-policy');
@@ -661,8 +890,24 @@
       const ER = global.EARTH_ROADS || null;
 
       if (S.mode === 'afad') {
-        if ($('#hud-layer')) $('#hud-layer').textContent = tr ? 'KATMAN · WGS-84 / KGM & AFAD LOJİSTİK AĞI' : 'LAYER · WGS-84 / KGM & AFAD LOGISTICS';
+        if (doc && doc.body) doc.body.classList.add('earth-mode');
+        populateEarthFlyto(tr, ER);
+        const bSub = $('.brand-sub');
+        if (bSub) bSub.textContent = tr
+          ? 'Dünya 1.0g · AFAD Afet Lojistiği, KGM Otonom Karayolu Ağı ve Multimodal (Kara/Deniz/Hava) Karar Motoru'
+          : 'Earth 1.0g · AFAD Disaster Logistics, Autonomous Highway Network & Multimodal Decision Engine';
+        const gTxt = $('#guide-text');
+        if (gTxt) gTxt.textContent = tr
+          ? 'Sağdaki 5 öncelikli AFAD lojistik ve sahra hastanesi üssünden birini seçin veya haritada herhangi iki noktaya tıklayarak A* kara/deniz/hava yardım koridoru oluşturun.'
+          : 'Select one of the 5 priority AFAD logistics & field hospital hubs below or click any two points on Earth to plan an A* land/sea/air corridor.';
+        if ($('#hud-layer')) $('#hud-layer').textContent = tr ? 'KATMAN · ULTRA-HD UYDU + KGM & AFAD CBS AĞI' : 'LAYER · ULTRA-HD SAT + KGM & AFAD GIS';
         if ($('#hud-proj')) $('#hud-proj').textContent = S.viewMode === '3d' ? 'WGS-84 3B Küre (1.0g)' : 'WGS-84 Equirectangular (EPSG:4326)';
+        if ($('#hud-hint')) $('#hud-hint').textContent = tr
+          ? 'Kaydırmak için sürükleyin, yakınlaştırmak için tekerleği kullanın · 1. Tık: A* Başlangıç, 2. Tık: A* Hedef'
+          : 'Drag to pan, scroll to zoom · 1st Click: A* Start, 2nd Click: A* Goal';
+        renderEarthCandidates(tr, ER);
+        const inspPt = S.afad.inspected || S.afad.customGoal || S.afad.customStart || { lat: sc.lat, lon: sc.lon, name: tr ? sc.locTitle : sc.locTitleEn };
+        renderEarthDetail(inspPt.lat, inspPt.lon, tr, ER);
       }
 
       // 1. Evaluate Autonomous Road Conditions (KGM / AFAD / Weather / Seismic)
@@ -929,7 +1174,88 @@
       };
     }
 
-    return { buildPresets, buildSliders, renderCandidates, renderDetail, renderRoute, runCrisis, renderAFAD, announce };
+    // Wire Earth topbar quick-view buttons & Earth GIS Layer checkboxes
+    const btnEarthRoads = $('#btn-earth-roads');
+    if (btnEarthRoads) {
+      btnEarthRoads.onclick = () => {
+        S.afad = S.afad || {};
+        S.afad.layers = S.afad.layers || { hdtiles: true, roads: true, faults: true, cities: true, mode: 'hybrid' };
+        S.afad.layers.roads = true;
+        S.afad.layers.faults = true;
+        if ($('#afad-chk-roads')) $('#afad-chk-roads').checked = true;
+        if ($('#afad-chk-faults')) $('#afad-chk-faults').checked = true;
+        renderAFAD();
+        if (ctx.onAfadFly) ctx.onAfadFly(38.9, 35.4, 4.2);
+      };
+    }
+    const btnEarthMaritime = $('#btn-earth-maritime');
+    if (btnEarthMaritime) {
+      btnEarthMaritime.onclick = () => {
+        if ($('#afad-start-city')) $('#afad-start-city').value = 'antakya';
+        if ($('#afad-goal-city')) $('#afad-goal-city').value = 'cezayir';
+        onCitySelectChange();
+        if (ctx.onAfadFly) ctx.onAfadFly(36.2, 19.5, 2.5);
+      };
+    }
+    const btnEarthSiting = $('#btn-earth-siting');
+    if (btnEarthSiting) {
+      btnEarthSiting.onclick = () => {
+        const sc = (S.afad && S.afad.scenario) || AFAD_SCENARIOS.maras;
+        const h = sc.hospital || sc;
+        S.afad.inspected = { lat: h.lat, lon: h.lon, name: h.name };
+        renderAFAD();
+        if (ctx.onAfadFly) ctx.onAfadFly(h.lat, h.lon, 11.5);
+      };
+    }
+    const btnReturnMars = $('#btn-return-mars');
+    if (btnReturnMars) {
+      btnReturnMars.onclick = () => {
+        const mBtn = doc.querySelector('.mode-btn[data-mode="landing"]');
+        if (mBtn) mBtn.click();
+      };
+    }
+
+    const eovSeg = $('#afad-ov-seg');
+    if (eovSeg) {
+      eovSeg.querySelectorAll('button').forEach((btn) => {
+        btn.onclick = () => {
+          const mode = btn.dataset.eov || 'hybrid';
+          eovSeg.querySelectorAll('button').forEach((b) => {
+            const act = b === btn;
+            b.classList.toggle('active', act);
+            b.setAttribute('aria-pressed', String(act));
+          });
+          S.afad = S.afad || {};
+          S.afad.layers = S.afad.layers || { hdtiles: true, roads: true, faults: true, cities: true, mode: 'hybrid' };
+          S.afad.layers.mode = mode;
+          if (mode === 'roads') { S.afad.layers.roads = true; S.afad.layers.faults = false; }
+          else if (mode === 'seismic') { S.afad.layers.roads = false; S.afad.layers.faults = true; }
+          else { S.afad.layers.roads = true; S.afad.layers.faults = true; }
+          if ($('#afad-chk-roads')) $('#afad-chk-roads').checked = S.afad.layers.roads;
+          if ($('#afad-chk-faults')) $('#afad-chk-faults').checked = S.afad.layers.faults;
+          if (ctx.onAfadFly) ctx.onAfadFly(null, null);
+        };
+      });
+    }
+
+    [
+      ['#afad-chk-hdtiles', 'hdtiles'],
+      ['#afad-chk-roads', 'roads'],
+      ['#afad-chk-faults', 'faults'],
+      ['#afad-chk-cities', 'cities']
+    ].forEach(([sel, key]) => {
+      const el = $(sel);
+      if (el) {
+        el.onchange = () => {
+          S.afad = S.afad || {};
+          S.afad.layers = S.afad.layers || { hdtiles: true, roads: true, faults: true, cities: true, mode: 'hybrid' };
+          S.afad.layers[key] = !!el.checked;
+          if (ctx.onAfadFly) ctx.onAfadFly(null, null);
+        };
+      }
+    });
+
+    return { buildPresets, buildSliders, renderCandidates, renderDetail, renderRoute, runCrisis, renderAFAD, exitAFAD, announce };
   }
 
   global.MDE_PANELS = { createPanels, critRowsHTML, announce };
