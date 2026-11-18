@@ -236,7 +236,7 @@
     doc: document, S, layers, SCORING, REGIONS, OVERLAYS, MARKERS: window.MDE_MARKERS, FMT, globe, globeCanvas,
     onStopSpin: () => { if (globe && globe.state.autoSpin) { globe.state.autoSpin = false; if ($('#btn-spin')) $('#btn-spin').classList.remove('active'); } },
     onPick: (x, y) => {
-      if (S.mode === 'afad') { const lat = L.latOfRow(y), lon = L.lonOfCol(x); S.afad = S.afad || {}; if (!S.afad.customStart || (S.afad.customStart && S.afad.customGoal)) { S.afad.customStart = { lat, lon }; S.afad.customGoal = null; } else { S.afad.customGoal = { lat, lon }; } if (panels && panels.renderAFAD) panels.renderAFAD(); viewport.draw(); return; }
+      if (S.mode === 'afad') { const lat = L.latOfRow(y), lon = L.lonOfCol(x); S.afad = S.afad || {}; if (!S.afad.customStart || (S.afad.customStart && S.afad.customGoal)) { S.afad.customStart = { lat, lon }; S.afad.customGoal = null; if ($('#afad-start-city')) $('#afad-start-city').value = ''; } else { S.afad.customGoal = { lat, lon }; if ($('#afad-goal-city')) $('#afad-goal-city').value = ''; } if (panels && panels.renderAFAD) panels.renderAFAD(); viewport.draw(); return; }
       if (S.mode === 'route') { const r = S.route; if (!r.start || (r.start && r.goal)) { r.start = { x, y }; r.goal = null; r.safe = r.straight = null; } else { r.goal = { x, y }; } panels.renderRoute(); if (r.goal) computeRoute(); viewport.draw(); return; }
       if (S.mode === 'crisis') setCrisisSite(x, y);
       if (S.mode === 'landing' && landingTool && L.elev) landingTool.openAt(x, y);
@@ -296,6 +296,7 @@
       if (layers.getEarthImg && layers.getEarthImg()) applyEarth(layers.getEarthImg());
       else if (layers.loadEarthMosaic) layers.loadEarthMosaic().then(img => { if (S.mode === 'afad' && img) applyEarth(img); });
       if (panels && panels.renderAFAD) panels.renderAFAD();
+      if (window.EARTH_ROADS && window.EARTH_ROADS.fetchLiveExternalFeeds) window.EARTH_ROADS.fetchLiveExternalFeeds().then(d => { if (d && S.mode === 'afad' && panels && panels.renderAFAD) { panels.renderAFAD(); viewport.draw(); } });
       if (S.afad && S.afad.scenario) panelCbs.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
     } else if (globe && layers.getBaseImg && layers.getBaseImg()) {
       try { globe.setBaseTexture(layers.getBaseImg()); } catch (e) { /* ignore */ }

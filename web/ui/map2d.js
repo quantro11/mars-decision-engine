@@ -253,16 +253,19 @@
           ctx.fillText(lbl, 12 * dpr, ly);
         }
       }
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+      ctx.strokeStyle = S.mode === 'afad' ? 'rgba(14, 165, 233, 0.35)' : 'rgba(245, 158, 11, 0.45)';
       ctx.setLineDash([6 * dpr, 5 * dpr]);
-      for (const lat of [50, -50]) {
+      const bandLats = S.mode === 'afad' ? [23.44, -23.44] : [50, -50];
+      for (const lat of bandLats) {
         const [, y0] = toScreen(0, L.rowOfLat(lat));
         ctx.beginPath(); ctx.moveTo(tx, y0); ctx.lineTo(tx + W * scale, y0); ctx.stroke();
-        const lbl = cssW < 520 ? `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'} limit` : `${Math.abs(lat)}° ${lat > 0 ? 'N' : 'S'} NASA limit`;
+        const lbl = S.mode === 'afad'
+          ? (lat > 0 ? '23.4°N Yengeç Dönencesi (WGS-84)' : '23.4°S Oğlak Dönencesi (WGS-84)')
+          : (cssW < 520 ? `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'} limit` : `${Math.abs(lat)}° ${lat > 0 ? 'N' : 'S'} NASA limit`);
         const tw = ctx.measureText(lbl).width;
         const ly = y0 - 7 * dpr;
         if (placer.canPlace(canvas.width - 14 * dpr - tw, ly - fh / 2, canvas.width - 14 * dpr, ly + fh / 2)) {
-          ctx.fillStyle = 'rgba(245, 158, 11, 0.78)';
+          ctx.fillStyle = S.mode === 'afad' ? 'rgba(14, 165, 233, 0.78)' : 'rgba(245, 158, 11, 0.78)';
           ctx.textAlign = 'right'; ctx.fillText(lbl, canvas.width - 14 * dpr, ly); ctx.textAlign = 'left';
         }
       }
@@ -291,9 +294,10 @@
         }
         ctx.stroke();
       }
-      ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
+      ctx.strokeStyle = S.mode === 'afad' ? 'rgba(14, 165, 233, 0.4)' : 'rgba(245, 158, 11, 0.5)';
       ctx.setLineDash([5 * dpr, 4 * dpr]);
-      for (const lat of [50, -50]) {
+      const band3D = S.mode === 'afad' ? [23.44, -23.44] : [50, -50];
+      for (const lat of band3D) {
         ctx.beginPath(); let open = false;
         for (let lon = -180; lon <= 180; lon += 4) {
           const [sx, sy, vis] = globe.project(lat, lon, false);
@@ -598,14 +602,50 @@
         }
       }
 
-      // 4. Arama-Kurtarma (SAR) A* Eniyilenmiş Rota ve Güvenli Koridor Çizimi
+      // 3b. KGM / OSM Karayolu Ağı & Otonom Açık/Hasarlı/Kapalı Yol Durumu Çizimi
+      const ER = global.EARTH_ROADS || null;
+      if (ER && ER.SEGMENTS) {
+        for (const seg of ER.SEGMENTS) {
+          const isClosed = seg.status === 'BLOCKED_COLLAPSE' || seg.status === 'CLOSED_WEATHER';
+          const isDamaged = seg.status === 'DAMAGED_PARTIAL';
+          ctx.beginPath();
+          let started = false;
+          for (const pt of seg.coords) {
+            const [sx, sy, vis] = projectGrid(L.colOfLon(pt[1]), L.rowOfLat(pt[0]));
+            if (!vis) { started = false; continue; }
+            if (!started) { ctx.moveTo(sx, sy); started = true; } else { ctx.lineTo(sx, sy); }
+          }
+          ctx.strokeStyle = isClosed
+            ? 'rgba(239, 68, 68, 0.85)'
+            : isDamaged
+              ? 'rgba(245, 158, 11, 0.82)'
+              : 'rgba(148, 163, 184, 0.35)';
+          ctx.lineWidth = (isClosed ? 2.6 : isDamaged ? 2.2 : 1.4) * dpr;
+          ctx.setLineDash(isClosed ? [4 * dpr, 3 * dpr] : isDamaged ? [6 * dpr, 3 * dpr] : []);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          if ((isClosed || isDamaged) && scale >= 2.8 && seg.coords.length >= 2) {
+            const mid = seg.coords[Math.floor(seg.coords.length / 2)];
+            const [mx, my, mvis] = projectGrid(L.colOfLon(mid[1]), L.rowOfLat(mid[0]));
+            if (mvis && mx > 25 && mx < canvas.width - 25 && my > 25 && my < canvas.height - 25) {
+              ctx.font = `700 ${9 * dpr}px monospace`;
+              ctx.fillStyle = isClosed ? '#ef4444' : '#f59e0b';
+              const tag = isClosed ? `⛔ KAPALI: ${seg.name.split(' ')[0]}` : `⚠ HASARLI: ${seg.name.split(' ')[0]}`;
+              ctx.fillText(tag, mx + 6 * dpr, my - 5 * dpr);
+            }
+          }
+        }
+      }
+
+      // 4. Arama-Kurtarma (SAR) Multimodal A* Rota (Kara / Deniz / Hava) Çizimi
       const astarData = (S.afad && S.afad.astar) || null;
       if (astarData && astarData.ok && astarData.safePath && astarData.safePath.length >= 2) {
-        // A) Tehlike Bölgesini Doğrudan Kesen Düz Hat (Kuş Uçuşu - Baypas Gösterimi)
-        if (astarData.straightPath && astarData.straightPath.length >= 2) {
-          ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
-          ctx.lineWidth = 2.0 * dpr;
-          ctx.setLineDash([7 * dpr, 5 * dpr]);
+        // A) Doğrudan Kuş Uçuşu / Deniz Engeli Karşılaştırma Hattı
+        if (astarData.straightPath && astarData.straightPath.length >= 2 && astarData.vehicle && astarData.vehicle.mode !== 'air') {
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+          ctx.lineWidth = 1.8 * dpr;
+          ctx.setLineDash([6 * dpr, 5 * dpr]);
           ctx.beginPath();
           let s0 = false;
           for (const pt of astarData.straightPath) {
@@ -617,44 +657,76 @@
           ctx.setLineDash([]);
         }
 
-        // B) A* Emniyetli Çoklu-Tehlike Baypas Koridoru (Emerald Safe Corridor)
-        ctx.strokeStyle = 'rgba(16, 185, 129, 0.38)';
-        ctx.lineWidth = 8.0 * dpr;
-        ctx.beginPath();
-        let s1 = false;
-        for (const pt of astarData.safePath) {
-          const [sx, sy, vis] = projectGrid(L.colOfLon(pt.lon), L.rowOfLat(pt.lat));
-          if (!vis) { s1 = false; continue; }
-          if (!s1) { ctx.moveTo(sx, sy); s1 = true; } else { ctx.lineTo(sx, sy); }
+        // B) Çoklu-Etap (Kara / Deniz Ro-Ro / Hava Köprüsü) Çizimi
+        const legs = (astarData.legs && astarData.legs.length)
+          ? astarData.legs
+          : [{ type: 'road', path: astarData.safePath }];
+
+        for (const leg of legs) {
+          if (!leg.path || leg.path.length < 2) continue;
+          const isSea = leg.type === 'sea';
+          const isAir = leg.type === 'air';
+          const isBlocked = leg.type === 'blocked';
+
+          ctx.strokeStyle = isBlocked
+            ? 'rgba(239, 68, 68, 0.35)'
+            : isSea
+              ? 'rgba(14, 165, 233, 0.36)'
+              : isAir
+                ? 'rgba(96, 165, 250, 0.34)'
+                : 'rgba(16, 185, 129, 0.38)';
+          ctx.lineWidth = 8.0 * dpr;
+          ctx.beginPath();
+          let s1 = false;
+          for (const pt of leg.path) {
+            const [sx, sy, vis] = projectGrid(L.colOfLon(pt.lon), L.rowOfLat(pt.lat));
+            if (!vis) { s1 = false; continue; }
+            if (!s1) { ctx.moveTo(sx, sy); s1 = true; } else { ctx.lineTo(sx, sy); }
+          }
+          ctx.stroke();
+
+          ctx.strokeStyle = isBlocked ? '#ef4444' : isSea ? '#0ea5e9' : isAir ? '#60a5fa' : '#10b981';
+          ctx.lineWidth = 3.4 * dpr;
+          ctx.setLineDash(isAir ? [10 * dpr, 5 * dpr] : isSea ? [8 * dpr, 4 * dpr] : []);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+          ctx.lineWidth = 1.3 * dpr;
+          ctx.setLineDash([5 * dpr, 4 * dpr]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          if ((isSea || isAir) && leg.path.length >= 2) {
+            const midPt = leg.path[Math.floor(leg.path.length / 2)];
+            const [mx, my, mvis] = projectGrid(L.colOfLon(midPt.lon), L.rowOfLat(midPt.lat));
+            if (mvis) {
+              ctx.font = `700 ${10 * dpr}px monospace`;
+              ctx.fillStyle = 'rgba(3, 5, 8, 0.92)';
+              const mLbl = isSea ? '🚢 DENİZ RO-RO / LST KORİDORU' : '✈️ HAVA KÖPRÜSÜ (FL310)';
+              ctx.fillText(mLbl, mx + 8 * dpr + 1, my - 6 * dpr + 1);
+              ctx.fillStyle = isSea ? '#7dd3fc' : '#bfdbfe';
+              ctx.fillText(mLbl, mx + 8 * dpr, my - 6 * dpr);
+            }
+          }
         }
-        ctx.stroke();
 
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 3.4 * dpr;
-        ctx.stroke();
-
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.lineWidth = 1.4 * dpr;
-        ctx.setLineDash([6 * dpr, 4 * dpr]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Ara Noktalar (Waypoints)
+        // Ara Noktalar & Liman Transfer Noktaları (Waypoints & Ports)
         const wps = (astarData.stats && astarData.stats.waypoints) || [];
         wps.forEach((wp, idx) => {
           const [sx, sy, vis] = projectGrid(L.colOfLon(wp.lon), L.rowOfLat(wp.lat));
           if (!vis) return;
-          ctx.fillStyle = '#f59e0b';
+          ctx.fillStyle = wp.port ? '#0ea5e9' : '#f59e0b';
           ctx.beginPath();
-          ctx.arc(sx, sy, 3.6 * dpr, 0, Math.PI * 2);
+          ctx.arc(sx, sy, (wp.port ? 5.2 : 3.6) * dpr, 0, Math.PI * 2);
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.4 * dpr;
+          ctx.lineWidth = 1.5 * dpr;
           ctx.stroke();
-          if (scale >= 4.5) {
-            ctx.font = `600 ${8.5 * dpr}px monospace`;
-            ctx.fillStyle = '#cbd5e1';
-            ctx.fillText(wp.name || `WP-${idx + 1}`, sx + 6 * dpr, sy - 5 * dpr);
+          if (wp.port || scale >= 2.8) {
+            ctx.font = `600 ${(wp.port ? 9.5 : 8.5) * dpr}px monospace`;
+            ctx.fillStyle = wp.port ? '#7dd3fc' : '#cbd5e1';
+            ctx.fillText(wp.name || `WP-${idx + 1}`, sx + 7 * dpr, sy - 5 * dpr);
           }
         });
       } else if (sc.route && sc.route.length >= 2) {
@@ -986,6 +1058,38 @@
       const [x, y] = g, v = layers.cellValues(x, y), s = S.score[y * W + x], nr = layers.nearestRegion(v.lat, v.lon);
       const i18n = global.MDE_I18N || (typeof globalThis !== 'undefined' ? globalThis.MDE_I18N : null);
       const tr = !!(i18n && i18n.getLang && i18n.getLang() === 'tr');
+      const isAfad = S.mode === 'afad';
+      const ER = global.EARTH_ROADS || null;
+
+      if (isAfad && ER) {
+        const land = ER.isLand ? ER.isLand(v.lat, v.lon) : true;
+        const mgrs = ER.latLonToMGRS ? ER.latLonToMGRS(v.lat, v.lon) : 'WGS-84';
+        let bestCity = 'Anadolu / Akdeniz', bestDist = Infinity;
+        if (ER.NODES) {
+          for (const k in ER.NODES) {
+            const nd = ER.NODES[k];
+            const d = Math.hypot(v.lat - nd.lat, (v.lon - nd.lon) * Math.cos(v.lat * Math.PI / 180)) * 111.3;
+            if (d < bestDist) { bestDist = d; bestCity = nd.name; }
+          }
+        }
+        const surfTxt = land ? (tr ? 'KARA (Karayolu/Saha)' : 'LAND') : (tr ? 'DENİZ (Akdeniz/Karadeniz)' : 'SEA');
+        if ($('#hud-coord')) {
+          $('#hud-coord').textContent = `WGS-84: ${fmtLat(v.lat)} · ${fmtLon(v.lon)} · MGRS: ${mgrs} · ${surfTxt} · 1.0g (9.81 m/s²)`;
+        }
+        if (tip) {
+          if (global.matchMedia && global.matchMedia('(hover: none)').matches) { tip.classList.add('hidden'); return; }
+          const nearLbl = bestDist < 80 ? escHtml(bestCity) : `${escHtml(bestCity)} (${bestDist.toFixed(0)} km)`;
+          const sum = ER.getRoadFeedSummary ? ER.getRoadFeedSummary().counts : { open: 50, damaged: 2, blocked: 1 };
+          tip.innerHTML = `<span class="tt-region">${nearLbl} · ${surfTxt}</span><b>${escHtml(fmtLat(v.lat))}, ${escHtml(fmtLon(v.lon))}</b><br>MGRS: <b>${escHtml(mgrs)}</b> · Datum: WGS-84<br>KGM Ağ: ${sum.open} Açık · ${sum.damaged} Hasarlı · ${sum.blocked} Kapalı<br>${land ? 'Kara Taşıtı & İKA Uygun (1.0g · 1013 hPa)' : 'Deniz Koridoru (Ro-Ro / TCG Bayraktar / Hava)'}`;
+          const r = canvas.getBoundingClientRect();
+          tip.classList.remove('hidden');
+          const tipW = tip.offsetWidth || 220, tipH = tip.offsetHeight || 95;
+          tip.style.left = Math.max(8, Math.min(Math.max(8, r.width - tipW - 8), e.clientX - r.left + 14)) + 'px';
+          tip.style.top = Math.max(8, Math.min(Math.max(8, r.height - tipH - 8), e.clientY - r.top + 14)) + 'px';
+        }
+        return;
+      }
+
       if ($('#hud-coord')) $('#hud-coord').textContent = (tr
         ? `ENL ${fmtLat(v.lat)} · BOY ${fmtLon(v.lon)} · RAKIM ${v.elev.toFixed(0)} m · EĞİM ${v.slope.toFixed(1)}° · SKOR ${s.toFixed(2)}`
         : `LAT ${fmtLat(v.lat)} · LON ${fmtLon(v.lon)} · ELEV ${v.elev.toFixed(0)} m · SLOPE ${v.slope.toFixed(1)}° · SCORE ${s.toFixed(2)}`)

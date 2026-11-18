@@ -472,10 +472,10 @@
 
     <section id="panel-afad" class="mode-panel hidden" aria-label="AFAD Disaster Logistics Planner">
       <div class="sec-head">
-        <h2>AFAD Afet &amp; İKA Modülü</h2>
-        <span class="hint">Dünya 1.0g · Dual-Use</span>
+        <h2>AFAD Afet &amp; Lojistik</h2>
+        <span class="hint">WGS-84 · MGRS · INSARAG</span>
       </div>
-      <p class="help">Deprem, heyelan ve sel acil durumlarında sahra hastanesi yer seçimi ve insansız kurtarma aracı (İKA) rotalaması.</p>
+      <p class="help">KGM/OSM karayolu ağı, otonom yol durumu (açık/hasarlı/kapalı), deniz/hava/kara araç seçimi ve uluslararası afet lojistik standartları.</p>
 
       <div class="control-group">
         <label for="afad-scenario-select">Afet Senaryosu &amp; Bölge
@@ -485,56 +485,137 @@
             <option value="rize">Karadeniz - Rize / Artvin Taşkın &amp; Heyelan Riski</option>
           </select>
         </label>
+
+        <label for="afad-start-city">Başlangıç Noktası (veya Haritaya 1. Tık)
+          <select id="afad-start-city" class="ls-select">
+            <option value="">Senaryo AFAD Merkezi (Varsayılan)</option>
+            <option value="antakya">Hatay (Antakya Merkez)</option>
+            <option value="iskenderun">İskenderun Limanı (Hatay)</option>
+            <option value="maras">Kahramanmaraş</option>
+            <option value="gaziantep">Gaziantep</option>
+            <option value="adana">Adana / İncirlik</option>
+            <option value="mersin">Mersin Limanı</option>
+            <option value="ankara">Ankara (AFAD Lojistik Merkez)</option>
+            <option value="istanbul">İstanbul (Ambarlı / İGA)</option>
+            <option value="izmir">İzmir (Alsancak Limanı)</option>
+            <option value="trabzon">Trabzon Limanı</option>
+            <option value="rize">Rize</option>
+          </select>
+        </label>
+
+        <label for="afad-goal-city">Hedef Bölge / Ülke (veya Haritaya 2. Tık)
+          <select id="afad-goal-city" class="ls-select">
+            <option value="">Senaryo Sahra Hastanesi (Varsayılan)</option>
+            <option value="cezayir">Cezayir (Algiers · Akdeniz / K. Afrika)</option>
+            <option value="tunus">Tunus Limanı (Kuzey Afrika)</option>
+            <option value="trablus">Trablus Limanı (Libya)</option>
+            <option value="iskenderiye">İskenderiye Limanı (Mısır)</option>
+            <option value="antakya">Hatay (Antakya Sahra Hastanesi)</option>
+            <option value="iskenderun">İskenderun Limanı</option>
+            <option value="maras">Kahramanmaraş</option>
+            <option value="gaziantep">Gaziantep</option>
+            <option value="malatya">Malatya</option>
+            <option value="adiyaman">Adıyaman</option>
+            <option value="ankara">Ankara</option>
+            <option value="istanbul">İstanbul</option>
+            <option value="izmir">İzmir</option>
+            <option value="rize">Rize</option>
+            <option value="atina">Atina / Pire (Yunanistan)</option>
+            <option value="sofya">Sofya (Bulgaristan)</option>
+          </select>
+        </label>
+
+        <label for="afad-vehicle-select">Yardım &amp; Kurtarma Aracı Seçimi
+          <select id="afad-vehicle-select" class="ls-select">
+            <option value="ika">🤖 Alpar / Barkan Otonom İKA (Kara · 28 km/s · 800 kg)</option>
+            <option value="truck">🚛 AFAD Ağır Nakliye Tırı (Kara · 85 km/s · 26 Ton)</option>
+            <option value="unimog">🚙 4x4 Taktik Unimog SAR (Kara · 70 km/s · 3.5 Ton)</option>
+            <option value="ship">🚢 TCG Bayraktar LST / Yardım Gemisi (Deniz · 19 kn · 1200 Ton)</option>
+            <option value="plane">✈️ Airbus A400M Atlas Hava Kargo (Hava · 750 km/s · 37 Ton)</option>
+            <option value="heli">🚁 Sikorsky S-70 / T925 SAR Helikopteri (Hava · 260 km/s · 4 Ton)</option>
+            <option value="foot">🚶 AFAD Kentsel Arama-Kurtarma Timi (Yaya · 4.2 km/s · INSARAG)</option>
+          </select>
+        </label>
+
+        <label for="afad-sea-policy">Deniz Engeli &amp; Kıtalararası Geçiş Politikası
+          <select id="afad-sea-policy" class="ls-select">
+            <option value="multimodal">Multimodal: Kara + Deniz Liman Transferi (Ro-Ro / LST Gemisi)</option>
+            <option value="land_only">Kesintisiz Karayolu: Sadece Karadan Çevreleme (Denize Girmez)</option>
+          </select>
+        </label>
       </div>
 
       <div class="station-lock">
-        <span class="station-lbl">Koordinat &amp; Bölge</span>
-        <b id="afad-loc-title">36.20° N, 36.16° E · Antakya Afet Bölgesi</b>
+        <span class="station-lbl">WGS-84 Koordinat &amp; MGRS Grid</span>
+        <b id="afad-loc-title">36.20° N, 36.16° E · 37SBA 4465 0987 · Antakya</b>
       </div>
 
-      <div class="control-group">
-        <label>Maksimum Eğim Sınırı (Konteyner/Sahra) <span id="afad-slope-v">3.0°</span>
+      <div class="tactical-card mt-sm">
+        <div class="kv">
+          <span>Otonom KGM / OSM Yol Ağı</span>
+          <b id="afad-road-summary" class="ok">50 AÇIK · 2 HASARLI · 1 KAPALI</b>
+        </div>
+        <div class="control-group mt-sm">
+          <label for="afad-road-inspect">Karayolu Kesiti Durum Kontrolü (53 Ana Koridor)
+            <select id="afad-road-inspect" class="ls-select"></select>
+          </label>
+        </div>
+        <div class="row mt-sm">
+          <button type="button" id="afad-road-toggle-btn" class="ghost">Yolu Aç / Hasarlı / Kapat</button>
+          <button type="button" id="afad-road-sync-btn" class="btn-spec">Otonom KGM/USGS Senkron</button>
+        </div>
+        <div id="afad-road-feed-note" class="help note-sm mt-sm">
+          KGM/AFAD Otonom Akış Aktif: Fay kırığı, heyelan ve yağış verileriyle kapalı yollar otomatik baypas edilir.
+        </div>
+      </div>
+
+      <div class="control-group mt-sm">
+        <label>Maksimum Eğim Sınırı (ISO Konteyner/Sahra) <span id="afad-slope-v">3.0°</span>
           <input type="range" id="afad-slope" min="1" max="15" step="0.5" value="3.0"></label>
-        <label>24 Saatlik Yağış (Heyelan Riski) <span id="afad-rain-v">35 mm</span>
+        <label>24 Saatlik Yağış (WMO Heyelan/Sel Eşiği) <span id="afad-rain-v">35 mm</span>
           <input type="range" id="afad-rain" min="0" max="250" step="5" value="35"></label>
-        <label>Arama-Kurtarma Personeli Teçhizatı <span id="afad-pack-v">22 kg</span>
+        <label>SAR Personeli Teçhizat Yükü (1.0g) <span id="afad-pack-v">22 kg</span>
           <input type="range" id="afad-pack" min="5" max="40" step="1" value="22"></label>
       </div>
 
       <div class="row">
-        <button type="button" id="afad-btn-fly" class="btn-spec">Haritada Afet Bölgesine Odaklan</button>
-        <button type="button" id="afad-btn-route" class="ghost">İKA Güvenli Koridor Çiz</button>
+        <button type="button" id="afad-btn-fly" class="btn-spec">Bölgeye Odaklan</button>
+        <button type="button" id="afad-btn-route" class="ghost">Rotayı Sıfırla</button>
       </div>
 
       <div id="afad-results-card" class="tactical-card mt-sm">
         <div class="kv">
-          <span>Sahra Hastanesi &amp; Çadır Kent</span>
-          <b id="afad-score-val" class="ok">%94 · OPTİMAL YERLEŞİM</b>
+          <span>Seçili Araç &amp; Standart Sınıf</span>
+          <b id="afad-veh-val">Otonom İKA · 800 kg</b>
         </div>
         <div class="kv">
-          <span>Yamaç Heyelan Güvenliği (FS)</span>
-          <b id="afad-fs-val" class="ok">FS = 2.45 (GÜVENLİ)</b>
+          <span>A* Lojistik Koridoru &amp; Süre</span>
+          <b id="afad-route-val">2.4 km · Emniyetli</b>
         </div>
         <div class="kv">
-          <span>Kurtarma Personeli Yorgunluğu (1.0g)</span>
-          <b id="afad-pandolf-val">432 W · 372 kcal/sa</b>
-        </div>
-        <div class="kv">
-          <span>Önerilen Saatlik Su Tüketimi</span>
+          <span>Yakıt / Enerji &amp; İkmal Tüketimi</span>
           <b id="afad-water-val">0.86 L / saat</b>
         </div>
         <div class="kv">
-          <span>İKA Otonom Arama Koridoru</span>
-          <b id="afad-route-val">2.4 km · Emniyetli</b>
+          <span>SAR Biyometrik (Pandolf 1.0g)</span>
+          <b id="afad-pandolf-val">432 W · 372 kcal/sa</b>
+        </div>
+        <div class="kv">
+          <span>Sahra Hastanesi (UN OCHA / AFAD)</span>
+          <b id="afad-score-val" class="ok">%94 · OPTİMAL YERLEŞİM</b>
+        </div>
+        <div class="kv">
+          <span>Yamaç Heyelan Güvenliği (Eurocode 7)</span>
+          <b id="afad-fs-val" class="ok">FS = 2.45 (GÜVENLİ)</b>
         </div>
         <div id="afad-verdict-note" class="help note-sm mt-sm">
-          Topografik eğim ≤ 3°, taşkın yatağı dışı stabil taban. Bekker zemin batma derinliği &lt; 8 mm. İKA aracı ve kurtarma personeli için tam geçişe uygundur.
+          Topografik eğim ≤ 3°, taşkın yatağı dışı stabil taban. Bekker zemin batma derinliği &lt; 8 mm.
         </div>
       </div>
 
       <div class="row mt-sm">
         <button type="button" id="afad-export-geojson" class="ghost">AFAD CBS GeoJSON İndir</button>
-        <button type="button" id="afad-export-mavlink" class="ghost">İKA MAVLink İndir</button>
+        <button type="button" id="afad-export-mavlink" class="ghost">İKA / İHA MAVLink İndir</button>
       </div>
     </section>
 
@@ -797,6 +878,7 @@
 <script src="planet_profiles.js"></script>
 <script src="scoring.js"></script>
 <script src="regions.js"></script>
+<script src="earth_roads.js"></script>
 <script src="astar.js"></script>
 <script src="dust_climatology_data.js"></script>
 <script src="storm.js"></script>

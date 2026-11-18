@@ -627,6 +627,12 @@
       }
     };
 
+    function fmtDur(min, tr) {
+      if (min < 60) return `${min} ${tr ? 'dk' : 'min'}`;
+      const h = Math.floor(min / 60), m = Math.round(min % 60);
+      return m > 0 ? `${h} ${tr ? 'sa' : 'h'} ${m} ${tr ? 'dk' : 'm'}` : `${h} ${tr ? 'saat' : 'h'}`;
+    }
+
     function renderAFAD() {
       const panel = $('#panel-afad');
       if (!panel) return;
@@ -636,6 +642,11 @@
       S.afad = S.afad || {};
       S.afad.active = true;
       S.afad.scenario = sc;
+
+      const vehSel = $('#afad-vehicle-select');
+      const seaSel = $('#afad-sea-policy');
+      S.afad.vehicle = (vehSel && vehSel.value) || S.afad.vehicle || 'ika';
+      S.afad.seaPolicy = (seaSel && seaSel.value) || S.afad.seaPolicy || 'multimodal';
 
       const slopeEl = $('#afad-slope'), rainEl = $('#afad-rain'), packEl = $('#afad-pack');
       const slopeVal = slopeEl ? +slopeEl.value : sc.baseSlope;
@@ -647,8 +658,59 @@
       if ($('#afad-pack-v')) $('#afad-pack-v').textContent = packVal + ' kg';
 
       const tr = isTr();
-      if ($('#afad-loc-title')) $('#afad-loc-title').textContent = tr ? sc.locTitle : sc.locTitleEn;
+      const ER = global.EARTH_ROADS || null;
 
+      if (S.mode === 'afad') {
+        if ($('#hud-layer')) $('#hud-layer').textContent = tr ? 'KATMAN · WGS-84 / KGM & AFAD LOJİSTİK AĞI' : 'LAYER · WGS-84 / KGM & AFAD LOGISTICS';
+        if ($('#hud-proj')) $('#hud-proj').textContent = S.viewMode === '3d' ? 'WGS-84 3B Küre (1.0g)' : 'WGS-84 Equirectangular (EPSG:4326)';
+      }
+
+      // 1. Evaluate Autonomous Road Conditions (KGM / AFAD / Weather / Seismic)
+      if (ER && ER.evaluateAutonomousStatus) {
+        const sum = ER.evaluateAutonomousStatus({
+          scenarioId: sc.id,
+          rainMm: rainVal,
+          hazards: sc.hazard ? [sc.hazard] : []
+        });
+        const sumEl = $('#afad-road-summary');
+        if (sumEl && sum) {
+          sumEl.className = sum.counts.blocked > 0 ? 'warn' : 'ok';
+          sumEl.textContent = tr
+            ? `${sum.counts.open} AÇIK · ${sum.counts.damaged} HASARLI · ${sum.counts.blocked} KAPALI`
+            : `${sum.counts.open} OPEN · ${sum.counts.damaged} DAMAGED · ${sum.counts.blocked} CLOSED`;
+        }
+        const insp = $('#afad-road-inspect');
+        if (insp && ER.SEGMENTS) {
+          const prevVal = insp.value;
+          insp.innerHTML = '';
+          ER.SEGMENTS.forEach((seg) => {
+            const o = doc.createElement('option');
+            o.value = seg.id;
+            const stTag = seg.status === 'OPEN'
+              ? (tr ? '[AÇIK]' : '[OPEN]')
+              : seg.status === 'DAMAGED_PARTIAL'
+                ? (tr ? '[KISMI HASARLI]' : '[DAMAGED]')
+                : (tr ? '[KAPALI]' : '[CLOSED]');
+            o.textContent = `${stTag} ${seg.name} (${seg.distKm} km)`;
+            insp.appendChild(o);
+          });
+          if (prevVal && ER.SEG_BY_ID && ER.SEG_BY_ID[prevVal]) insp.value = prevVal;
+        }
+        const feedNote = $('#afad-road-feed-note');
+        if (feedNote) {
+          const disrupted = ER.SEGMENTS.filter((s) => s.status !== 'OPEN');
+          if (disrupted.length) {
+            const topD = disrupted.slice(0, 3).map((s) => `${s.name.split(' ')[0]}: ${s.reason}`).join(' | ');
+            feedNote.textContent = `⚡ ${sum.sourceLabel}: ${topD}`;
+          } else {
+            feedNote.textContent = tr
+              ? 'Tüm KGM / OSM ana arterleri açık. Otonom sismik ve meteorolojik izleme aktif.'
+              : 'All main highway arteries open. Autonomous seismic and weather monitoring active.';
+          }
+        }
+      }
+
+      // 2. Site Suitability & Infinite-Slope Eurocode 7 Landslide FS
       let score = 96;
       if (slopeVal > 3.0) score -= (slopeVal - 3.0) * 11;
       if (rainVal > 70) score -= (rainVal - 70) * 0.18;
@@ -658,8 +720,8 @@
       if (scoreEl) {
         scoreEl.className = score >= 80 ? 'ok' : score >= 50 ? 'warn' : 'bad';
         scoreEl.textContent = tr
-          ? `%${score} · ${score >= 80 ? 'OPTİMAL YERLEŞİM' : score >= 50 ? 'ŞARTLI UYGUN' : 'RİSKLİ ALAN'}`
-          : `${score}% · ${score >= 80 ? 'OPTIMAL SITING' : score >= 50 ? 'CONDITIONAL' : 'HAZARDOUS'}`;
+          ? `%${score} · ${score >= 80 ? 'OPTİMAL (UN OCHA)' : score >= 50 ? 'ŞARTLI UYGUN' : 'RİSKLİ ALAN'}`
+          : `${score}% · ${score >= 80 ? 'OPTIMAL (UN OCHA)' : score >= 50 ? 'CONDITIONAL' : 'HAZARDOUS'}`;
       }
 
       const betaRad = slopeVal * Math.PI / 180;
@@ -671,21 +733,11 @@
       if (fsEl) {
         fsEl.className = fs >= 1.5 ? 'ok' : fs >= 1.1 ? 'warn' : 'bad';
         fsEl.textContent = tr
-          ? `FS = ${fs} (${fs >= 1.5 ? 'GÜVENLİ - STABİL' : fs >= 1.1 ? 'ORTA RİSK' : 'KRİTİK HEYELAN TEHLİKESİ'})`
+          ? `FS = ${fs} (${fs >= 1.5 ? 'GÜVENLİ - STABİL' : fs >= 1.1 ? 'ORTA RİSK' : 'KRİTİK HEYELAN'})`
           : `FS = ${fs} (${fs >= 1.5 ? 'SAFE - STABLE' : fs >= 1.1 ? 'MODERATE RISK' : 'CRITICAL HAZARD'})`;
       }
 
-      const v = 4.0 / 3.6;
-      const W = 80, L_mass = packVal;
-      const slopePct = Math.tan(slopeVal * Math.PI / 180) * 100;
-      const pandolfW = Math.round(1.5 * W + 2.0 * (W + L_mass) * Math.pow(L_mass / W, 2) + 1.2 * (W + L_mass) * (1.5 * v * v + 0.35 * v * slopePct));
-      const kcalH = Math.round(pandolfW * 0.8604);
-      const waterL = +(pandolfW / 400.0 * 0.8).toFixed(2);
-
-      if ($('#afad-pandolf-val')) $('#afad-pandolf-val').textContent = `${pandolfW} W · ${kcalH} kcal/${tr ? 'sa' : 'h'}`;
-      if ($('#afad-water-val')) $('#afad-water-val').textContent = `${waterL} L / ${tr ? 'saat' : 'h'}`;
-      if ($('#afad-route-val')) $('#afad-route-val').textContent = `2.4 km · ${tr ? 'Emniyetli İKA Koridoru' : 'Safe UGV Corridor'}`;
-
+      // 3. Multimodal A* Route & Vehicle Logistics Calculation
       const astarEngine = global.ASTAR;
       if (astarEngine && astarEngine.planEarth) {
         const sLat = (S.afad.customStart ? S.afad.customStart.lat : (sc.hq ? sc.hq.lat : sc.lat));
@@ -693,29 +745,50 @@
         const gLat = (S.afad.customGoal ? S.afad.customGoal.lat : (sc.hospital ? sc.hospital.lat : (sc.lat + 0.04)));
         const gLon = (S.afad.customGoal ? S.afad.customGoal.lon : (sc.hospital ? sc.hospital.lon : (sc.lon + 0.04)));
         const hazards = sc.hazard ? [sc.hazard] : [];
-        const astarRes = astarEngine.planEarth(sLat, sLon, gLat, gLon, { hazards, packKg: packVal });
+        const astarRes = astarEngine.planEarth(sLat, sLon, gLat, gLon, {
+          hazards,
+          packKg: packVal,
+          vehicle: S.afad.vehicle,
+          seaPolicy: S.afad.seaPolicy
+        });
         S.afad.astar = astarRes;
+
         if (astarRes && astarRes.stats) {
           const st = astarRes.stats;
-          if ($('#afad-route-val')) {
-            $('#afad-route-val').textContent = `${st.distKm} km · ${tr ? 'A* Emniyetli Koridor' : 'A* Safe Route'} (+%${st.detourPct})`;
+          const veh = astarRes.vehicle || (ER && ER.VEHICLES && ER.VEHICLES[S.afad.vehicle]) || { shortName: 'Otonom İKA', payloadKg: 800, maxSpeedKmH: 28, stdClass: 'AFAD SAR' };
+          const sName = (S.afad.customStart && S.afad.customStart.name) || (sc.hq ? sc.hq.name : 'AFAD-HQ');
+          const gName = (S.afad.customGoal && S.afad.customGoal.name) || (sc.hospital ? sc.hospital.name : 'Sahra Hastanesi');
+
+          if ($('#afad-loc-title')) {
+            $('#afad-loc-title').textContent = `${sLat.toFixed(2)}°N, ${sLon.toFixed(2)}°E (${st.mgrsStart || 'WGS-84'}) → ${gLat.toFixed(2)}°N, ${gLon.toFixed(2)}°E (${st.mgrsGoal || 'WGS-84'})`;
           }
-          if ($('#afad-pandolf-val')) {
-            $('#afad-pandolf-val').textContent = `${st.pandolfW} W · ${st.kcalH} kcal/${tr ? 'sa' : 'h'} (${st.transitTimeMin} ${tr ? 'dk intikal' : 'min'})`;
+          if ($('#afad-veh-val')) {
+            const capTxt = veh.payloadKg >= 1000 ? `${(veh.payloadKg / 1000).toFixed(0)} Ton` : `${veh.payloadKg} kg`;
+            $('#afad-veh-val').textContent = `${veh.icon || ''} ${veh.shortName} · ${capTxt} · ${veh.maxSpeedKmH} km/s`;
+          }
+          if ($('#afad-route-val')) {
+            const modeTag = astarRes.isMultimodal
+              ? (tr ? 'Kara + Deniz Ro-Ro' : 'Multimodal Road+Sea')
+              : veh.mode === 'air'
+                ? (tr ? 'Hava Köprüsü' : 'Airbridge')
+                : veh.mode === 'maritime'
+                  ? (tr ? 'Deniz Koridoru' : 'Maritime Route')
+                  : (tr ? 'A* Açık Karayolu' : 'A* Open Highway');
+            $('#afad-route-val').textContent = `${st.distKm} km · ${fmtDur(st.transitTimeMin, tr)} · ${modeTag}`;
           }
           if ($('#afad-water-val')) {
-            $('#afad-water-val').textContent = `${st.waterL} L (${tr ? 'İKA:' : 'UGV:'} ${st.ugvTimeMin} dk)`;
+            $('#afad-water-val').textContent = `${st.energyUsed || 0} ${st.energyUnit || 'L'} · (SAR Su: ${st.waterL} L)`;
+          }
+          if ($('#afad-pandolf-val')) {
+            $('#afad-pandolf-val').textContent = `${st.pandolfW} W · ${st.kcalH} kcal/${tr ? 'sa' : 'h'} (1.0g · ${packVal} kg)`;
           }
           if ($('#afad-verdict-note')) {
-            $('#afad-verdict-note').textContent = tr
-              ? `A* Eniyilemesi: ${st.distKm} km güvenli koridor (Düz hat: ${st.straightKm} km, %${st.detourPct} enkaz baypası). İntikal süresi kurtarma personeli için ${st.transitTimeMin} dk, otonom İKA için ${st.ugvTimeMin} dk. Haritaya tıklayarak başlangıç/hedef noktalarını değiştirebilirsiniz.`
-              : `A* Multi-Hazard Solution: ${st.distKm} km safe route (${st.straightKm} km direct, +${st.detourPct}% detour avoiding hazard zone). Transit time: ${st.transitTimeMin} min walking, ${st.ugvTimeMin} min autonomous UGV. Click on map to set custom Start / Goal.`;
+            const roadStr = (astarRes.usedRoads && astarRes.usedRoads.length)
+              ? ` Güzergah: ${astarRes.usedRoads.slice(0, 4).join(' → ')}${astarRes.usedRoads.length > 4 ? ' …' : ''}.`
+              : '';
+            $('#afad-verdict-note').textContent = `${sName} → ${gName}: ${astarRes.notice || ''}${roadStr} [${veh.stdClass || 'INSARAG/AFAD Standardı'}]`;
           }
         }
-      } else if ($('#afad-verdict-note')) {
-        $('#afad-verdict-note').textContent = tr
-          ? `Eğim ${slopeVal}° (Konteyner eşiği ≤ 3°), 24s yağış ${rainVal} mm. Bekker zemin batma derinliği < 8 mm. Kurtarma ekipleri ve İKA araçları için rota açıktır.`
-          : `Slope ${slopeVal}° (Container threshold ≤ 3°), 24h rain ${rainVal} mm. Bekker soil sinkage < 8 mm. Route cleared for rescue personnel and UGVs.`;
       }
     }
 
@@ -724,12 +797,86 @@
       selScenario.onchange = () => {
         S.afad.customStart = null;
         S.afad.customGoal = null;
+        if ($('#afad-start-city')) $('#afad-start-city').value = '';
+        if ($('#afad-goal-city')) $('#afad-goal-city').value = '';
         renderAFAD();
         if (ctx.onAfadFly && S.afad && S.afad.scenario) {
           ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
         }
       };
     }
+
+    const selStartCity = $('#afad-start-city');
+    const selGoalCity = $('#afad-goal-city');
+    function onCitySelectChange() {
+      const ER = global.EARTH_ROADS;
+      if (!ER || !ER.NODES) return;
+      const sKey = selStartCity ? selStartCity.value : '';
+      const gKey = selGoalCity ? selGoalCity.value : '';
+      if (sKey && ER.NODES[sKey]) {
+        const n = ER.NODES[sKey];
+        S.afad.customStart = { lat: n.lat, lon: n.lon, name: n.name };
+      } else if (!sKey) {
+        S.afad.customStart = null;
+      }
+      if (gKey && ER.NODES[gKey]) {
+        const n = ER.NODES[gKey];
+        S.afad.customGoal = { lat: n.lat, lon: n.lon, name: n.name };
+      } else if (!gKey) {
+        S.afad.customGoal = null;
+      }
+      renderAFAD();
+      const target = S.afad.customGoal || S.afad.customStart || (S.afad.scenario ? { lat: S.afad.scenario.lat, lon: S.afad.scenario.lon } : null);
+      if (ctx.onAfadFly && target) ctx.onAfadFly(target.lat, target.lon);
+    }
+    if (selStartCity) selStartCity.onchange = onCitySelectChange;
+    if (selGoalCity) selGoalCity.onchange = onCitySelectChange;
+
+    ['#afad-vehicle-select', '#afad-sea-policy'].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.onchange = () => {
+        renderAFAD();
+        if (ctx.onAfadFly && S.afad && S.afad.scenario) {
+          const pt = S.afad.customGoal || S.afad.customStart || S.afad.scenario;
+          ctx.onAfadFly(pt.lat, pt.lon);
+        }
+      };
+    });
+
+    const btnRoadToggle = $('#afad-road-toggle-btn');
+    if (btnRoadToggle) {
+      btnRoadToggle.onclick = () => {
+        const ER = global.EARTH_ROADS;
+        const insp = $('#afad-road-inspect');
+        if (!ER || !insp || !insp.value) return;
+        const seg = ER.SEG_BY_ID[insp.value];
+        if (!seg) return;
+        const order = ['OPEN', 'DAMAGED_PARTIAL', 'BLOCKED_COLLAPSE'];
+        const next = order[(order.indexOf(seg.status) + 1) % order.length];
+        ER.setSegmentStatus(seg.id, next);
+        renderAFAD();
+        if (ctx.onAfadFly && S.afad && S.afad.scenario) {
+          const pt = S.afad.customStart || S.afad.scenario;
+          ctx.onAfadFly(pt.lat, pt.lon);
+        }
+        announce(`${seg.name} → ${next}`, doc);
+      };
+    }
+
+    const btnRoadSync = $('#afad-road-sync-btn');
+    if (btnRoadSync) {
+      btnRoadSync.onclick = async () => {
+        const ER = global.EARTH_ROADS;
+        if (!ER) return;
+        ER.SEGMENTS.forEach((s) => { s.manualOverride = false; });
+        const sc = (S.afad && S.afad.scenario) || AFAD_SCENARIOS.maras;
+        await ER.fetchLiveExternalFeeds({ lat: sc.lat, lon: sc.lon });
+        renderAFAD();
+        if (ctx.onAfadFly) ctx.onAfadFly(sc.lat, sc.lon);
+        announce(isTr() ? 'KGM, AFAD ve USGS canlı yol durumu otonom olarak güncellendi.' : 'Live road conditions synchronized.', doc);
+      };
+    }
+
     ['#afad-slope', '#afad-rain', '#afad-pack'].forEach(sel => {
       const el = $(sel);
       if (el) el.oninput = () => renderAFAD();
@@ -747,11 +894,13 @@
       btnAfadRoute.onclick = () => {
         S.afad.customStart = null;
         S.afad.customGoal = null;
+        if ($('#afad-start-city')) $('#afad-start-city').value = '';
+        if ($('#afad-goal-city')) $('#afad-goal-city').value = '';
         renderAFAD();
         if (ctx.onAfadFly && S.afad && S.afad.scenario) {
           ctx.onAfadFly(S.afad.scenario.lat, S.afad.scenario.lon);
         }
-        announce(isTr() ? 'A* Afet / SAR Koridoru haritada hesaplandı.' : 'A* disaster route computed on map.', doc);
+        announce(isTr() ? 'A* Afet / SAR Koridoru sıfırlandı ve yeniden hesaplandı.' : 'A* disaster route reset and computed on map.', doc);
       };
     }
     const btnAfadGeo = $('#afad-export-geojson');
@@ -765,8 +914,11 @@
     if (btnAfadMav && global.MDE_BRIEF && global.MDE_BRIEF.downloadBriefMAVLink) {
       btnAfadMav.onclick = () => {
         const sc = (S.afad && S.afad.scenario) || AFAD_SCENARIOS.maras;
+        const pts = (S.afad && S.afad.astar && S.afad.astar.safePath && S.afad.astar.safePath.length)
+          ? S.afad.astar.safePath
+          : (sc.route || []);
         const fakePayload = {
-          top_candidates: (sc.route || []).map((r, i) => ({
+          top_candidates: pts.map((r, i) => ({
             rank: i + 1,
             lat_deg: r.lat,
             lon_deg: r.lon,

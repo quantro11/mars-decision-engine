@@ -408,6 +408,8 @@
   }
 
   function planEarth(startLat, startLon, goalLat, goalLon, opts = {}) {
+    const er = global.EARTH_ROADS || (typeof globalThis !== 'undefined' ? globalThis.EARTH_ROADS : null);
+    if (er && er.planRoute) return er.planRoute(startLat, startLon, goalLat, goalLon, opts);
     const hazards = opts.hazards || [];
     const directKm = haversineEarthKm(startLat, startLon, goalLat, goalLon);
     if (directKm < 0.02) {
